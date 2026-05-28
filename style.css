@@ -583,6 +583,13 @@ details li {
     filter: grayscale(0.8);
 }
 
+.unit.unknown-koh {
+    border-radius: 50%;
+    background: rgba(8, 10, 16, 0.95);
+    border-style: dashed;
+    box-shadow: 0 0 10px rgba(255, 255, 255, 0.12), inset 0 0 10px rgba(0, 0, 0, 0.45);
+}
+
 /* Player Specific Colors */
 .unit.player-1 {
     color: var(--neon-cyan);

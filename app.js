@@ -295,6 +295,10 @@ class Unit {
     }
 
     getEffectiveMoveType() {
+        if (this.type === 'koh') {
+            const ability = this.player === 1 ? p1Ability : p2Ability;
+            if (ability === '暗殺者') return 'straight';
+        }
         return this.moveType;
     }
 }
@@ -616,6 +620,8 @@ function handleOnlineMessage(message) {
             applyRemoteAction(message.action);
         } else if (message.kind === 'reset') {
             resetToSetup(true);
+        } else if (message.kind === 'forfeit' || message.kind === 'win') {
+            triggerWin(message.winner, true);
         }
     } finally {
         applyingRemoteAction = false;
@@ -1167,14 +1173,17 @@ function renderBoard() {
 
                 if (!isHiddenByFog) {
                     const unitEl = document.createElement('div');
-                    unitEl.className = `unit player-${u.player} ${u.type}`;
+                    const shouldMaskEnemyKoh = u.type === 'koh' && u.player !== viewerPlayer;
+                    unitEl.className = `unit player-${u.player} ${shouldMaskEnemyKoh ? 'unknown-koh' : u.type}`;
                     if (actedUnitIds.has(u.id)) unitEl.classList.add('acted');
-                    if (u.type === 'koh') {
+                    if (u.type === 'koh' && !shouldMaskEnemyKoh) {
                         unitEl.classList.add('koh-ability', getAbilityClass(u.player));
                         unitEl.setAttribute('data-ability', u.player === 1 ? p1Ability : p2Ability);
                     }
-                    unitEl.setAttribute('data-rank', u.symbol);
-                    unitEl.title = `${u.name} (P${u.player})\n移動: ${u.getEffectiveMoveType() === 'straight' ? '直線' : 'マンハッタン'}${u.getMovementRange()}\n視界: ${u.getVisionRange()}\n${u.abilityDescription}`;
+                    unitEl.setAttribute('data-rank', shouldMaskEnemyKoh ? '?' : u.symbol);
+                    unitEl.title = shouldMaskEnemyKoh
+                        ? `UNKNOWN UNIT (P${u.player})`
+                        : `${u.name} (P${u.player})\n移動: ${u.getEffectiveMoveType() === 'straight' ? '直線' : 'マンハッタン'}${u.getMovementRange()}\n視界: ${u.getVisionRange()}\n${u.abilityDescription}`;
                     if (u.type === 'core') unitEl.classList.add('core');
                     cellEl.appendChild(unitEl);
                 }
@@ -1853,7 +1862,7 @@ function reinforceScouts() {
 }
 
 // --- WIN / LOSE ---
-function triggerWin(winnerId) {
+function triggerWin(winnerId, fromOnline = false) {
     isGameOver = true;
     const titleEl = document.getElementById('game-over-title');
     const subtitleEl = document.getElementById('game-over-subtitle');
@@ -1873,11 +1882,14 @@ function triggerWin(winnerId) {
     }
 
     document.getElementById('game-over-overlay').classList.remove('hidden');
+    if (onlineMode && !fromOnline) sendOnlineMessage({ kind: 'win', winner: winnerId });
 }
 
 function forfeitGame() {
     if (confirm("本当に降伏（Reboot）しますか？現在の作戦データは破棄されます。")) {
-        triggerWin(currentPlayer === 1 ? 2 : 1);
+        const winner = localPlayer ? (localPlayer === 1 ? 2 : 1) : (currentPlayer === 1 ? 2 : 1);
+        if (onlineMode) sendOnlineMessage({ kind: 'forfeit', winner });
+        triggerWin(winner, true);
     }
 }
 
