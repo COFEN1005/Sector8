@@ -912,6 +912,19 @@ details li {
     text-shadow: none;
 }
 
+.neon-btn.ready-btn {
+    margin-top: 0.7rem;
+    border-color: var(--neon-gold);
+    color: var(--neon-gold);
+    text-shadow: 0 0 5px var(--neon-gold);
+}
+
+.neon-btn.ready-btn.ready {
+    background: var(--neon-gold);
+    color: #000;
+    text-shadow: none;
+}
+
 /* GAME INFO & LOG FEED */
 .deck-info {
     display: flex;

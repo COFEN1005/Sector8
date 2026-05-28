@@ -158,6 +158,7 @@ let matchmakingMode = false;
 let matchmakingRole = null; // 'host' or 'guest'
 let matchRoomId = null;
 let onlineAbilityChoices = { 1: null, 2: null };
+let onlineReadyState = { 1: false, 2: false };
 
 function detectDeviceProfile() {
     const coarsePointer = window.matchMedia('(pointer: coarse)').matches;
@@ -360,10 +361,16 @@ function setupUIEventListeners() {
         onlineAbilityChoice.addEventListener('change', () => {
             if (!onlineMode || !localPlayer) return;
             onlineAbilityChoices[localPlayer] = getOnlineAbilityChoice();
+            onlineReadyState[localPlayer] = false;
             sendOnlineMessage({ kind: 'ability_choice', ability: onlineAbilityChoices[localPlayer] });
+            sendOnlineMessage({ kind: 'ready_state', ready: false });
+            updateReadyButton();
             updateOnlineStartAvailability();
         });
     }
+
+    const onlineReadyBtn = document.getElementById('btn-online-ready');
+    if (onlineReadyBtn) onlineReadyBtn.addEventListener('click', markOnlineReady);
 
     const copyRoomBtn = document.getElementById('btn-copy-room');
     if (copyRoomBtn) copyRoomBtn.addEventListener('click', copyRoomCode);
@@ -472,8 +479,10 @@ function hostRoom() {
     matchmakingRole = 'host';
     localPlayer = 1;
     onlineAbilityChoices = { 1: getOnlineAbilityChoice(), 2: null };
+    onlineReadyState = { 1: false, 2: false };
     onlineMode = true;
     setGameMode('online');
+    updateReadyButton();
     connectOnlineSocket(roomId, 1);
 }
 
@@ -488,8 +497,10 @@ function joinRoom() {
     matchmakingRole = 'guest';
     localPlayer = 2;
     onlineAbilityChoices = { 1: null, 2: getOnlineAbilityChoice() };
+    onlineReadyState = { 1: false, 2: false };
     onlineMode = true;
     setGameMode('online');
+    updateReadyButton();
     document.getElementById('matchmaking-status').textContent = `ルーム ${roomId} に接続中...`;
     connectOnlineSocket(roomId, 2);
 }
@@ -501,6 +512,7 @@ function cancelMatchmaking() {
     matchmakingMode = false;
     matchRoomId = null;
     onlineAbilityChoices = { 1: null, 2: null };
+    onlineReadyState = { 1: false, 2: false };
     showLocalPanel();
     document.getElementById('matchmaking-status').textContent = '';
     document.getElementById('room-share-area').classList.add('hidden');
@@ -548,6 +560,8 @@ function connectOnlineSocket(roomId, player) {
         addConsoleLog(`ONLINE: Player ${player} として接続しました。`, 'system');
         addConnectionLog(`Player ${player} として接続しました。`);
         onlineAbilityChoices[player] = getOnlineAbilityChoice();
+        onlineReadyState[player] = false;
+        updateReadyButton();
         sendOnlineMessage({ kind: 'ability_choice', ability: onlineAbilityChoices[player] });
     });
 
@@ -578,7 +592,7 @@ function handleOnlineMessage(message) {
     if (message.kind === 'player_joined') {
         addConsoleLog(`ONLINE: 対戦相手が接続しました！`, 'system');
         addConnectionLog('対戦相手が接続しました。');
-        document.getElementById('matchmaking-status').textContent = '対戦相手が接続しました。相手の甲アビリティ選択を確認中...';
+        document.getElementById('matchmaking-status').textContent = '対戦相手が接続しました。準備完了を押してください。';
         onlineAbilityChoices[localPlayer] = getOnlineAbilityChoice();
         sendOnlineMessage({ kind: 'ability_choice', ability: onlineAbilityChoices[localPlayer] });
         updateOnlineStartAvailability();
@@ -590,7 +604,7 @@ function handleOnlineMessage(message) {
     if (message.kind === 'ability_choice') {
         onlineAbilityChoices[message.player] = message.ability;
         document.getElementById('matchmaking-status').textContent =
-            `相手の甲アビリティ: ${message.ability}`;
+            '相手の甲アビリティ選択を受信しました。内容はゲーム開始まで非表示です。';
         sendOnlineMessage({ kind: 'ability_ack', ability: getOnlineAbilityChoice() });
         updateOnlineStartAvailability();
         return;
@@ -598,6 +612,14 @@ function handleOnlineMessage(message) {
 
     if (message.kind === 'ability_ack') {
         onlineAbilityChoices[message.player] = message.ability;
+        updateOnlineStartAvailability();
+        return;
+    }
+
+    if (message.kind === 'ready_state') {
+        onlineReadyState[message.player] = Boolean(message.ready);
+        document.getElementById('matchmaking-status').textContent =
+            message.ready ? '相手が準備完了しました。' : '相手が準備を解除しました。';
         updateOnlineStartAvailability();
         return;
     }
@@ -636,11 +658,30 @@ function sendOnlineMessage(message) {
 function updateOnlineStartAvailability() {
     const btnStart = document.getElementById('btn-start-online-match');
     if (!btnStart) return;
-    const ready = Boolean(onlineAbilityChoices[1] && onlineAbilityChoices[2]);
+    const ready = Boolean(onlineAbilityChoices[1] && onlineAbilityChoices[2] && onlineReadyState[1] && onlineReadyState[2]);
     btnStart.disabled = !(localPlayer === 1 && ready);
     if (localPlayer === 1) {
-        btnStart.textContent = ready ? 'ONLINE MATCH START' : 'WAITING FOR ABILITY';
+        btnStart.textContent = ready ? 'ONLINE MATCH START' : 'WAITING FOR READY';
     }
+}
+
+function updateReadyButton() {
+    const readyBtn = document.getElementById('btn-online-ready');
+    if (!readyBtn) return;
+    readyBtn.disabled = !onlineMode || !localPlayer || !onlineSocket || onlineSocket.readyState !== WebSocket.OPEN;
+    readyBtn.classList.toggle('ready', Boolean(localPlayer && onlineReadyState[localPlayer]));
+    readyBtn.textContent = localPlayer && onlineReadyState[localPlayer] ? '準備完了済み' : '準備完了';
+}
+
+function markOnlineReady() {
+    if (!onlineMode || !localPlayer) return;
+    onlineAbilityChoices[localPlayer] = getOnlineAbilityChoice();
+    onlineReadyState[localPlayer] = true;
+    sendOnlineMessage({ kind: 'ability_choice', ability: onlineAbilityChoices[localPlayer] });
+    sendOnlineMessage({ kind: 'ready_state', ready: true });
+    document.getElementById('matchmaking-status').textContent = '準備完了しました。相手を待っています。';
+    updateReadyButton();
+    updateOnlineStartAvailability();
 }
 
 function addConnectionLog(text) {
@@ -1173,17 +1214,14 @@ function renderBoard() {
 
                 if (!isHiddenByFog) {
                     const unitEl = document.createElement('div');
-                    const shouldMaskEnemyKoh = u.type === 'koh' && u.player !== viewerPlayer;
-                    unitEl.className = `unit player-${u.player} ${shouldMaskEnemyKoh ? 'unknown-koh' : u.type}`;
+                    unitEl.className = `unit player-${u.player} ${u.type}`;
                     if (actedUnitIds.has(u.id)) unitEl.classList.add('acted');
-                    if (u.type === 'koh' && !shouldMaskEnemyKoh) {
+                    if (u.type === 'koh') {
                         unitEl.classList.add('koh-ability', getAbilityClass(u.player));
                         unitEl.setAttribute('data-ability', u.player === 1 ? p1Ability : p2Ability);
                     }
-                    unitEl.setAttribute('data-rank', shouldMaskEnemyKoh ? '?' : u.symbol);
-                    unitEl.title = shouldMaskEnemyKoh
-                        ? `UNKNOWN UNIT (P${u.player})`
-                        : `${u.name} (P${u.player})\n移動: ${u.getEffectiveMoveType() === 'straight' ? '直線' : 'マンハッタン'}${u.getMovementRange()}\n視界: ${u.getVisionRange()}\n${u.abilityDescription}`;
+                    unitEl.setAttribute('data-rank', u.symbol);
+                    unitEl.title = `${u.name} (P${u.player})\n移動: ${u.getEffectiveMoveType() === 'straight' ? '直線' : 'マンハッタン'}${u.getMovementRange()}\n視界: ${u.getVisionRange()}\n${u.abilityDescription}`;
                     if (u.type === 'core') unitEl.classList.add('core');
                     cellEl.appendChild(unitEl);
                 }
