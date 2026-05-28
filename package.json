@@ -1,0 +1,15 @@
+{
+  "name": "sector8-information-collapse",
+  "version": "2.0.0",
+  "description": "Sector8: Information Collapse - Tactical multi-map board game",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "keywords": ["game", "strategy", "boardgame"],
+  "license": "MIT"
+}

@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Sector8: Information Collapse</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="app-container">
+        <!-- HEADER -->
+        <header>
+            <div class="logo">
+                <span class="glitch-text" data-text="SECTOR-8">SECTOR-8</span>
+                <span class="sub-logo">INFORMATION COLLAPSE</span>
+            </div>
+            <div id="turn-indicator" class="glass-panel">
+                <div class="turn-label">TURN <span id="turn-count">1</span></div>
+                <div class="active-player-display">
+                    <span class="indicator-dot"></span>
+                    <span id="current-player-name">PLAYER 1</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- MAIN LAYOUT -->
+        <main>
+            <!-- LEFT COLUMN: RULES & INFO -->
+            <section id="sidebar-left" class="glass-panel">
+                <div class="panel-header">
+                    <h2>SYSTEM RULES</h2>
+                </div>
+                <div class="rules-content">
+                    <details open>
+                        <summary>🎛️ 独立マルチマップ制</summary>
+                        <p>本作は、独立した3つのマップで戦いが行われます：</p>
+                        <p><strong>エリア1 (自陣 - 9×9)</strong>: 自軍コア(核)が存在するエリア。行0の <code>t</code> マスからエリア2へワープ。</p>
+                        <p><strong>エリア2 (中央 - 8×9)</strong>: 主戦場。行7の <code>t</code> はエリア1へ、行0の <code>t</code> はエリア3へ接続。ここに自軍が0体になると<strong>「情報崩壊」</strong>となり、自陣（エリア1）の全域視界バフを喪失します。</p>
+                        <p><strong>エリア3 (敵陣 - 9×9)</strong>: 敵のコアが存在するエリア。行8の <code>t</code> からエリア2へワープ。</p>
+                    </details>
+                    <details>
+                        <summary>🛡️ ユニット情報 (HPは全員1)</summary>
+                        <ul>
+                            <li><strong>甲 (Koh)</strong>: 視界3・周辺移動3。試合前に選択した強力なアビリティを所持。</li>
+                            <li><strong>乙 (Otsu)</strong>: 視界3・直線移動3。敵陣（エリア3）でのみ撃破時周囲2マスを巻き込むアビリティ所持。</li>
+                            <li><strong>丙 (Hei)</strong>: 視界2・周辺移動2。機動力のある歩兵。</li>
+                            <li><strong>丁 (Tei)</strong>: 視界2・直線移動2。標準的な歩兵。</li>
+                            <li><strong>偵察兵 (Scout)</strong>: 視界2・攻撃不可。エリア2固定。視界内へワープ可能。別マップへは移動不可。</li>
+                        </ul>
+                    </details>
+                    <details>
+                        <summary>⚔️ 甲アビリティ一覧</summary>
+                        <ul>
+                            <li><strong>千里眼</strong>: 1方向の直線全マスを可視化</li>
+                            <li><strong>鼓舞</strong>: 次ターン周囲1マスの味方移動・視界+1</li>
+                            <li><strong>足跡</strong>: パッシブ：前ターンの視界情報を維持</li>
+                            <li><strong>歴戦王</strong>: パッシブ：自身の移動+1・視界+1</li>
+                            <li><strong>戦姫</strong>: パッシブ：敵甲撃破時、味方丙・丁の視界+1</li>
+                            <li><strong>爆破</strong>: 周囲2マスの全マス破壊して自滅</li>
+                            <li><strong>暗殺者</strong>: パッシブ：直線移動5・直線視界5。敵撃破時、進行方向から1マス後退してターン終了。</li>
+                        </ul>
+                    </details>
+                    <details>
+                        <summary>🌁 ポータルと視界ルール</summary>
+                        <p>・<strong>戦場の霧</strong>: 視界外の敵は完全に見えなくなります。</p>
+                        <p>・<strong>テレポートマス (t)</strong>: ユニットがこのマスへ移動すると、隣接マップの対応するマスへ即座に転送されます。転送先に敵がいる場合は撃破し、味方がいる場合はテレポート不可。エリア2初期配置の前線コマは自拠点側へテレポート不可。偵察兵はエリア2固定でテレポート不可。</p>
+                        <p>・<strong>固定壁 (w)</strong>: 移動を遮断。視界は通ります。甲の「爆破」でのみ破壊可能。</p>
+                    </details>
+                </div>
+                <div class="system-status">
+                    <div class="status-row">
+                        <span>P1 AREA 2 STATUS:</span>
+                        <span id="p1-area2-status" class="status-val text-cyan">ONLINE</span>
+                    </div>
+                    <div class="status-row">
+                        <span>P2 AREA 2 STATUS:</span>
+                        <span id="p2-area2-status" class="status-val text-magenta">ONLINE</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- CENTER COLUMN: THE BOARD -->
+            <section id="board-container">
+                <!-- Area Map Tabs -->
+                <div id="map-tabs" class="glass-panel">
+                    <button class="map-tab active" data-map="area1">
+                        <span class="tab-indicator cyan"></span>
+                        <span class="tab-text">AREA 1: 自陣</span>
+                        <span id="tab-count-area1" class="tab-count">0 / 0</span>
+                    </button>
+                    <button class="map-tab" data-map="area2">
+                        <span class="tab-indicator purple"></span>
+                        <span class="tab-text">AREA 2: 中央</span>
+                        <span id="tab-count-area2" class="tab-count">0 / 0</span>
+                    </button>
+                    <button class="map-tab" data-map="area3">
+                        <span class="tab-indicator magenta"></span>
+                        <span class="tab-text">AREA 3: 敵陣</span>
+                        <span id="tab-count-area3" class="tab-count">0 / 0</span>
+                    </button>
+                </div>
+
+                <div id="game-board-wrapper">
+                    <div id="board"></div>
+                </div>
+
+                <div id="action-controls" class="glass-panel hidden">
+                    <div id="selected-unit-info">
+                        <span class="unit-badge">甲</span>
+                        <span class="unit-name">UNIT NAME</span>
+                        <span class="unit-coords">(X, Y)</span>
+                    </div>
+                    <div class="action-buttons">
+                        <button id="btn-move" class="action-btn active">移動する</button>
+                        <button id="btn-ability" class="action-btn">アビリティ使用</button>
+                        <button id="btn-teleport" class="action-btn teleport-btn hidden">⚡ テレポート</button>
+                        <button id="btn-cancel" class="action-btn cancel">キャンセル</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- RIGHT COLUMN: CONTROL PANEL & GAME LOG -->
+            <section id="sidebar-right" class="glass-panel">
+                <div class="panel-header">
+                    <h2>TACTICAL HUB</h2>
+                </div>
+
+                <div id="setup-panel" class="hub-section">
+                    <h3>GAME CONFIGURATION</h3>
+
+                    <!-- Mode tabs -->
+                    <div class="mode-tabs">
+                        <button id="tab-mode-ai" class="mode-tab active" onclick="setModeTab('ai')">🤖 AI戦</button>
+                        <button id="tab-mode-local" class="mode-tab" onclick="setModeTab('local')">👥 ローカル</button>
+                        <button id="tab-mode-online" class="mode-tab" onclick="setModeTab('online')">🌐 オンライン</button>
+                    </div>
+
+                    <!-- Local / AI panel -->
+                    <div id="setup-local-panel">
+                        <div class="config-group">
+                            <label>OPPONENT TYPE</label>
+                            <div class="toggle-group">
+                                <button id="btn-opt-ai" class="toggle-btn active">対戦AI</button>
+                                <button id="btn-opt-human" class="toggle-btn">ローカル対戦</button>
+                            </div>
+                        </div>
+
+                        <div class="ability-select-container">
+                            <h4>PLAYER 1: 甲アビリティ</h4>
+                            <select id="p1-ability-choice" class="neon-select">
+                                <option value="千里眼">千里眼</option>
+                                <option value="鼓舞">鼓舞</option>
+                                <option value="足跡" selected>足跡</option>
+                                <option value="歴戦王">歴戦王</option>
+                                <option value="戦姫">戦姫</option>
+                                <option value="爆破">爆破</option>
+                                <option value="暗殺者">暗殺者</option>
+                            </select>
+
+                            <div id="p2-ability-group" style="opacity:0.5">
+                                <h4>PLAYER 2: 甲アビリティ</h4>
+                                <select id="p2-ability-choice" class="neon-select">
+                                    <option value="千里眼">千里眼</option>
+                                    <option value="鼓舞">鼓舞</option>
+                                    <option value="足跡">足跡</option>
+                                    <option value="歴戦王" selected>歴戦王</option>
+                                    <option value="戦姫">戦姫</option>
+                                    <option value="爆破">爆破</option>
+                                    <option value="暗殺者">暗殺者</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <button id="btn-start-game" class="neon-btn pulse">SYSTEM INITIATE</button>
+                    </div>
+
+                    <!-- Online matchmaking panel -->
+                    <div id="matchmaking-panel" class="hidden">
+                        <div class="matchmaking-section">
+                            <h4 class="match-subhead">🏠 ホストとして部屋を作る</h4>
+                            <button id="btn-host-room" class="neon-btn" style="margin-bottom:0.8rem;">部屋を作る (P1)</button>
+                            <div id="room-share-area" class="hidden">
+                                <div class="room-id-box">
+                                    <span class="room-id-label">ROOM ID:</span>
+                                    <span id="room-id-display" class="room-id-value">------</span>
+                                </div>
+                                <p class="room-hint">このIDを対戦相手に伝えてください。<br>対戦相手が接続したらゲームを開始できます。</p>
+                                <button id="btn-start-online-match" class="neon-btn pulse" disabled onclick="startGame()">ONLINE MATCH START</button>
+                            </div>
+                        </div>
+
+                        <div class="matchmaking-divider">── または ──</div>
+
+                        <div class="matchmaking-section">
+                            <h4 class="match-subhead">🔗 ゲストとして参加する</h4>
+                            <div class="room-join-row">
+                                <input id="room-id-input" class="neon-input" type="text" maxlength="6" placeholder="ROOM ID..." />
+                                <button id="btn-join-room" class="neon-btn join-btn">参加 (P2)</button>
+                            </div>
+                        </div>
+
+                        <div id="matchmaking-status" class="match-status"></div>
+
+                        <button id="btn-cancel-match" class="neon-btn danger" style="margin-top:0.8rem;">キャンセル</button>
+                    </div>
+                </div>
+
+                <div id="game-info-panel" class="hub-section hidden">
+                    <div class="deck-info">
+                        <div class="deck-row">
+                            <span>P1 ALIVE UNITS:</span>
+                            <span id="p1-units-count" class="text-cyan">14/14</span>
+                        </div>
+                        <div class="deck-row">
+                            <span>P2 ALIVE UNITS:</span>
+                            <span id="p2-units-count" class="text-magenta">14/14</span>
+                        </div>
+                    </div>
+
+                    <h3>COMBAT FEED</h3>
+                    <div id="log-feed">
+                        <div class="log-entry system">GAME INITIALIZED. SELECT CONFIG AND INITIATE.</div>
+                    </div>
+
+                    <button id="btn-forfeit" class="neon-btn danger">SYSTEM REBOOT (降伏)</button>
+                </div>
+            </section>
+        </main>
+
+        <!-- GAME OVER MODAL -->
+        <div id="game-over-overlay" class="overlay hidden">
+            <div class="modal glass-panel">
+                <h1 id="game-over-title" class="glitch-text" data-text="VICTORY">VICTORY</h1>
+                <p id="game-over-subtitle">PLAYER 1 HAS DESTROYED THE ENEMY CORE.</p>
+                <div class="modal-buttons">
+                    <button id="btn-restart" class="neon-btn">RELOAD SYSTEM</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- DIRECTION OVERLAY (千里眼) -->
+        <div id="direction-overlay" class="overlay hidden">
+            <div class="modal glass-panel mini">
+                <h3>SELECT SIGHT DIRECTION</h3>
+                <div class="direction-grid">
+                    <button class="dir-btn" data-dir="up">▲ UP</button>
+                    <button class="dir-btn" data-dir="left">◀ LEFT</button>
+                    <button class="dir-btn" data-dir="right">RIGHT ▶</button>
+                    <button class="dir-btn" data-dir="down">▼ DOWN</button>
+                </div>
+                <button id="btn-cancel-dir" class="neon-btn danger">CANCEL</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    // Mode tab switching helper (called from inline onclick)
+    function setModeTab(mode) {
+        document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active'));
+        document.getElementById('tab-mode-' + mode).classList.add('active');
+        if (mode === 'online') {
+            document.getElementById('matchmaking-panel').classList.remove('hidden');
+            document.getElementById('setup-local-panel').classList.add('hidden');
+        } else {
+            document.getElementById('matchmaking-panel').classList.add('hidden');
+            document.getElementById('setup-local-panel').classList.remove('hidden');
+            // sync AI/Human toggle
+            if (mode === 'ai') {
+                document.getElementById('btn-opt-ai').click();
+            } else {
+                document.getElementById('btn-opt-human').click();
+            }
+        }
+    }
+    </script>
+    <script src="app.js"></script>
+</body>
+</html>
