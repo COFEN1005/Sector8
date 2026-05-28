@@ -219,8 +219,8 @@ class Unit {
                 break;
             case 'scout':
                 this.baseVision = 2;
-                this.baseMove = 2;
-                this.moveType = 'manhattan';
+                this.baseMove = 1;
+                this.moveType = 'straight';
                 break;
         }
     }
@@ -256,7 +256,7 @@ class Unit {
             return `【乙特有: 切り崩し】敵本拠地で敵撃破時、周囲1マスの全コマを追加破壊。`;
         }
         if (this.type === 'scout') {
-            return `【偵察兵特有: ワープ】マンハッタン移動2・攻撃可。エリア2固定。視界内の空きマスへ瞬時ワープ。`;
+            return `【偵察兵特有: ワープ】直線移動1・攻撃可。エリア2固定。視界内の空きマスへ瞬時ワープ。`;
         }
         return '固有アビリティなし';
     }
