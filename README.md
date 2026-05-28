@@ -38,7 +38,7 @@ If the GitHub repository already has files, run `git pull origin main --allow-un
 Create a new Render Web Service from `COFEN1005/Sector8`.
 
 - Runtime: Node
-- Build command: `npm install`
-- Start command: `npm start`
+- Build command: `npm install --omit=dev`
+- Start command: `node server.js`
 
 `render.yaml` is included, so Render can also create the service from the blueprint.
