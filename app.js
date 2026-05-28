@@ -24,6 +24,8 @@ const PORTAL_COLS = [0, 1, 9, 10];
 const WALLS_PER_MAP = 12;
 const SCOUT_REINFORCE_INTERVAL = 10;
 const SCOUT_LIMIT_PER_PLAYER = 2;
+const ACTIONS_PER_TURN = 2;
+const KEEPALIVE_WARNING_MS = 10 * 60 * 1000;
 
 function getPortalDestination(mapName, r, c) {
     if (!PORTAL_COLS.includes(c)) return null;
@@ -101,6 +103,9 @@ let isGameOver = false;
 let protectedWallCells = new Set();
 let scoutReinforcementSerial = 0;
 let gameSeed = 1;
+let actionsThisTurn = 0;
+let actedUnitIds = new Set();
+let lastKeepAliveAt = Date.now();
 
 let selectedUnit = null;
 let selectedAction = 'move';
@@ -358,6 +363,17 @@ function setupUIEventListeners() {
 
     const copyRoomBtn = document.getElementById('btn-copy-room');
     if (copyRoomBtn) copyRoomBtn.addEventListener('click', copyRoomCode);
+
+    const sendChatBtn = document.getElementById('btn-send-chat');
+    if (sendChatBtn) sendChatBtn.addEventListener('click', sendChatMessage);
+    const chatInput = document.getElementById('chat-input');
+    if (chatInput) {
+        chatInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') sendChatMessage();
+        });
+    }
+    const keepAliveBtn = document.getElementById('btn-keepalive');
+    if (keepAliveBtn) keepAliveBtn.addEventListener('click', extendRenderSession);
 }
 
 function setupMapTabs() {
@@ -423,6 +439,8 @@ window.setGameMode = setGameMode;
 function updateModeVisibility() {
     const feedPanel = document.getElementById('combat-feed-panel');
     if (feedPanel) feedPanel.classList.toggle('hidden', gameMode !== 'debug');
+    const onlinePanel = document.getElementById('online-tools-panel');
+    if (onlinePanel) onlinePanel.classList.toggle('hidden', gameMode !== 'online');
 }
 
 function showMatchmakingPanel() {
@@ -524,6 +542,7 @@ function connectOnlineSocket(roomId, player) {
 
     onlineSocket.addEventListener('open', () => {
         addConsoleLog(`ONLINE: Player ${player} として接続しました。`, 'system');
+        addConnectionLog(`Player ${player} として接続しました。`);
         onlineAbilityChoices[player] = getOnlineAbilityChoice();
         sendOnlineMessage({ kind: 'ability_choice', ability: onlineAbilityChoices[player] });
     });
@@ -535,10 +554,12 @@ function connectOnlineSocket(roomId, player) {
 
     onlineSocket.addEventListener('close', () => {
         addConsoleLog('ONLINE: サーバー接続が切断されました。', 'system');
+        addConnectionLog('サーバー接続が切断されました。');
     });
 
     onlineSocket.addEventListener('error', () => {
         addConsoleLog('ONLINE: 接続エラー。サーバーが起動しているか確認してください。', 'system');
+        addConnectionLog('接続エラーが発生しました。');
     });
 }
 
@@ -552,6 +573,7 @@ function handleOnlineMessage(message) {
 
     if (message.kind === 'player_joined') {
         addConsoleLog(`ONLINE: 対戦相手が接続しました！`, 'system');
+        addConnectionLog('対戦相手が接続しました。');
         document.getElementById('matchmaking-status').textContent = '対戦相手が接続しました。相手の甲アビリティ選択を確認中...';
         onlineAbilityChoices[localPlayer] = getOnlineAbilityChoice();
         sendOnlineMessage({ kind: 'ability_choice', ability: onlineAbilityChoices[localPlayer] });
@@ -573,6 +595,16 @@ function handleOnlineMessage(message) {
     if (message.kind === 'ability_ack') {
         onlineAbilityChoices[message.player] = message.ability;
         updateOnlineStartAvailability();
+        return;
+    }
+
+    if (message.kind === 'chat') {
+        addChatMessage(`P${message.player}`, message.text);
+        return;
+    }
+
+    if (message.kind === 'keepalive') {
+        addConnectionLog(`P${message.player} が接続延長しました。`);
         return;
     }
 
@@ -603,6 +635,73 @@ function updateOnlineStartAvailability() {
     if (localPlayer === 1) {
         btnStart.textContent = ready ? 'ONLINE MATCH START' : 'WAITING FOR ABILITY';
     }
+}
+
+function addConnectionLog(text) {
+    const feed = document.getElementById('connection-log');
+    if (!feed) return;
+    const entry = document.createElement('div');
+    entry.className = 'connection-entry';
+    const timeStamp = new Date().toLocaleTimeString('ja-JP', { hour12: false, hour: '2-digit', minute: '2-digit' });
+    entry.textContent = `[${timeStamp}] ${text}`;
+    feed.appendChild(entry);
+    feed.scrollTop = feed.scrollHeight;
+}
+
+function addChatMessage(author, text) {
+    const feed = document.getElementById('chat-feed');
+    if (!feed || !text) return;
+    const entry = document.createElement('div');
+    entry.className = 'chat-entry';
+    entry.textContent = `${author}: ${text}`;
+    feed.appendChild(entry);
+    feed.scrollTop = feed.scrollHeight;
+}
+
+function sendChatMessage() {
+    const input = document.getElementById('chat-input');
+    const text = input?.value.trim();
+    if (!text) return;
+    addChatMessage('YOU', text);
+    sendOnlineMessage({ kind: 'chat', text });
+    input.value = '';
+}
+
+async function extendRenderSession() {
+    lastKeepAliveAt = Date.now();
+    try {
+        await fetch('/keepalive', { cache: 'no-store' });
+        addConnectionLog('Render接続を延長しました。');
+        sendOnlineMessage({ kind: 'keepalive' });
+    } catch {
+        addConnectionLog('接続延長リクエストに失敗しました。');
+    }
+}
+
+function startKeepAliveWarningTimer() {
+    window.clearInterval(startKeepAliveWarningTimer.timer);
+    startKeepAliveWarningTimer.timer = window.setInterval(() => {
+        if (!onlineMode || activePhase !== 'battle') return;
+        if (Date.now() - lastKeepAliveAt >= KEEPALIVE_WARNING_MS) {
+            addConnectionLog('10分以上延長していません。Render対策として延長ボタンを押してください。');
+            showKeepAliveWarning();
+            lastKeepAliveAt = Date.now();
+        }
+    }, 30 * 1000);
+}
+
+function showKeepAliveWarning() {
+    let warning = document.getElementById('keepalive-warning');
+    if (!warning) {
+        warning = document.createElement('div');
+        warning.id = 'keepalive-warning';
+        warning.className = 'keepalive-warning';
+        warning.textContent = '接続延長を押してください';
+        document.body.appendChild(warning);
+    }
+    warning.classList.add('show');
+    window.clearTimeout(showKeepAliveWarning.timer);
+    showKeepAliveWarning.timer = window.setTimeout(() => warning.classList.remove('show'), 4000);
 }
 
 function applyRemoteAction(action) {
@@ -643,6 +742,9 @@ function startGame(config = null, fromOnline = false) {
     selectedUnit = null;
     activeMap = 'area1';
     scoutReinforcementSerial = 0;
+    actionsThisTurn = 0;
+    actedUnitIds = new Set();
+    lastKeepAliveAt = Date.now();
 
     p1KohDestroyed = false;
     p2KohDestroyed = false;
@@ -668,6 +770,7 @@ function startGame(config = null, fromOnline = false) {
 
     addConsoleLog("GAME INITIATED. PLAYER 1 (BLUE) TURN.", 'system');
     showTurnBanner();
+    startKeepAliveWarningTimer();
 
     if (onlineMode && !fromOnline) {
         sendOnlineMessage({ kind: 'start', config: { p1Ability, p2Ability, seed: gameSeed } });
@@ -832,23 +935,61 @@ function isMapConnected(mapName) {
 }
 
 function generateRandomWalls(seed) {
-    Object.keys(MAP_SIZES).forEach((mapName, mapIndex) => {
-        const rng = createRng(seed + (mapIndex + 1) * 9973);
-        let placed = 0;
-        let attempts = 0;
-        while (placed < WALLS_PER_MAP && attempts < 800) {
-            attempts++;
-            const candidates = shuffleWithRng(getWallCandidates(mapName), rng);
-            const candidate = candidates[0];
-            if (!candidate) break;
-            const cell = boards[mapName][candidate.row][candidate.col];
-            cell.isWall = true;
-            if (isMapConnected(mapName)) {
-                placed++;
-            } else {
-                cell.isWall = false;
-            }
+    placeSymmetricWalls('area1', seed + 9973, ['area3']);
+    placeSymmetricWalls('area2', seed + 19946);
+}
+
+function placeSymmetricWalls(mapName, seed, mirrorMaps = []) {
+    const rng = createRng(seed);
+    const size = MAP_SIZES[mapName];
+    const targetMaps = [mapName, ...mirrorMaps];
+    let placed = 0;
+    let attempts = 0;
+
+    while (placed < WALLS_PER_MAP && attempts < 1200) {
+        attempts++;
+        const candidates = shuffleWithRng(getWallCandidates(mapName), rng);
+        const candidate = candidates.find(pos => {
+            const pair = getPointSymmetricCell(mapName, pos.row, pos.col);
+            return canPlaceWallSet(targetMaps, [pos, pair]);
+        });
+        if (!candidate) break;
+
+        const pair = getPointSymmetricCell(mapName, candidate.row, candidate.col);
+        const cells = sameCell(candidate, pair) ? [candidate] : [candidate, pair];
+        targetMaps.forEach(targetMap => setWalls(targetMap, cells, true));
+        if (targetMaps.every(targetMap => isMapConnected(targetMap))) {
+            placed += cells.length;
+        } else {
+            targetMaps.forEach(targetMap => setWalls(targetMap, cells, false));
         }
+    }
+}
+
+function getPointSymmetricCell(mapName, row, col) {
+    const size = MAP_SIZES[mapName];
+    return { row: size.rows - 1 - row, col: size.cols - 1 - col };
+}
+
+function sameCell(a, b) {
+    return a.row === b.row && a.col === b.col;
+}
+
+function canPlaceWallSet(mapNames, cells) {
+    return mapNames.every(mapName => cells.every(pos => {
+        const cell = boards[mapName][pos.row][pos.col];
+        return !cell.isWall &&
+            !cell.isTeleport &&
+            !cell.isCoreTile &&
+            !cell.unit &&
+            !protectedWallCells.has(cellKey(mapName, pos.row, pos.col)) &&
+            !isCentralReserveCell(mapName, pos.row, pos.col);
+    }));
+}
+
+function setWalls(mapName, cells, value) {
+    cells.forEach(pos => {
+        boards[mapName][pos.row][pos.col].isWall = value;
     });
 }
 
@@ -1027,6 +1168,7 @@ function renderBoard() {
                 if (!isHiddenByFog) {
                     const unitEl = document.createElement('div');
                     unitEl.className = `unit player-${u.player} ${u.type}`;
+                    if (actedUnitIds.has(u.id)) unitEl.classList.add('acted');
                     if (u.type === 'koh') {
                         unitEl.classList.add('koh-ability', getAbilityClass(u.player));
                         unitEl.setAttribute('data-ability', u.player === 1 ? p1Ability : p2Ability);
@@ -1257,6 +1399,10 @@ function handleCellClick(row, col) {
 
 function selectUnit(unit) {
     if (unit.type === 'core') return;
+    if (actedUnitIds.has(unit.id)) {
+        addConsoleLog('INFO: このターンに行動済みのコマは再行動できません。', 'system');
+        return;
+    }
 
     if (activeMap !== unit.map) {
         activeMap = unit.map;
@@ -1425,7 +1571,7 @@ function executeMove(unit, destRow, destCol) {
             addConsoleLog(`ABILITY: 暗殺者 - ${unit.name}が${captureNames}を撃破し、1マス後退。`, 'ability');
             if (resolved.portalDest && unit.player === currentPlayer) activeMap = finalMap;
             sendOnlineMessage({ kind: 'action', action: { type: 'move', unitId: unit.id, row: destRow, col: destCol } });
-            endTurn();
+            completeUnitAction(unit);
             return;
         }
     }
@@ -1454,7 +1600,7 @@ function executeMove(unit, destRow, destCol) {
     addConsoleLog(logMsg, logType);
     if (resolved.portalDest && unit.player === currentPlayer) activeMap = targetMap;
     sendOnlineMessage({ kind: 'action', action: { type: 'move', unitId: unit.id, row: destRow, col: destCol } });
-    endTurn();
+    completeUnitAction(unit);
 }
 
 function executeAbility(unit, destRow, destCol) {
@@ -1467,7 +1613,7 @@ function executeAbility(unit, destRow, destCol) {
         unit.row = destRow; unit.col = destCol;
         addConsoleLog(`Player ${unit.player}: 偵察兵が [${startCol},${startRow}] から [${destCol},${destRow}] へワープ転送。`, 'ability');
         sendOnlineMessage({ kind: 'action', action: { type: 'ability', unitId: unit.id, row: destRow, col: destCol } });
-        endTurn();
+        completeUnitAction(unit);
         return;
     }
 
@@ -1491,7 +1637,7 @@ function executeAbility(unit, destRow, destCol) {
             }
             addConsoleLog(`ABILITY: 甲の「鼓舞」発動！同マップ周囲 ${affectedCount} 体の味方の移動・視界+1。`, 'ability');
             sendOnlineMessage({ kind: 'action', action: { type: 'ability', unitId: unit.id } });
-            endTurn();
+            completeUnitAction(unit);
 
         } else if (abilityName === '爆破') {
             addConsoleLog(`ABILITY: 甲の「爆破」自滅シークエンス開始！`, 'destroy');
@@ -1539,7 +1685,7 @@ function executeAbility(unit, destRow, destCol) {
             if (destroyedCoords.length > 0)
                 addConsoleLog(`SYSTEM: 爆破により消滅: ${destroyedCoords.join(', ')}`, 'destroy');
             sendOnlineMessage({ kind: 'action', action: { type: 'ability', unitId: unit.id } });
-            endTurn();
+            completeUnitAction(unit);
 
         } else {
             // パッシブ系アビリティはターン消費なし（移動が本アクション）
@@ -1561,7 +1707,7 @@ function executeClairvoyance(direction, unitOverride = selectedUnit) {
     const dirKanji = { up: '▲上', down: '▼下', left: '◀左', right: '右▶' }[direction];
     addConsoleLog(`ABILITY: 甲の「千里眼」起動。${unit.map} 内の ${dirKanji} 方向を可視化。`, 'ability');
     sendOnlineMessage({ kind: 'action', action: { type: 'clairvoyance', unitId: unit.id, dir: direction } });
-    endTurn();
+    completeUnitAction(unit);
 }
 
 function executeOtsuBreakthrough(mapName, centerR, centerC) {
@@ -1600,6 +1746,29 @@ function executeOtsuBreakthrough(mapName, centerR, centerC) {
 }
 
 // --- TURN TRANSITION ---
+function completeUnitAction(unit) {
+    if (isGameOver) return;
+    actedUnitIds.add(unit.id);
+    actionsThisTurn++;
+    cancelSelection();
+    calculateVisibility();
+    renderBoard();
+    updateUI();
+
+    if (actionsThisTurn >= ACTIONS_PER_TURN || !hasAvailableActionUnit(currentPlayer)) {
+        endTurn();
+        return;
+    }
+
+    addConsoleLog(`ACTION ${actionsThisTurn}/${ACTIONS_PER_TURN}: Player ${currentPlayer} は別のコマをもう1体行動できます。`, currentPlayer === 1 ? 'p1' : 'p2');
+    showTurnBanner();
+    if (currentPlayer === 2 && vsAI) setTimeout(executeAITurn, 700);
+}
+
+function hasAvailableActionUnit(player) {
+    return units.some(unit => unit.player === player && unit.type !== 'core' && !actedUnitIds.has(unit.id));
+}
+
 function endTurn() {
     cancelSelection();
     if (isGameOver) return;
@@ -1619,6 +1788,8 @@ function endTurn() {
     }
 
     currentPlayer = currentPlayer === 1 ? 2 : 1;
+    actionsThisTurn = 0;
+    actedUnitIds = new Set();
     if (currentPlayer === 1) {
         gameTurn++;
         if (gameTurn % SCOUT_REINFORCE_INTERVAL === 0) reinforceScouts();
@@ -1647,7 +1818,7 @@ function showTurnBanner() {
     }
     const isMine = !onlineMode || localPlayer === currentPlayer;
     banner.className = `turn-banner player-${currentPlayer} show`;
-    banner.textContent = `TURN ${gameTurn} / PLAYER ${currentPlayer}${onlineMode ? (isMine ? ' - YOUR TURN' : ' - OPPONENT') : ''}`;
+    banner.textContent = `TURN ${gameTurn} / PLAYER ${currentPlayer} / ${actionsThisTurn}/${ACTIONS_PER_TURN}${onlineMode ? (isMine ? ' - YOUR TURN' : ' - OPPONENT') : ''}`;
     window.clearTimeout(showTurnBanner.timer);
     showTurnBanner.timer = window.setTimeout(() => banner.classList.remove('show'), 1500);
 }
@@ -1733,15 +1904,15 @@ function updateUI() {
 
     if (currentPlayer === 1) {
         playerNameEl.textContent = onlineMode
-            ? `PLAYER 1 (BLUE)${localPlayer === 1 ? ' - YOUR TURN' : ' - OPPONENT TURN'}`
+            ? `PLAYER 1 (BLUE)${localPlayer === 1 ? ` - YOUR TURN ${actionsThisTurn}/${ACTIONS_PER_TURN}` : ' - OPPONENT TURN'}`
             : 'PLAYER 1 (BLUE)';
         playerNameEl.className = 'text-cyan';
         playerDotEl.style.backgroundColor = 'var(--neon-cyan)';
         playerDotEl.style.boxShadow = '0 0 10px var(--neon-cyan)';
     } else {
         playerNameEl.textContent = onlineMode
-            ? `PLAYER 2 (RED)${localPlayer === 2 ? ' - YOUR TURN' : ' - OPPONENT TURN'}`
-            : (vsAI ? 'AI BOT (RED)' : 'PLAYER 2 (RED)');
+            ? `PLAYER 2 (RED)${localPlayer === 2 ? ` - YOUR TURN ${actionsThisTurn}/${ACTIONS_PER_TURN}` : ' - OPPONENT TURN'}`
+            : (vsAI ? `AI BOT (RED) ${actionsThisTurn}/${ACTIONS_PER_TURN}` : 'PLAYER 2 (RED)');
         playerNameEl.className = 'text-magenta';
         playerDotEl.style.backgroundColor = 'var(--neon-magenta)';
         playerDotEl.style.boxShadow = '0 0 10px var(--neon-magenta)';
@@ -1754,6 +1925,8 @@ function updateUI() {
     document.getElementById('p2-units-count').textContent = `${p2Count} / ${totalUnits}`;
     updateMapLabels();
     updateModeVisibility();
+    document.body.classList.toggle('my-turn', !onlineMode || localPlayer === currentPlayer);
+    document.body.classList.toggle('opponent-turn', onlineMode && localPlayer !== currentPlayer);
 }
 
 function updateMapLabels() {
@@ -1779,7 +1952,7 @@ function addConsoleLog(text, type = 'system') {
 function executeAITurn() {
     if (isGameOver) return;
 
-    const aiUnits = units.filter(u => u.player === 2 && u.type !== 'core');
+    const aiUnits = units.filter(u => u.player === 2 && u.type !== 'core' && !actedUnitIds.has(u.id));
     if (aiUnits.length === 0) { endTurn(); return; }
 
     let bestAction = null;

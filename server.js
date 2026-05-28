@@ -132,6 +132,14 @@ const server = http.createServer((req, res) => {
         res.writeHead(302, { Location: '/index.html?online=1&player=2' });
         res.end(); return;
     }
+    if (url.pathname === '/keepalive') {
+        res.writeHead(200, {
+            'Content-Type': 'application/json; charset=utf-8',
+            'Cache-Control': 'no-cache'
+        });
+        res.end(JSON.stringify({ ok: true, now: Date.now() }));
+        return;
+    }
 
     const requestPath = url.pathname === '/' ? '/index.html' : url.pathname;
     const filePath = path.normalize(path.join(root, requestPath));

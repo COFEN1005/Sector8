@@ -578,6 +578,11 @@ details li {
     transform: scale(1.08);
 }
 
+.unit.acted {
+    opacity: 0.45;
+    filter: grayscale(0.8);
+}
+
 /* Player Specific Colors */
 .unit.player-1 {
     color: var(--neon-cyan);
@@ -987,6 +992,96 @@ details li {
 
 #combat-feed-panel.hidden {
     display: none !important;
+}
+
+.online-tools-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+    margin-bottom: 1rem;
+}
+
+.tool-row,
+.chat-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.tool-row h3 {
+    margin: 0;
+    flex: 1;
+}
+
+.small-tool-btn {
+    border: 1px solid var(--neon-cyan);
+    background: rgba(0, 240, 255, 0.08);
+    color: var(--neon-cyan);
+    border-radius: 5px;
+    padding: 0.45rem 0.55rem;
+    font-family: var(--font-mono);
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.connection-log,
+.chat-feed {
+    min-height: 54px;
+    max-height: 92px;
+    overflow-y: auto;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 0.5rem;
+    background: rgba(0, 0, 0, 0.28);
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    line-height: 1.4;
+}
+
+.connection-entry {
+    color: var(--text-muted);
+}
+
+.chat-entry {
+    color: var(--text-primary);
+    margin-bottom: 0.25rem;
+}
+
+.chat-row .neon-input {
+    min-width: 0;
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+.keepalive-warning {
+    position: fixed;
+    right: 1rem;
+    bottom: 1rem;
+    z-index: 2100;
+    padding: 0.8rem 1rem;
+    border: 1px solid var(--neon-gold);
+    border-radius: 8px;
+    background: rgba(3, 5, 10, 0.95);
+    color: var(--neon-gold);
+    font-family: var(--font-mono);
+    font-weight: 800;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+}
+
+.keepalive-warning.show {
+    opacity: 1;
+}
+
+body.my-turn #turn-indicator {
+    border-color: var(--neon-cyan);
+    box-shadow: var(--shadow-cyan);
+}
+
+body.opponent-turn #turn-indicator {
+    border-color: var(--neon-magenta);
+    box-shadow: var(--shadow-magenta);
 }
 
 .log-entry {
