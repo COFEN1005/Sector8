@@ -373,6 +373,17 @@ details li {
     gap: 4px;
     width: 100%;
     height: 100%;
+    transition: transform 0.25s ease;
+}
+
+#board.viewer-player-2 {
+    transform: rotate(180deg);
+}
+
+#board.viewer-player-2 .unit,
+#board.viewer-player-2 .cell::before,
+#board.viewer-player-2 .cell::after {
+    transform: rotate(180deg);
 }
 
 /* CELLS AND ZONES */

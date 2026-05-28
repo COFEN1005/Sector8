@@ -990,14 +990,14 @@ function saveTurnVision() {
 function renderBoard() {
     const boardEl = document.getElementById('board');
     boardEl.innerHTML = '';
-    boardEl.className = `board-map-${activeMap}`;
+    const viewerPlayer = getViewerPlayer();
+    boardEl.className = `board-map-${activeMap} viewer-player-${viewerPlayer}`;
 
     const size = MAP_SIZES[activeMap];
     boardEl.style.gridTemplateColumns = `repeat(${size.cols}, 1fr)`;
     boardEl.style.gridTemplateRows = `repeat(${size.rows}, 1fr)`;
     document.getElementById('game-board-wrapper').style.aspectRatio = `${size.cols} / ${size.rows}`;
 
-    const viewerPlayer = getViewerPlayer();
     const activeVision = viewerPlayer === 1 ? p1Vision[activeMap] : p2Vision[activeMap];
 
     for (let r = 0; r < size.rows; r++) {
