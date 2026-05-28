@@ -23,6 +23,7 @@ const MAP_SIZES = {
 const PORTAL_COLS = [0, 1, 9, 10];
 const WALLS_PER_MAP = 12;
 const SCOUT_REINFORCE_INTERVAL = 10;
+const SCOUT_LIMIT_PER_PLAYER = 2;
 
 function getPortalDestination(mapName, r, c) {
     if (!PORTAL_COLS.includes(c)) return null;
@@ -1652,6 +1653,11 @@ function showTurnBanner() {
 
 function reinforceScouts() {
     [1, 2].forEach(player => {
+        const scoutCount = units.filter(unit => unit.player === player && unit.type === 'scout').length;
+        if (scoutCount >= SCOUT_LIMIT_PER_PLAYER) {
+            addConsoleLog(`SUPPLY: Player ${player} の偵察兵は上限${SCOUT_LIMIT_PER_PLAYER}体です。`, 'system');
+            return;
+        }
         const rows = player === 1 ? [10, 9] : [0, 1];
         const spawn = rows.flatMap(row =>
             Array.from({ length: MAP_SIZES.area2.cols }, (_, col) => ({ row, col }))
