@@ -37,16 +37,16 @@
                     <details open>
                         <summary>🎛️ 独立マルチマップ制</summary>
                         <p>本作は、独立した3つのマップで戦いが行われます：</p>
-                        <p><strong>エリア1 (自陣 - 9×9)</strong>: 自軍コア(核)が存在するエリア。行0の <code>t</code> マスからエリア2へワープ。</p>
-                        <p><strong>エリア2 (中央 - 8×9)</strong>: 主戦場。行7の <code>t</code> はエリア1へ、行0の <code>t</code> はエリア3へ接続。ここに自軍が0体になると<strong>「情報崩壊」</strong>となり、自陣（エリア1）の全域視界バフを喪失します。</p>
-                        <p><strong>エリア3 (敵陣 - 9×9)</strong>: 敵のコアが存在するエリア。行8の <code>t</code> からエリア2へワープ。</p>
+                        <p><strong>エリア1 (自陣 - 11×11)</strong>: 自軍コア(核)が存在するエリア。行0の <code>t</code> マスからエリア2へワープ。</p>
+                        <p><strong>エリア2 (中央 - 11×11)</strong>: 主戦場。行10の <code>t</code> はエリア1へ、行0の <code>t</code> はエリア3へ接続。ここに自軍が0体になると<strong>「情報崩壊」</strong>となり、自陣（エリア1）の全域視界バフを喪失します。</p>
+                        <p><strong>エリア3 (敵陣 - 11×11)</strong>: 敵のコアが存在するエリア。行10の <code>t</code> からエリア2へワープ。</p>
                     </details>
                     <details>
                         <summary>🛡️ ユニット情報 (HPは全員1)</summary>
                         <ul>
-                            <li><strong>甲 (Koh)</strong>: 視界3・周辺移動3。試合前に選択した強力なアビリティを所持。</li>
-                            <li><strong>乙 (Otsu)</strong>: 視界3・直線移動3。敵陣（エリア3）でのみ撃破時周囲2マスを巻き込むアビリティ所持。</li>
-                            <li><strong>丙 (Hei)</strong>: 視界2・周辺移動2。機動力のある歩兵。</li>
+                            <li><strong>甲 (Koh)</strong>: 視界3・マンハッタン移動3。試合前に選択した強力なアビリティを所持。</li>
+                            <li><strong>乙 (Otsu)</strong>: 視界3・直線移動3。敵本拠地で撃破時、周囲1マスを巻き込むアビリティ所持。</li>
+                            <li><strong>丙 (Hei)</strong>: 視界2・マンハッタン移動2。機動力のある歩兵。</li>
                             <li><strong>丁 (Tei)</strong>: 視界2・直線移動2。標準的な歩兵。</li>
                             <li><strong>偵察兵 (Scout)</strong>: 視界2・攻撃不可。エリア2固定。視界内へワープ可能。別マップへは移動不可。</li>
                         </ul>
@@ -60,7 +60,7 @@
                             <li><strong>歴戦王</strong>: パッシブ：自身の移動+1・視界+1</li>
                             <li><strong>戦姫</strong>: パッシブ：敵甲撃破時、味方丙・丁の視界+1</li>
                             <li><strong>爆破</strong>: 周囲2マスの全マス破壊して自滅</li>
-                            <li><strong>暗殺者</strong>: パッシブ：直線移動5・直線視界5。敵撃破時、進行方向から1マス後退してターン終了。</li>
+                            <li><strong>暗殺者</strong>: パッシブ：マンハッタン移動5・直線視界5。敵撃破時、進行方向から1マス後退してターン終了。</li>
                         </ul>
                     </details>
                     <details>
@@ -69,16 +69,6 @@
                         <p>・<strong>テレポートマス (t)</strong>: ユニットがこのマスへ移動すると、隣接マップの対応するマスへ即座に転送されます。転送先に敵がいる場合は撃破し、味方がいる場合はテレポート不可。エリア2初期配置の前線コマは自拠点側へテレポート不可。偵察兵はエリア2固定でテレポート不可。</p>
                         <p>・<strong>固定壁 (w)</strong>: 移動を遮断。視界は通ります。甲の「爆破」でのみ破壊可能。</p>
                     </details>
-                </div>
-                <div class="system-status">
-                    <div class="status-row">
-                        <span>P1 AREA 2 STATUS:</span>
-                        <span id="p1-area2-status" class="status-val text-cyan">ONLINE</span>
-                    </div>
-                    <div class="status-row">
-                        <span>P2 AREA 2 STATUS:</span>
-                        <span id="p2-area2-status" class="status-val text-magenta">ONLINE</span>
-                    </div>
                 </div>
             </section>
 
@@ -133,7 +123,8 @@
 
                     <!-- Mode tabs -->
                     <div class="mode-tabs">
-                        <button id="tab-mode-ai" class="mode-tab active" onclick="setModeTab('ai')">🤖 AI戦</button>
+                        <button id="tab-mode-debug" class="mode-tab active" onclick="setModeTab('debug')">DEBUG</button>
+                        <button id="tab-mode-ai" class="mode-tab" onclick="setModeTab('ai')">AI戦</button>
                         <button id="tab-mode-local" class="mode-tab" onclick="setModeTab('local')">👥 ローカル</button>
                         <button id="tab-mode-online" class="mode-tab" onclick="setModeTab('online')">🌐 オンライン</button>
                     </div>
@@ -186,6 +177,7 @@
                                 <div class="room-id-box">
                                     <span class="room-id-label">ROOM ID:</span>
                                     <span id="room-id-display" class="room-id-value">------</span>
+                                    <button id="btn-copy-room" class="copy-room-btn" type="button">COPY</button>
                                 </div>
                                 <p class="room-hint">このIDを対戦相手に伝えてください。<br>対戦相手が接続したらゲームを開始できます。</p>
                                 <button id="btn-start-online-match" class="neon-btn pulse" disabled onclick="startGame()">ONLINE MATCH START</button>
@@ -218,11 +210,23 @@
                             <span>P2 ALIVE UNITS:</span>
                             <span id="p2-units-count" class="text-magenta">14/14</span>
                         </div>
+                        <div class="deck-row">
+                            <span>P1 AREA 2:</span>
+                            <span id="p1-area2-status" class="status-val text-cyan">ONLINE</span>
+                        </div>
+                        <div class="deck-row">
+                            <span>P2 AREA 2:</span>
+                            <span id="p2-area2-status" class="status-val text-magenta">ONLINE</span>
+                        </div>
                     </div>
 
-                    <h3>COMBAT FEED</h3>
-                    <div id="log-feed">
-                        <div class="log-entry system">GAME INITIALIZED. SELECT CONFIG AND INITIATE.</div>
+                    <div id="minimap-panel" class="minimap-panel"></div>
+
+                    <div id="combat-feed-panel">
+                        <h3>COMBAT FEED</h3>
+                        <div id="log-feed">
+                            <div class="log-entry system">GAME INITIALIZED. SELECT CONFIG AND INITIATE.</div>
+                        </div>
                     </div>
 
                     <button id="btn-forfeit" class="neon-btn danger">SYSTEM REBOOT (降伏)</button>
@@ -261,19 +265,20 @@
     function setModeTab(mode) {
         document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active'));
         document.getElementById('tab-mode-' + mode).classList.add('active');
+        window.gameMode = mode;
         if (mode === 'online') {
             document.getElementById('matchmaking-panel').classList.remove('hidden');
             document.getElementById('setup-local-panel').classList.add('hidden');
         } else {
             document.getElementById('matchmaking-panel').classList.add('hidden');
             document.getElementById('setup-local-panel').classList.remove('hidden');
-            // sync AI/Human toggle
-            if (mode === 'ai') {
+            if (mode === 'ai' || mode === 'debug') {
                 document.getElementById('btn-opt-ai').click();
             } else {
                 document.getElementById('btn-opt-human').click();
             }
         }
+        if (window.setGameMode) window.setGameMode(mode);
     }
     </script>
     <script src="app.js"></script>

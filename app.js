@@ -3,7 +3,7 @@
  * Core Game Engine - Teleport / 3-Map Edition (v2.0)
  * 
  * Changes v2.0:
- * - Area1/Area3: 9x9 grids (99)
+ * - Area1/Area2/Area3: 11x11 grids
  * - Core: 3 tiles wide (center-aligned)
  * - Walls: 3x3 blocks, point-symmetric
  * - Unit lineup: 乙丙丁丁丙丁丁丙乙
@@ -15,25 +15,26 @@
 
 // --- CONSTANTS & CONFIGURATION ---
 const MAP_SIZES = {
-    area1: { rows: 9, cols: 9 }, // P1 Base (9x9)
-    area2: { rows: 8, cols: 9 }, // Central Battlefield (8x9)
-    area3: { rows: 9, cols: 9 }  // P2 Base (9x9)
+    area1: { rows: 11, cols: 11 },
+    area2: { rows: 11, cols: 11 },
+    area3: { rows: 11, cols: 11 }
 };
 
-// Portal columns (cols 0,1,7,8 for 9-wide grid)
-const PORTAL_COLS = [0, 1, 7, 8];
+const PORTAL_COLS = [0, 1, 9, 10];
+const WALLS_PER_MAP = 12;
+const SCOUT_REINFORCE_INTERVAL = 10;
 
 function getPortalDestination(mapName, r, c) {
     if (!PORTAL_COLS.includes(c)) return null;
 
     if (mapName === 'area1' && r === 0) {
-        return { map: 'area2', row: 7, col: c };
+        return { map: 'area2', row: 10, col: c };
     }
     if (mapName === 'area2') {
-        if (r === 7) return { map: 'area1', row: 0, col: c };
-        if (r === 0) return { map: 'area3', row: 8, col: c };
+        if (r === 10) return { map: 'area1', row: 0, col: c };
+        if (r === 0) return { map: 'area3', row: 10, col: c };
     }
-    if (mapName === 'area3' && r === 8) {
+    if (mapName === 'area3' && r === 10) {
         return { map: 'area2', row: 0, col: c };
     }
     return null;
@@ -94,7 +95,11 @@ let gameTurn = 1;
 let p1Ability = '足跡';
 let p2Ability = '歴戦王';
 let vsAI = true;
+let gameMode = 'debug';
 let isGameOver = false;
+let protectedWallCells = new Set();
+let scoutReinforcementSerial = 0;
+let gameSeed = 1;
 
 let selectedUnit = null;
 let selectedAction = 'move';
@@ -112,6 +117,29 @@ let p1ClairvoyanceDir = null;
 let p2ClairvoyanceDir = null;
 let p1ClairvoyanceAge = 0;
 let p2ClairvoyanceAge = 0;
+
+function createRng(seed) {
+    let t = seed >>> 0;
+    return function random() {
+        t += 0x6D2B79F5;
+        let x = Math.imul(t ^ (t >>> 15), 1 | t);
+        x ^= x + Math.imul(x ^ (x >>> 7), 61 | x);
+        return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+    };
+}
+
+function shuffleWithRng(items, rng) {
+    const copy = [...items];
+    for (let i = copy.length - 1; i > 0; i--) {
+        const j = Math.floor(rng() * (i + 1));
+        [copy[i], copy[j]] = [copy[j], copy[i]];
+    }
+    return copy;
+}
+
+function cellKey(mapName, r, c) {
+    return `${mapName}:${r},${c}`;
+}
 
 // --- ONLINE MULTIPLAYER STATE ---
 const urlParams = new URLSearchParams(window.location.search);
@@ -170,7 +198,7 @@ class Unit {
             case 'koh':
                 this.baseVision = 3;
                 this.baseMove = 3;
-                this.moveType = 'surrounding';
+                this.moveType = 'manhattan';
                 break;
             case 'otsu':
                 this.baseVision = 3;
@@ -180,7 +208,7 @@ class Unit {
             case 'hei':
                 this.baseVision = 2;
                 this.baseMove = 2;
-                this.moveType = 'surrounding';
+                this.moveType = 'manhattan';
                 break;
             case 'tei':
                 this.baseVision = 2;
@@ -222,7 +250,7 @@ class Unit {
             return `【甲特有: ${ability}】`;
         }
         if (this.type === 'otsu') {
-            return `【乙特有: 切り崩し】敵本拠地(エリア3)で敵撃破時、周囲2マスの全コマを追加破壊。`;
+            return `【乙特有: 切り崩し】敵本拠地で敵撃破時、周囲1マスの全コマを追加破壊。`;
         }
         if (this.type === 'scout') {
             return `【偵察兵特有: ワープ】攻撃不可。エリア2固定。視界内の空きマスへ瞬時ワープ。`;
@@ -235,7 +263,7 @@ class Unit {
         if (this.type === 'koh') {
             const ability = this.player === 1 ? p1Ability : p2Ability;
             if (ability === '歴戦王') r += 1;
-            if (ability === '暗殺者') { return 5; } // 暗殺者: 直線移動5 (overrides base + moveType)
+            if (ability === '暗殺者') { return 5; }
         }
         if (this.inspirationTurns > 0) r += 1;
         return r;
@@ -258,12 +286,7 @@ class Unit {
         return v;
     }
 
-    // 暗殺者の移動タイプは常に直線
     getEffectiveMoveType() {
-        if (this.type === 'koh') {
-            const ability = this.player === 1 ? p1Ability : p2Ability;
-            if (ability === '暗殺者') return 'straight';
-        }
         return this.moveType;
     }
 }
@@ -275,6 +298,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setupMapTabs();
     setupGameModeTabs();
     setupOnlineMode();
+    updateModeVisibility();
     addConsoleLog("SYSTEM READY. SELECT CONFIGURATION AND PRESS 'SYSTEM INITIATE'.", 'system');
 });
 
@@ -318,6 +342,9 @@ function setupUIEventListeners() {
             executeClairvoyance(dir);
         });
     });
+
+    const copyRoomBtn = document.getElementById('btn-copy-room');
+    if (copyRoomBtn) copyRoomBtn.addEventListener('click', copyRoomCode);
 }
 
 function setupMapTabs() {
@@ -366,7 +393,27 @@ function setOpponent(isAi) {
     }
 }
 
+function setGameMode(mode) {
+    gameMode = mode;
+    if (mode === 'online') {
+        vsAI = false;
+    } else if (mode === 'ai' || mode === 'debug') {
+        vsAI = true;
+    } else {
+        vsAI = false;
+    }
+    updateModeVisibility();
+}
+
+window.setGameMode = setGameMode;
+
+function updateModeVisibility() {
+    const feedPanel = document.getElementById('combat-feed-panel');
+    if (feedPanel) feedPanel.classList.toggle('hidden', gameMode !== 'debug');
+}
+
 function showMatchmakingPanel() {
+    setGameMode('online');
     document.getElementById('matchmaking-panel').classList.remove('hidden');
     document.getElementById('setup-local-panel').classList.add('hidden');
     // highlight online tab
@@ -390,6 +437,7 @@ function hostRoom() {
     matchmakingRole = 'host';
     localPlayer = 1;
     onlineMode = true;
+    setGameMode('online');
     connectOnlineSocket(roomId, 1);
 }
 
@@ -404,6 +452,7 @@ function joinRoom() {
     matchmakingRole = 'guest';
     localPlayer = 2;
     onlineMode = true;
+    setGameMode('online');
     document.getElementById('matchmaking-status').textContent = `ルーム ${roomId} に接続中...`;
     connectOnlineSocket(roomId, 2);
 }
@@ -418,11 +467,13 @@ function cancelMatchmaking() {
     document.getElementById('matchmaking-status').textContent = '';
     document.getElementById('room-share-area').classList.add('hidden');
     document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active'));
-    document.getElementById('tab-mode-ai').classList.add('active');
+    document.getElementById('tab-mode-debug').classList.add('active');
+    setGameMode('debug');
 }
 
 function setupOnlineMode() {
     if (!onlineMode) return;
+    setGameMode('online');
     vsAI = false;
     setOpponent(false);
     document.getElementById('current-player-name').textContent = `PLAYER ${localPlayer || '?'} CONNECTING`;
@@ -433,6 +484,17 @@ function setupOnlineMode() {
         document.getElementById('btn-start-game').textContent = 'START ONLINE MATCH';
     }
     connectOnlineSocket(null, localPlayer);
+}
+
+async function copyRoomCode() {
+    const roomText = document.getElementById('room-id-display')?.textContent?.trim();
+    if (!roomText || roomText === '------') return;
+    try {
+        await navigator.clipboard.writeText(roomText);
+        document.getElementById('matchmaking-status').textContent = 'ルームIDをコピーしました。';
+    } catch {
+        document.getElementById('matchmaking-status').textContent = `ルームID: ${roomText}`;
+    }
 }
 
 function connectOnlineSocket(roomId, player) {
@@ -517,6 +579,7 @@ function startGame(config = null, fromOnline = false) {
 
     p1Ability = config ? config.p1Ability : document.getElementById('p1-ability-choice').value;
     p2Ability = config ? config.p2Ability : document.getElementById('p2-ability-choice').value;
+    gameSeed = config?.seed || Math.floor(Math.random() * 0xFFFFFFFF);
     vsAI = onlineMode ? false : vsAI;
 
     activePhase = 'battle';
@@ -525,6 +588,7 @@ function startGame(config = null, fromOnline = false) {
     gameTurn = 1;
     selectedUnit = null;
     activeMap = 'area1';
+    scoutReinforcementSerial = 0;
 
     p1KohDestroyed = false;
     p2KohDestroyed = false;
@@ -542,21 +606,24 @@ function startGame(config = null, fromOnline = false) {
 
     initializeBoards();
     initializeUnits();
+    generateRandomWalls(gameSeed);
     calculateVisibility();
-    switchActiveMap('area1');
+    switchActiveMap(getViewerPlayer() === 2 ? 'area3' : 'area1');
     renderBoard();
     updateUI();
 
     addConsoleLog("GAME INITIATED. PLAYER 1 (BLUE) TURN.", 'system');
+    showTurnBanner();
 
     if (onlineMode && !fromOnline) {
-        sendOnlineMessage({ kind: 'start', config: { p1Ability, p2Ability } });
+        sendOnlineMessage({ kind: 'start', config: { p1Ability, p2Ability, seed: gameSeed } });
     }
 }
 
 // --- BOARD INITIALIZATION ---
 function initializeBoards() {
     boards = { area1: [], area2: [], area3: [] };
+    protectedWallCells = new Set();
 
     Object.keys(MAP_SIZES).forEach(mapName => {
         const size = MAP_SIZES[mapName];
@@ -565,38 +632,17 @@ function initializeBoards() {
         for (let r = 0; r < size.rows; r++) {
             let rowCells = [];
             for (let c = 0; c < size.cols; c++) {
-                let isWall = false;
-
                 const isTeleport = PORTAL_COLS.includes(c) && (
                     (mapName === 'area1' && r === 0) ||
-                    (mapName === 'area2' && (r === 0 || r === 7)) ||
-                    (mapName === 'area3' && r === 8)
+                    (mapName === 'area2' && (r === 0 || r === 10)) ||
+                    (mapName === 'area3' && r === 10)
                 );
 
-                // Walls: 3x3 blocks, point-symmetric layout
-                // area1 (9x9): block at rows 3-5, cols 3-5 → split into two 3x3:
-                //   top-left: r=2-4, c=1-3 / bottom-right (point sym): r=4-6, c=5-7
-                if (mapName === 'area1') {
-                    if ((r >= 2 && r <= 4) && (c >= 1 && c <= 3)) isWall = true;
-                    if ((r >= 4 && r <= 6) && (c >= 5 && c <= 7)) isWall = true;
-                } else if (mapName === 'area2') {
-                    // Keep central walls (narrower for 9-wide): cols 0,8 are teleport rows
-                    if ((r === 3 || r === 4) && (c === 1 || c === 7)) isWall = true;
-                } else if (mapName === 'area3') {
-                    // Point-symmetric to area1 (mirror vertically)
-                    // area3 rows go 0(core) to 8(teleport), symmetric center = row4
-                    // Symmetric to area1 block1 (r=2-4,c=1-3) → area3 (r=4-6,c=5-7)
-                    // Symmetric to area1 block2 (r=4-6,c=5-7) → area3 (r=2-4,c=1-3)
-                    if ((r >= 2 && r <= 4) && (c >= 5 && c <= 7)) isWall = true;
-                    if ((r >= 4 && r <= 6) && (c >= 1 && c <= 3)) isWall = true;
-                }
-
-                // Core tiles: 3 tiles wide, centered (cols 3,4,5 of 0-8)
                 let isCoreTile = false;
-                if (mapName === 'area1' && r === 8 && (c >= 3 && c <= 5)) isCoreTile = true;
-                if (mapName === 'area3' && r === 0 && (c >= 3 && c <= 5)) isCoreTile = true;
+                if (mapName === 'area1' && r === 10 && (c >= 4 && c <= 6)) isCoreTile = true;
+                if (mapName === 'area3' && r === 0 && (c >= 4 && c <= 6)) isCoreTile = true;
 
-                rowCells.push({ row: r, col: c, isWall, isTeleport, isCoreTile, unit: null });
+                rowCells.push({ row: r, col: c, isWall: false, isTeleport, isCoreTile, unit: null });
             }
             mapBoard.push(rowCells);
         }
@@ -605,57 +651,151 @@ function initializeBoards() {
 }
 
 // --- UNIT INITIALIZATION ---
-// area1/area3: 9 cols (0-8)
-// Lineup: 乙丙丁丁丙丁丁丙乙 (9 units)
-// Area2: 9 cols, frontline adjusted
 function initializeUnits() {
     units = [];
+    const rng = createRng(gameSeed);
 
     // --- PLAYER 1 (Blue) ---
-    // Core: 3 tiles centered (cols 3,4,5), row 8 area1
-    const p1Core = new Unit('p1_core', 'core', 1, 'area1', 8, 4);
-    addUnitToBoard(p1Core, 'area1', 8, 3);
-    addUnitToBoard(p1Core, 'area1', 8, 4);
-    addUnitToBoard(p1Core, 'area1', 8, 5);
+    const p1Core = new Unit('p1_core', 'core', 1, 'area1', 10, 5);
+    addUnitToBoard(p1Core, 'area1', 10, 4);
+    addUnitToBoard(p1Core, 'area1', 10, 5);
+    addUnitToBoard(p1Core, 'area1', 10, 6);
 
-    // Row 7 lineup: 乙丙丁丁丙丁丁丙乙
     const p1Lineup = ['otsu','hei','tei','tei','hei','tei','tei','hei','otsu'];
     p1Lineup.forEach((type, i) => {
-        addUnitToBoard(new Unit(`p1_home_${i}`, type, 1, 'area1', 7, i), 'area1', 7, i);
+        addUnitToBoard(new Unit(`p1_home_${i}`, type, 1, 'area1', 9, i + 1), 'area1', 9, i + 1);
     });
 
-    // Area 2 frontline P1 (row 7): 偵 x 甲 丙 x 丁 x x 偵
-    addUnitToBoard(new Unit('p1_scout_1', 'scout', 1, 'area2', 7, 0), 'area2', 7, 0);
-    addUnitToBoard(new Unit('p1_koh', 'koh', 1, 'area2', 7, 2, true), 'area2', 7, 2);
-    addUnitToBoard(new Unit('p1_hei_front', 'hei', 1, 'area2', 7, 3, true), 'area2', 7, 3);
-    addUnitToBoard(new Unit('p1_tei_front', 'tei', 1, 'area2', 7, 5, true), 'area2', 7, 5);
-    addUnitToBoard(new Unit('p1_scout_2', 'scout', 1, 'area2', 7, 8), 'area2', 7, 8);
+    placeArea2Frontline(1, [
+        ['p1_scout_1', 'scout'],
+        ['p1_koh', 'koh'],
+        ['p1_hei_front', 'hei'],
+        ['p1_tei_front', 'tei'],
+        ['p1_hei_front_extra', 'hei'],
+        ['p1_tei_front_extra', 'tei'],
+        ['p1_scout_2', 'scout']
+    ], rng);
 
     // --- PLAYER 2 (Magenta) ---
-    // Core: 3 tiles centered (cols 3,4,5), row 0 area3
-    const p2Core = new Unit('p2_core', 'core', 2, 'area3', 0, 4);
-    addUnitToBoard(p2Core, 'area3', 0, 3);
+    const p2Core = new Unit('p2_core', 'core', 2, 'area3', 0, 5);
     addUnitToBoard(p2Core, 'area3', 0, 4);
     addUnitToBoard(p2Core, 'area3', 0, 5);
+    addUnitToBoard(p2Core, 'area3', 0, 6);
 
-    // Row 1 lineup (point-symmetric): 乙丙丁丁丙丁丁丙乙 (reversed col order)
     const p2Lineup = ['otsu','hei','tei','tei','hei','tei','tei','hei','otsu'];
     p2Lineup.forEach((type, i) => {
-        const col = 8 - i; // reversed for point symmetry
+        const col = 9 - i;
         addUnitToBoard(new Unit(`p2_home_${i}`, type, 2, 'area3', 1, col), 'area3', 1, col);
     });
 
-    // Area 2 frontline P2 (row 0): point-symmetric to P1 row7
-    addUnitToBoard(new Unit('p2_scout_1', 'scout', 2, 'area2', 0, 8), 'area2', 0, 8);
-    addUnitToBoard(new Unit('p2_koh', 'koh', 2, 'area2', 0, 6, true), 'area2', 0, 6);
-    addUnitToBoard(new Unit('p2_hei_front', 'hei', 2, 'area2', 0, 5, true), 'area2', 0, 5);
-    addUnitToBoard(new Unit('p2_tei_front', 'tei', 2, 'area2', 0, 3, true), 'area2', 0, 3);
-    addUnitToBoard(new Unit('p2_scout_2', 'scout', 2, 'area2', 0, 0), 'area2', 0, 0);
+    placeArea2Frontline(2, [
+        ['p2_scout_1', 'scout'],
+        ['p2_koh', 'koh'],
+        ['p2_hei_front', 'hei'],
+        ['p2_tei_front', 'tei'],
+        ['p2_hei_front_extra', 'hei'],
+        ['p2_tei_front_extra', 'tei'],
+        ['p2_scout_2', 'scout']
+    ], rng);
 }
 
 function addUnitToBoard(unit, mapName, r, c) {
     if (!units.includes(unit)) units.push(unit);
+    unit.map = mapName;
+    unit.row = r;
+    unit.col = c;
     boards[mapName][r][c].unit = unit;
+    protectedWallCells.add(cellKey(mapName, r, c));
+}
+
+function placeArea2Frontline(player, lineup, rng) {
+    const rows = player === 1 ? [9, 10] : [0, 1];
+    const candidates = [];
+    rows.forEach(row => {
+        for (let col = 0; col < MAP_SIZES.area2.cols; col++) {
+            candidates.push({ row, col });
+        }
+    });
+
+    shuffleWithRng(candidates, rng).slice(0, lineup.length).forEach((pos, index) => {
+        const [id, type] = lineup[index];
+        addUnitToBoard(new Unit(id, type, player, 'area2', pos.row, pos.col, true), 'area2', pos.row, pos.col);
+    });
+}
+
+function isCentralReserveCell(mapName, r, c) {
+    const size = MAP_SIZES[mapName];
+    const midR = Math.floor(size.rows / 2);
+    const midC = Math.floor(size.cols / 2);
+    return Math.abs(r - midR) <= 1 && Math.abs(c - midC) <= 1;
+}
+
+function getWallCandidates(mapName) {
+    const size = MAP_SIZES[mapName];
+    const candidates = [];
+    for (let r = 0; r < size.rows; r++) {
+        for (let c = 0; c < size.cols; c++) {
+            const cell = boards[mapName][r][c];
+            if (cell.isWall || cell.isTeleport || cell.isCoreTile || cell.unit) continue;
+            if (protectedWallCells.has(cellKey(mapName, r, c))) continue;
+            if (isCentralReserveCell(mapName, r, c)) continue;
+            candidates.push({ row: r, col: c });
+        }
+    }
+    return candidates;
+}
+
+function isMapConnected(mapName) {
+    const size = MAP_SIZES[mapName];
+    let start = null;
+    let passableCount = 0;
+    for (let r = 0; r < size.rows; r++) {
+        for (let c = 0; c < size.cols; c++) {
+            if (!boards[mapName][r][c].isWall) {
+                passableCount++;
+                if (!start) start = { row: r, col: c };
+            }
+        }
+    }
+    if (!start) return false;
+
+    const visited = new Set([`${start.row},${start.col}`]);
+    const queue = [start];
+    const dirs = [{ r: -1, c: 0 }, { r: 1, c: 0 }, { r: 0, c: -1 }, { r: 0, c: 1 }];
+    while (queue.length) {
+        const current = queue.shift();
+        dirs.forEach(dir => {
+            const nr = current.row + dir.r;
+            const nc = current.col + dir.c;
+            const key = `${nr},${nc}`;
+            if (nr < 0 || nr >= size.rows || nc < 0 || nc >= size.cols) return;
+            if (visited.has(key) || boards[mapName][nr][nc].isWall) return;
+            visited.add(key);
+            queue.push({ row: nr, col: nc });
+        });
+    }
+    return visited.size === passableCount;
+}
+
+function generateRandomWalls(seed) {
+    Object.keys(MAP_SIZES).forEach((mapName, mapIndex) => {
+        const rng = createRng(seed + (mapIndex + 1) * 9973);
+        let placed = 0;
+        let attempts = 0;
+        while (placed < WALLS_PER_MAP && attempts < 800) {
+            attempts++;
+            const candidates = shuffleWithRng(getWallCandidates(mapName), rng);
+            const candidate = candidates[0];
+            if (!candidate) break;
+            const cell = boards[mapName][candidate.row][candidate.col];
+            cell.isWall = true;
+            if (isMapConnected(mapName)) {
+                placed++;
+            } else {
+                cell.isWall = false;
+            }
+        }
+    });
 }
 
 function removeUnitEverywhere(unit) {
@@ -838,7 +978,7 @@ function renderBoard() {
                         unitEl.setAttribute('data-ability', u.player === 1 ? p1Ability : p2Ability);
                     }
                     unitEl.setAttribute('data-rank', u.symbol);
-                    unitEl.title = `${u.name} (P${u.player})\n移動: ${u.getEffectiveMoveType() === 'straight' ? '直線' : '周辺'}${u.getMovementRange()}\n視界: ${u.getVisionRange()}\n${u.abilityDescription}`;
+                    unitEl.title = `${u.name} (P${u.player})\n移動: ${u.getEffectiveMoveType() === 'straight' ? '直線' : 'マンハッタン'}${u.getMovementRange()}\n視界: ${u.getVisionRange()}\n${u.abilityDescription}`;
                     if (u.type === 'core') unitEl.classList.add('core');
                     cellEl.appendChild(unitEl);
                 }
@@ -850,6 +990,7 @@ function renderBoard() {
     }
 
     updateTabIndicators();
+    renderMinimaps();
 }
 
 function updateTabIndicators() {
@@ -871,6 +1012,55 @@ function updateTabIndicators() {
         const countEl = document.getElementById(`tab-count-${map}`);
         if (countEl) countEl.textContent = `${alliesCount} / ${visibleEnemies}`;
     });
+}
+
+function renderMinimaps() {
+    const panel = document.getElementById('minimap-panel');
+    if (!panel || !boards.area1.length) return;
+    const viewerPlayer = getViewerPlayer();
+    const vision = viewerPlayer === 1 ? p1Vision : p2Vision;
+    panel.innerHTML = '';
+
+    Object.keys(MAP_SIZES).forEach(mapName => {
+        const mini = document.createElement('button');
+        mini.className = `minimap ${activeMap === mapName ? 'active' : ''}`;
+        mini.type = 'button';
+        mini.addEventListener('click', () => switchActiveMap(mapName));
+
+        const title = document.createElement('span');
+        title.className = 'minimap-title';
+        title.textContent = getViewerAreaLabel(mapName, viewerPlayer);
+        mini.appendChild(title);
+
+        const grid = document.createElement('span');
+        grid.className = 'minimap-grid';
+        grid.style.gridTemplateColumns = `repeat(${MAP_SIZES[mapName].cols}, 1fr)`;
+        for (let r = 0; r < MAP_SIZES[mapName].rows; r++) {
+            for (let c = 0; c < MAP_SIZES[mapName].cols; c++) {
+                const cell = document.createElement('span');
+                const boardCell = boards[mapName][r][c];
+                cell.className = 'minimap-cell';
+                if (boardCell.isWall) cell.classList.add('wall');
+                if (boardCell.isTeleport) cell.classList.add('teleport');
+                if (boardCell.isCoreTile) cell.classList.add('core-tile');
+                const unit = boardCell.unit;
+                const visible = gameMode === 'debug' || !unit || unit.player === viewerPlayer || vision[mapName].has(`${r},${c}`);
+                if (unit && visible) cell.classList.add(unit.player === 1 ? 'p1' : 'p2');
+                else if (!vision[mapName].has(`${r},${c}`) && gameMode !== 'debug') cell.classList.add('fog');
+                grid.appendChild(cell);
+            }
+        }
+        mini.appendChild(grid);
+        panel.appendChild(mini);
+    });
+}
+
+function getViewerAreaLabel(mapName, viewerPlayer = getViewerPlayer()) {
+    if (viewerPlayer === 2) {
+        if (mapName === 'area3') return 'AREA 1: 自陣';
+        if (mapName === 'area1') return 'AREA 3: 敵陣';
+    }
+    return getAreaLabel(mapName);
 }
 
 // --- MOVEMENT & PATHFINDING ---
@@ -915,25 +1105,24 @@ function getValidMoves(unit) {
             }
         });
     } else {
-        // BFS surrounding movement
+        // BFS manhattan movement
         const queue = [{ row: unit.row, col: unit.col, steps: 0 }];
         const visited = new Set();
         visited.add(`${unit.row},${unit.col}`);
+        const dirs = [{ r: -1, c: 0 }, { r: 1, c: 0 }, { r: 0, c: -1 }, { r: 0, c: 1 }];
 
         while (queue.length > 0) {
             const curr = queue.shift();
             if (curr.steps >= moveRange) continue;
 
-            for (let dr = -1; dr <= 1; dr++) {
-                for (let dc = -1; dc <= 1; dc++) {
-                    if (dr === 0 && dc === 0) continue;
-                    const nextR = curr.row + dr, nextC = curr.col + dc;
+            dirs.forEach(dir => {
+                    const nextR = curr.row + dir.r, nextC = curr.col + dir.c;
                     const key = `${nextR},${nextC}`;
 
-                    if (nextR < 0 || nextR >= size.rows || nextC < 0 || nextC >= size.cols) continue;
-                    if (boards[map][nextR][nextC].isWall) continue;
-                    if (unit.type === 'scout' && map !== 'area2') continue;
-                    if (isMoveDestinationBlockedByFriendly(unit, nextR, nextC)) continue;
+                    if (nextR < 0 || nextR >= size.rows || nextC < 0 || nextC >= size.cols) return;
+                    if (boards[map][nextR][nextC].isWall) return;
+                    if (unit.type === 'scout' && map !== 'area2') return;
+                    if (isMoveDestinationBlockedByFriendly(unit, nextR, nextC)) return;
 
                     const resolved = resolveMoveDestination(unit, nextR, nextC);
                     const hasEnemyTarget =
@@ -947,8 +1136,7 @@ function getValidMoves(unit) {
                             queue.push({ row: nextR, col: nextC, steps: curr.steps + 1 });
                         }
                     }
-                }
-            }
+            });
         }
     }
 
@@ -1377,7 +1565,10 @@ function endTurn() {
     }
 
     currentPlayer = currentPlayer === 1 ? 2 : 1;
-    if (currentPlayer === 1) gameTurn++;
+    if (currentPlayer === 1) {
+        gameTurn++;
+        if (gameTurn % SCOUT_REINFORCE_INTERVAL === 0) reinforceScouts();
+    }
 
     calculateVisibility();
     renderBoard();
@@ -1386,10 +1577,49 @@ function endTurn() {
     const playerName = currentPlayer === 1 ? "PLAYER 1" : "PLAYER 2";
     const logColor = currentPlayer === 1 ? 'p1' : 'p2';
     addConsoleLog(`TURN ${gameTurn} - ${playerName} の戦術行動フェーズ。`, logColor);
+    showTurnBanner();
 
     if (currentPlayer === 2 && vsAI) {
         setTimeout(executeAITurn, 1000);
     }
+}
+
+function showTurnBanner() {
+    let banner = document.getElementById('turn-banner');
+    if (!banner) {
+        banner = document.createElement('div');
+        banner.id = 'turn-banner';
+        document.body.appendChild(banner);
+    }
+    const isMine = !onlineMode || localPlayer === currentPlayer;
+    banner.className = `turn-banner player-${currentPlayer} show`;
+    banner.textContent = `TURN ${gameTurn} / PLAYER ${currentPlayer}${onlineMode ? (isMine ? ' - YOUR TURN' : ' - OPPONENT') : ''}`;
+    window.clearTimeout(showTurnBanner.timer);
+    showTurnBanner.timer = window.setTimeout(() => banner.classList.remove('show'), 1500);
+}
+
+function reinforceScouts() {
+    [1, 2].forEach(player => {
+        const rows = player === 1 ? [10, 9] : [0, 1];
+        const spawn = rows.flatMap(row =>
+            Array.from({ length: MAP_SIZES.area2.cols }, (_, col) => ({ row, col }))
+        ).find(pos => {
+            const cell = boards.area2[pos.row][pos.col];
+            return !cell.isWall && !cell.unit;
+        });
+        if (!spawn) {
+            addConsoleLog(`SUPPLY: Player ${player} の偵察兵補充地点がありません。`, 'system');
+            return;
+        }
+        scoutReinforcementSerial++;
+        addUnitToBoard(
+            new Unit(`p${player}_scout_reinforce_${scoutReinforcementSerial}`, 'scout', player, 'area2', spawn.row, spawn.col, true),
+            'area2',
+            spawn.row,
+            spawn.col
+        );
+        addConsoleLog(`SUPPLY: Player ${player} に偵察兵を1体補充しました。`, player === 1 ? 'p1' : 'p2');
+    });
 }
 
 // --- WIN / LOSE ---
@@ -1458,11 +1688,22 @@ function updateUI() {
         playerDotEl.style.boxShadow = '0 0 10px var(--neon-magenta)';
     }
 
-    const totalUnits = 9 + 5; // home lineup 9 + frontline 5
+    const totalUnits = 9 + 7; // home lineup 9 + area2 frontline 7
     const p1Count = units.filter(u => u.player === 1 && u.type !== 'core').length;
     const p2Count = units.filter(u => u.player === 2 && u.type !== 'core').length;
     document.getElementById('p1-units-count').textContent = `${p1Count} / ${totalUnits}`;
     document.getElementById('p2-units-count').textContent = `${p2Count} / ${totalUnits}`;
+    updateMapLabels();
+    updateModeVisibility();
+}
+
+function updateMapLabels() {
+    const viewerPlayer = getViewerPlayer();
+    document.querySelectorAll('.map-tab').forEach(tab => {
+        const mapName = tab.getAttribute('data-map');
+        const textEl = tab.querySelector('.tab-text');
+        if (textEl) textEl.textContent = getViewerAreaLabel(mapName, viewerPlayer);
+    });
 }
 
 function addConsoleLog(text, type = 'system') {
@@ -1508,7 +1749,7 @@ function executeAITurn() {
                 score += 10;
             } else if (resolved.targetMap === 'area2') {
                 score += 200;
-                if (m.row === 7) score += 80;
+                if (m.row === 10) score += 80;
             } else if (resolved.targetMap === 'area1') {
                 score += 800;
                 const dist = Math.abs(resolved.targetRow - 8) + Math.abs(resolved.targetCol - 4);
