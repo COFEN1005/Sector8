@@ -4,6 +4,7 @@
   "description": "Sector8: Information Collapse - Tactical multi-map board game",
   "main": "server.js",
   "scripts": {
+    "build": "node --check server.js && node --check app.js",
     "start": "node server.js",
     "dev": "node server.js"
   },
