@@ -151,6 +151,7 @@ let applyingRemoteAction = false;
 let matchmakingMode = false;
 let matchmakingRole = null; // 'host' or 'guest'
 let matchRoomId = null;
+let onlineAbilityChoices = { 1: null, 2: null };
 
 function detectDeviceProfile() {
     const coarsePointer = window.matchMedia('(pointer: coarse)').matches;
@@ -343,6 +344,16 @@ function setupUIEventListeners() {
         });
     });
 
+    const onlineAbilityChoice = document.getElementById('online-ability-choice');
+    if (onlineAbilityChoice) {
+        onlineAbilityChoice.addEventListener('change', () => {
+            if (!onlineMode || !localPlayer) return;
+            onlineAbilityChoices[localPlayer] = getOnlineAbilityChoice();
+            sendOnlineMessage({ kind: 'ability_choice', ability: onlineAbilityChoices[localPlayer] });
+            updateOnlineStartAvailability();
+        });
+    }
+
     const copyRoomBtn = document.getElementById('btn-copy-room');
     if (copyRoomBtn) copyRoomBtn.addEventListener('click', copyRoomCode);
 }
@@ -436,6 +447,7 @@ function hostRoom() {
     matchRoomId = roomId;
     matchmakingRole = 'host';
     localPlayer = 1;
+    onlineAbilityChoices = { 1: getOnlineAbilityChoice(), 2: null };
     onlineMode = true;
     setGameMode('online');
     connectOnlineSocket(roomId, 1);
@@ -451,6 +463,7 @@ function joinRoom() {
     matchRoomId = roomId;
     matchmakingRole = 'guest';
     localPlayer = 2;
+    onlineAbilityChoices = { 1: null, 2: getOnlineAbilityChoice() };
     onlineMode = true;
     setGameMode('online');
     document.getElementById('matchmaking-status').textContent = `ルーム ${roomId} に接続中...`;
@@ -463,6 +476,7 @@ function cancelMatchmaking() {
     localPlayer = null;
     matchmakingMode = false;
     matchRoomId = null;
+    onlineAbilityChoices = { 1: null, 2: null };
     showLocalPanel();
     document.getElementById('matchmaking-status').textContent = '';
     document.getElementById('room-share-area').classList.add('hidden');
@@ -486,6 +500,10 @@ function setupOnlineMode() {
     connectOnlineSocket(null, localPlayer);
 }
 
+function getOnlineAbilityChoice() {
+    return document.getElementById('online-ability-choice')?.value || '足跡';
+}
+
 async function copyRoomCode() {
     const roomText = document.getElementById('room-id-display')?.textContent?.trim();
     if (!roomText || roomText === '------') return;
@@ -504,6 +522,8 @@ function connectOnlineSocket(roomId, player) {
 
     onlineSocket.addEventListener('open', () => {
         addConsoleLog(`ONLINE: Player ${player} として接続しました。`, 'system');
+        onlineAbilityChoices[player] = getOnlineAbilityChoice();
+        sendOnlineMessage({ kind: 'ability_choice', ability: onlineAbilityChoices[player] });
     });
 
     onlineSocket.addEventListener('message', (event) => {
@@ -530,13 +550,29 @@ function handleOnlineMessage(message) {
 
     if (message.kind === 'player_joined') {
         addConsoleLog(`ONLINE: 対戦相手が接続しました！`, 'system');
-        document.getElementById('matchmaking-status').textContent = '対戦相手が接続しました！ゲームを開始できます。';
-        const btnStart = document.getElementById('btn-start-online-match');
-        if (btnStart) btnStart.disabled = false;
+        document.getElementById('matchmaking-status').textContent = '対戦相手が接続しました。相手の甲アビリティ選択を確認中...';
+        onlineAbilityChoices[localPlayer] = getOnlineAbilityChoice();
+        sendOnlineMessage({ kind: 'ability_choice', ability: onlineAbilityChoices[localPlayer] });
+        updateOnlineStartAvailability();
         return;
     }
 
     if (message.player === localPlayer) return;
+
+    if (message.kind === 'ability_choice') {
+        onlineAbilityChoices[message.player] = message.ability;
+        document.getElementById('matchmaking-status').textContent =
+            `相手の甲アビリティ: ${message.ability}`;
+        sendOnlineMessage({ kind: 'ability_ack', ability: getOnlineAbilityChoice() });
+        updateOnlineStartAvailability();
+        return;
+    }
+
+    if (message.kind === 'ability_ack') {
+        onlineAbilityChoices[message.player] = message.ability;
+        updateOnlineStartAvailability();
+        return;
+    }
 
     applyingRemoteAction = true;
     try {
@@ -555,6 +591,16 @@ function handleOnlineMessage(message) {
 function sendOnlineMessage(message) {
     if (!onlineMode || applyingRemoteAction || !onlineSocket || onlineSocket.readyState !== WebSocket.OPEN) return;
     onlineSocket.send(JSON.stringify({ ...message, player: localPlayer }));
+}
+
+function updateOnlineStartAvailability() {
+    const btnStart = document.getElementById('btn-start-online-match');
+    if (!btnStart) return;
+    const ready = Boolean(onlineAbilityChoices[1] && onlineAbilityChoices[2]);
+    btnStart.disabled = !(localPlayer === 1 && ready);
+    if (localPlayer === 1) {
+        btnStart.textContent = ready ? 'ONLINE MATCH START' : 'WAITING FOR ABILITY';
+    }
 }
 
 function applyRemoteAction(action) {
@@ -577,8 +623,14 @@ function applyRemoteAction(action) {
 function startGame(config = null, fromOnline = false) {
     if (onlineMode && localPlayer !== 1 && !fromOnline) return;
 
-    p1Ability = config ? config.p1Ability : document.getElementById('p1-ability-choice').value;
-    p2Ability = config ? config.p2Ability : document.getElementById('p2-ability-choice').value;
+    if (onlineMode) {
+        onlineAbilityChoices[localPlayer || 1] = getOnlineAbilityChoice();
+        p1Ability = config ? config.p1Ability : (onlineAbilityChoices[1] || '足跡');
+        p2Ability = config ? config.p2Ability : (onlineAbilityChoices[2] || '歴戦王');
+    } else {
+        p1Ability = config ? config.p1Ability : document.getElementById('p1-ability-choice').value;
+        p2Ability = config ? config.p2Ability : document.getElementById('p2-ability-choice').value;
+    }
     gameSeed = config?.seed || Math.floor(Math.random() * 0xFFFFFFFF);
     vsAI = onlineMode ? false : vsAI;
 
