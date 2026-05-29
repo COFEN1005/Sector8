@@ -1394,7 +1394,7 @@ function handleBgmVolumeChange(event) {
 
 function handleVisionSaturationChange(event) {
     visionSaturation = Number(event.target.value) / 100;
-    document.documentElement.style.setProperty('--vision-saturation', String(visionSaturation));
+    document.documentElement.style.setProperty('--vision-brightness', String(visionSaturation));
 }
 
 function playTurnSfx() {
