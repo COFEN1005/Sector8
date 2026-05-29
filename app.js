@@ -26,6 +26,7 @@ const SCOUT_REINFORCE_INTERVAL = 10;
 const MEDIC_SCOUT_REINFORCE_INTERVAL = 6;
 const SCOUT_LIMIT_PER_PLAYER = 2;
 const ACTIONS_PER_TURN = 2;
+const FLAG_SURVIVAL_TURNS = 7;
 const KEEPALIVE_WARNING_MS = 10 * 60 * 1000;
 const DEVELOP_MODE_SEQUENCE = '12312321213';
 const ALL_ABILITY_OPTIONS = ['千里眼', '鼓舞', '足跡', '歴戦王', '戦姫', '爆破', '暗殺者', '盲目', '衛生兵', '監視', '迷彩'];
@@ -119,9 +120,11 @@ let gameMode = 'debug';
 let isGameOver = false;
 let protectedWallCells = new Set();
 let scoutReinforcementSerial = 0;
+let militaryFlagSerial = 0;
 let gameSeed = 1;
 let actionsThisTurn = 0;
 let actedUnitIds = new Set();
+let militaryFlags = [];
 let lastKeepAliveAt = Date.now();
 let developModeEnabled = false;
 let developModeSequence = '';
@@ -333,6 +336,9 @@ class Unit {
         this.warPrincessHeiPromoted = false;
         this.camouflaged = false;
         this.veteranMomentumPenalty = false;
+        this.carryingFlagPlayer = null;
+        this.carryingFlagAbility = null;
+        this.flagSurvivalTurns = 0;
 
         this.configureTypeStats(type);
     }
@@ -1423,8 +1429,10 @@ function startGame(config = null, fromOnline = false) {
     selectedUnit = null;
     activeMap = 'area1';
     scoutReinforcementSerial = 0;
+    militaryFlagSerial = 0;
     actionsThisTurn = 0;
     actedUnitIds = new Set();
+    militaryFlags = [];
     lastKeepAliveAt = Date.now();
     previewUnit = null;
     developModeSequence = '';
@@ -1488,7 +1496,7 @@ function initializeBoards() {
                 if (mapName === 'area1' && r === 10 && (c >= 4 && c <= 6)) isCoreTile = true;
                 if (mapName === 'area3' && r === 0 && (c >= 4 && c <= 6)) isCoreTile = true;
 
-                rowCells.push({ row: r, col: c, isWall: false, isTeleport, isCoreTile, unit: null });
+                rowCells.push({ row: r, col: c, isWall: false, isTeleport, isCoreTile, unit: null, flag: null });
             }
             mapBoard.push(rowCells);
         }
@@ -1733,8 +1741,108 @@ function removeUnitEverywhere(unit) {
     units = units.filter(u => u.id !== unit.id);
 }
 
+function addMilitaryFlagToBoard(flag) {
+    militaryFlags.push(flag);
+    boards[flag.map][flag.row][flag.col].flag = flag;
+}
+
+function removeMilitaryFlag(flag) {
+    if (!flag) return;
+    const cell = boards[flag.map]?.[flag.row]?.[flag.col];
+    if (cell?.flag?.id === flag.id) cell.flag = null;
+    militaryFlags = militaryFlags.filter(entry => entry.id !== flag.id);
+}
+
+function clearFlagCarrier(unit) {
+    if (!unit) return;
+    unit.carryingFlagPlayer = null;
+    unit.carryingFlagAbility = null;
+    unit.flagSurvivalTurns = 0;
+}
+
+function createMilitaryFlag(player, map, row, col, ability) {
+    militaryFlagSerial++;
+    return {
+        id: `flag_${player}_${militaryFlagSerial}`,
+        player,
+        map,
+        row,
+        col,
+        ability
+    };
+}
+
+function dropMilitaryFlag(player, map, row, col, ability, silent = false) {
+    const flag = createMilitaryFlag(player, map, row, col, ability);
+    addMilitaryFlagToBoard(flag);
+    if (!silent) {
+        addConsoleLog(`SYSTEM: Player ${player} の軍旗が ${getAreaLabel(map)} [${col},${row}] に落ちた。`, 'destroy');
+    }
+    return flag;
+}
+
+function dropFlagForUnit(unit, map, row, col, silent = false) {
+    let flag = null;
+    if (unit.type === 'koh') {
+        flag = dropMilitaryFlag(unit.player, map, row, col, getPlayerAbility(unit.player), silent);
+    } else if (unit.carryingFlagPlayer) {
+        flag = dropMilitaryFlag(unit.carryingFlagPlayer, map, row, col, unit.carryingFlagAbility, silent);
+    }
+    clearFlagCarrier(unit);
+    return flag;
+}
+
+function destroyMilitaryFlagAt(map, row, col, reason = '爆破') {
+    const flag = boards[map]?.[row]?.[col]?.flag;
+    if (!flag) return false;
+    removeMilitaryFlag(flag);
+    addConsoleLog(`SYSTEM: ${reason}により Player ${flag.player} の軍旗が消滅。`, 'destroy');
+    return true;
+}
+
+function tryPickupMilitaryFlag(unit) {
+    if (!unit || unit.type === 'core' || unit.type === 'koh' || unit.carryingFlagPlayer) return false;
+    const flag = boards[unit.map]?.[unit.row]?.[unit.col]?.flag;
+    if (!flag || flag.player !== unit.player) return false;
+    unit.carryingFlagPlayer = flag.player;
+    unit.carryingFlagAbility = flag.ability;
+    unit.flagSurvivalTurns = 0;
+    removeMilitaryFlag(flag);
+    addConsoleLog(`SYSTEM: ${unit.name} が Player ${unit.player} の軍旗を回収した。`, unit.player === 1 ? 'p1' : 'p2');
+    return true;
+}
+
+function promoteFlagBearer(unit) {
+    const inheritedAbility = unit.carryingFlagAbility || getPlayerAbility(unit.player);
+    clearFlagCarrier(unit);
+    promoteUnitType(unit, 'koh');
+    unit.camouflaged = false;
+    unit.veteranMomentumPenalty = false;
+    unit.warPrincessKills = 0;
+    unit.warPrincessTeiPromoted = false;
+    unit.warPrincessHeiPromoted = false;
+    if (unit.player === 1) p1KohDestroyed = false;
+    else p2KohDestroyed = false;
+    addConsoleLog(`SYSTEM: ${unit.name} が軍旗を守り抜き、甲へ昇格。アビリティ「${inheritedAbility}」を継承。`, 'ability');
+}
+
+function updateFlagCarrierSurvival(player) {
+    units.forEach(unit => {
+        if (unit.player !== player || !unit.carryingFlagPlayer) return;
+        unit.flagSurvivalTurns++;
+        addConsoleLog(`SYSTEM: ${unit.name} の軍旗生存カウント ${unit.flagSurvivalTurns}/${FLAG_SURVIVAL_TURNS}。`, player === 1 ? 'p1' : 'p2');
+        if (unit.flagSurvivalTurns >= FLAG_SURVIVAL_TURNS) {
+            promoteFlagBearer(unit);
+        }
+    });
+}
+
 function captureUnit(victim, attackerPlayer) {
+    const victimMap = victim.map;
+    const victimRow = victim.row;
+    const victimCol = victim.col;
     removeUnitEverywhere(victim);
+    dropFlagForUnit(victim, victimMap, victimRow, victimCol);
 
     if (victim.type === 'koh') {
         if (victim.player === 1) p1KohDestroyed = true;
@@ -2003,8 +2111,16 @@ function renderBoard() {
             if (cellData.isTeleport) cellEl.classList.add('teleport');
             if (cellData.isWall) cellEl.classList.add('wall');
             if (cellData.isCoreTile) cellEl.classList.add('core-tile');
+            if (cellData.flag) cellEl.classList.add('has-flag');
 
             if (!activeVision.has(coordStr)) cellEl.classList.add('fog-grey');
+
+            if (cellData.flag) {
+                const flagEl = document.createElement('div');
+                flagEl.className = `military-flag player-${cellData.flag.player}`;
+                flagEl.title = `Player ${cellData.flag.player} の軍旗`;
+                cellEl.appendChild(flagEl);
+            }
 
             if (cellData.unit) {
                 const u = cellData.unit;
@@ -2024,8 +2140,15 @@ function renderBoard() {
                             unitEl.appendChild(killCounter);
                         }
                     }
+                    if (u.carryingFlagPlayer) {
+                        unitEl.classList.add('flag-carrier');
+                        const flagCounter = document.createElement('span');
+                        flagCounter.className = 'flag-counter';
+                        flagCounter.textContent = `${u.flagSurvivalTurns}/${FLAG_SURVIVAL_TURNS}`;
+                        unitEl.appendChild(flagCounter);
+                    }
                     unitEl.setAttribute('data-rank', u.symbol);
-                    unitEl.title = `${u.name} (P${u.player})\n移動: ${getMoveTypeLabel(u.getEffectiveMoveType())}${u.getMovementRange()}\n視界: ${getVisionShapeLabel(u.getVisionShape())}${u.getVisionRange()}\n${u.abilityDescription}`;
+                    unitEl.title = `${u.name} (P${u.player})\n移動: ${getMoveTypeLabel(u.getEffectiveMoveType())}${u.getMovementRange()}\n視界: ${getVisionShapeLabel(u.getVisionShape())}${u.getVisionRange()}${u.carryingFlagPlayer ? '\n軍旗生存: ' + u.flagSurvivalTurns + '/' + FLAG_SURVIVAL_TURNS : ''}\n${u.abilityDescription}`;
                     if (u.type === 'core') unitEl.classList.add('core');
                     cellEl.appendChild(unitEl);
                 }
@@ -2090,6 +2213,7 @@ function renderMinimaps() {
                 if (boardCell.isWall) cell.classList.add('wall');
                 if (boardCell.isTeleport) cell.classList.add('teleport');
                 if (boardCell.isCoreTile) cell.classList.add('core-tile');
+                if (boardCell.flag) cell.classList.add(`flag-p${boardCell.flag.player}`);
                 const unit = boardCell.unit;
                 const visible = gameMode === 'debug' || !unit || isUnitVisibleToViewer(unit, viewerPlayer, vision[mapName]);
                 if (unit && visible) cell.classList.add(unit.player === 1 ? 'p1' : 'p2');
@@ -2520,6 +2644,7 @@ function executeMove(unit, destRow, destCol) {
             unit.row = finalRow;
             unit.col = finalCol;
             boards[finalMap][finalRow][finalCol].unit = unit;
+            tryPickupMilitaryFlag(unit);
 
             const captureNames = captured.map(v => v.unit.name).join(', ');
             addConsoleLog(`ABILITY: 暗殺者 - ${unit.name}が${captureNames}を撃破し、1マス後退。`, 'ability');
@@ -2537,6 +2662,7 @@ function executeMove(unit, destRow, destCol) {
     unit.row = finalRow;
     unit.col = finalCol;
     boards[finalMap][finalRow][finalCol].unit = unit;
+    tryPickupMilitaryFlag(unit);
 
     let logMsg;
     if (resolved.portalDest) {
@@ -2573,6 +2699,7 @@ function executeAbility(unit, destRow, destCol) {
         boards[map][startRow][startCol].unit = null;
         boards[map][destRow][destCol].unit = unit;
         unit.row = destRow; unit.col = destCol;
+        tryPickupMilitaryFlag(unit);
         addConsoleLog(`Player ${unit.player}: 偵察兵が [${startCol},${startRow}] から [${destCol},${destRow}] へワープ転送。`, 'ability');
         playMoveSfx();
         sendOnlineMessage({ kind: 'action', action: { type: 'ability', unitId: unit.id, row: destRow, col: destCol } });
@@ -2610,10 +2737,12 @@ function executeAbility(unit, destRow, destCol) {
 
         } else if (abilityName === '爆破') {
             addConsoleLog(`ABILITY: 甲の「爆破」自滅シークエンス開始！`, 'destroy');
-            boards[map][unit.row][unit.col].unit = null;
-            units = units.filter(u => u.id !== unit.id);
+            const selfRow = unit.row;
+            const selfCol = unit.col;
+            captureUnit(unit, unit.player === 1 ? 2 : 1);
             if (unit.player === 1) p1KohDestroyed = true;
             else p2KohDestroyed = true;
+            destroyMilitaryFlagAt(map, selfRow, selfCol);
 
             const destroyedCoords = [];
             const size = MAP_SIZES[map];
@@ -2639,13 +2768,12 @@ function executeAbility(unit, destRow, destCol) {
                                 triggerWin(unit.player === 1 ? (victim.player === 2 ? 1 : 2) : (victim.player === 1 ? 2 : 1));
                                 return;
                             } else {
-                                boards[map][r][c].unit = null;
+                                captureUnit(victim, unit.player);
+                                destroyMilitaryFlagAt(map, r, c);
                             }
-                            units = units.filter(u => u.id !== victim.id);
-                            if (victim.type === 'koh') {
-                                if (victim.player === 1) p1KohDestroyed = true;
-                                else p2KohDestroyed = true;
-                            }
+                        } else if (targetCell.flag) {
+                            destroyMilitaryFlagAt(map, r, c);
+                            destroyedCoords.push(`軍旗[${c},${r}]`);
                         }
                     }
                 }
@@ -2692,21 +2820,7 @@ function executeOtsuBreakthrough(mapName, centerR, centerC) {
             if (targetCell.unit) {
                 const victim = targetCell.unit;
                 victims.push(`${victim.name}[${c},${r}]`);
-                if (victim.type === 'core') {
-                    for (let cr = 0; cr < size.rows; cr++)
-                        for (let cc = 0; cc < size.cols; cc++)
-                            if (boards[mapName][cr][cc].unit?.id === victim.id)
-                                boards[mapName][cr][cc].unit = null;
-                    triggerWin(currentPlayer);
-                    return;
-                } else {
-                    boards[mapName][r][c].unit = null;
-                }
-                units = units.filter(u => u.id !== victim.id);
-                if (victim.type === 'koh') {
-                    if (victim.player === 1) p1KohDestroyed = true;
-                    else p2KohDestroyed = true;
-                }
+                if (captureUnit(victim, currentPlayer)) return;
             }
         }
     }
@@ -2749,6 +2863,7 @@ function endTurn() {
     units.forEach(u => {
         if (u.player === currentPlayer && u.inspirationTurns > 0) u.inspirationTurns--;
     });
+    updateFlagCarrierSurvival(currentPlayer);
 
     saveTurnVision();
 
