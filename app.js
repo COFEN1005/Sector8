@@ -656,7 +656,6 @@ function setupGameModeTabs() {
     if (btnCancelMatch) btnCancelMatch.addEventListener('click', cancelMatchmaking);
     const btnRandomMatch = document.getElementById('btn-random-match');
     if (btnRandomMatch) btnRandomMatch.addEventListener('click', startRandomMatch);
-
     const tabPrivate = document.getElementById('tab-online-private');
     if (tabPrivate) tabPrivate.addEventListener('click', () => setOnlineMatchTab('private'));
     const tabRandom = document.getElementById('tab-online-random');
@@ -739,15 +738,43 @@ function showLocalPanel() {
     document.getElementById('setup-local-panel').classList.remove('hidden');
 }
 
-function setOnlineMatchTab(tab) {
+function resetOnlineMatchmakingState(keepPanel = true) {
+    manualDisconnect = true;
+    if (onlineSocket) {
+        try { onlineSocket.close(); } catch {}
+        onlineSocket = null;
+    }
+    onlineMode = false;
+    localPlayer = null;
+    spectatorMode = false;
+    matchmakingRole = null;
+    matchRoomId = null;
+    randomQueuePending = false;
+    randomMatchAutoStarted = false;
+    onlineAbilityChoices = { 1: null, 2: null };
+    onlineReadyState = { 1: false, 2: false };
+    onlineUsernames = { 1: null, 2: null };
+    clearOnlineSession();
+    updateRandomQueueCount(0);
+    if (keepPanel) {
+        setMatchmakingStatus('');
+        updateMatchmakingPlayerSummary();
+        updateReadyButton();
+    }
+}
+
+function setOnlineMatchTab(tab, options = {}) {
     const isRandom = tab === 'random';
+    if (!isRandom && (matchmakingRole === 'random' || isRandomMatchRoom() || randomQueuePending)) {
+        resetOnlineMatchmakingState(true);
+    }
     document.getElementById('online-private-panel')?.classList.toggle('hidden', isRandom);
     document.getElementById('online-random-panel')?.classList.toggle('hidden', !isRandom);
     document.getElementById('tab-online-private')?.classList.toggle('active', !isRandom);
     document.getElementById('tab-online-random')?.classList.toggle('active', isRandom);
     document.getElementById('btn-online-ready')?.classList.toggle('hidden', isRandom);
     if (isRandom && !onlineSocket) {
-        setMatchmakingStatus('ランダムに接続を押すとマッチング開始です。');
+        setMatchmakingStatus('マッチング開始を押すとランダムマッチングを開始します。');
     }
 }
 
