@@ -25,8 +25,16 @@
                 </div>
             </div>
             <div class="audio-controls">
-                <button id="btn-toggle-sfx" class="small-tool-btn" type="button">SFX ON</button>
-                <button id="btn-toggle-bgm" class="small-tool-btn" type="button">BGM ON</button>
+                <div class="audio-group">
+                    <button id="btn-toggle-sfx" class="small-tool-btn" type="button">SFX ON</button>
+                    <label class="audio-slider-label" for="sfx-volume">SFX</label>
+                    <input id="sfx-volume" class="audio-slider" type="range" min="0" max="100" value="55" />
+                </div>
+                <div class="audio-group">
+                    <button id="btn-toggle-bgm" class="small-tool-btn" type="button">BGM ON</button>
+                    <label class="audio-slider-label" for="bgm-volume">BGM</label>
+                    <input id="bgm-volume" class="audio-slider" type="range" min="0" max="100" value="35" />
+                </div>
             </div>
         </header>
         <div id="status-alert" class="status-alert hidden"></div>

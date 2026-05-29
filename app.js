@@ -116,6 +116,8 @@ let moveSfxEnabled = true;
 let bgmEnabled = true;
 let moveSfx = null;
 let bgmTrack = null;
+let moveSfxVolume = 0.55;
+let bgmVolume = 0.35;
 
 let selectedUnit = null;
 let previewUnit = null;
@@ -486,6 +488,10 @@ function setupUIEventListeners() {
     if (toggleMoveSfxBtn) toggleMoveSfxBtn.addEventListener('click', toggleMoveSfx);
     const toggleBgmBtn = document.getElementById('btn-toggle-bgm');
     if (toggleBgmBtn) toggleBgmBtn.addEventListener('click', toggleBgm);
+    const sfxVolumeSlider = document.getElementById('sfx-volume');
+    if (sfxVolumeSlider) sfxVolumeSlider.addEventListener('input', handleSfxVolumeChange);
+    const bgmVolumeSlider = document.getElementById('bgm-volume');
+    if (bgmVolumeSlider) bgmVolumeSlider.addEventListener('input', handleBgmVolumeChange);
 }
 
 function setupMapTabs() {
@@ -874,12 +880,12 @@ function initializeAudio() {
 
     moveSfx = new Audio('audio/sfx_move.wav');
     moveSfx.preload = 'auto';
-    moveSfx.volume = 0.55;
+    moveSfx.volume = moveSfxVolume;
 
     bgmTrack = new Audio('audio/bgm_main.mp3');
     bgmTrack.preload = 'auto';
     bgmTrack.loop = true;
-    bgmTrack.volume = 0.35;
+    bgmTrack.volume = bgmVolume;
 
     updateAudioButtons();
     if (bgmEnabled && activePhase === 'battle') {
@@ -890,8 +896,12 @@ function initializeAudio() {
 function updateAudioButtons() {
     const sfxBtn = document.getElementById('btn-toggle-sfx');
     const bgmBtn = document.getElementById('btn-toggle-bgm');
+    const sfxVolumeSlider = document.getElementById('sfx-volume');
+    const bgmVolumeSlider = document.getElementById('bgm-volume');
     if (sfxBtn) sfxBtn.textContent = moveSfxEnabled ? 'SFX ON' : 'SFX OFF';
     if (bgmBtn) bgmBtn.textContent = bgmEnabled ? 'BGM ON' : 'BGM OFF';
+    if (sfxVolumeSlider) sfxVolumeSlider.value = String(Math.round(moveSfxVolume * 100));
+    if (bgmVolumeSlider) bgmVolumeSlider.value = String(Math.round(bgmVolume * 100));
 }
 
 function playMoveSfx() {
@@ -916,6 +926,16 @@ function toggleBgm() {
         else bgmTrack.pause();
     }
     updateAudioButtons();
+}
+
+function handleSfxVolumeChange(event) {
+    moveSfxVolume = Number(event.target.value) / 100;
+    if (moveSfx) moveSfx.volume = moveSfxVolume;
+}
+
+function handleBgmVolumeChange(event) {
+    bgmVolume = Number(event.target.value) / 100;
+    if (bgmTrack) bgmTrack.volume = bgmVolume;
 }
 
 function applyRemoteAction(action) {

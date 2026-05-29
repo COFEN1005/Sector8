@@ -65,6 +65,31 @@ header {
     display: flex;
     gap: 0.45rem;
     align-items: center;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.audio-group {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.3rem 0.45rem;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    background: rgba(10, 15, 25, 0.48);
+}
+
+.audio-slider-label {
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    letter-spacing: 1px;
+}
+
+.audio-slider {
+    width: 90px;
+    accent-color: var(--neon-gold);
+    cursor: pointer;
 }
 
 .logo {
@@ -1656,6 +1681,21 @@ body.opponent-turn #turn-indicator {
         margin-bottom: 0.5rem;
         flex-wrap: wrap;
         gap: 0.5rem;
+    }
+
+    .audio-controls {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .audio-group {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .audio-slider {
+        width: 100%;
+        min-width: 56px;
     }
 
     .glitch-text { font-size: 1.4rem; }
