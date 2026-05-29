@@ -354,6 +354,7 @@ server.on('upgrade', (req, socket) => {
         player,
         role,
         roomId: room.id,
+        randomRoom: room.random,
         reconnectToken,
         snapshot: getRoomSnapshot(room),
         profiles: room.profiles
