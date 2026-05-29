@@ -655,7 +655,7 @@ function setupGameModeTabs() {
     const btnCancelMatch = document.getElementById('btn-cancel-match');
     if (btnCancelMatch) btnCancelMatch.addEventListener('click', cancelMatchmaking);
     const btnRandomMatch = document.getElementById('btn-random-match');
-    if (btnRandomMatch) btnRandomMatch.addEventListener('click', prepareRandomMatch);
+    if (btnRandomMatch) btnRandomMatch.addEventListener('click', startRandomMatch);
 
     const tabPrivate = document.getElementById('tab-online-private');
     if (tabPrivate) tabPrivate.addEventListener('click', () => setOnlineMatchTab('private'));
@@ -745,6 +745,10 @@ function setOnlineMatchTab(tab) {
     document.getElementById('online-random-panel')?.classList.toggle('hidden', !isRandom);
     document.getElementById('tab-online-private')?.classList.toggle('active', !isRandom);
     document.getElementById('tab-online-random')?.classList.toggle('active', isRandom);
+    document.getElementById('btn-online-ready')?.classList.toggle('hidden', isRandom);
+    if (isRandom && !onlineSocket) {
+        setMatchmakingStatus('ランダムに接続を押すとマッチング開始です。');
+    }
 }
 
 // Simple room-based matchmaking via WebSocket
@@ -793,32 +797,21 @@ function joinRoom() {
     connectOnlineSocket({ roomId, player: 2 });
 }
 
-function prepareRandomMatch() {
+function startRandomMatch() {
+    if (onlineSocket && onlineSocket.readyState === WebSocket.OPEN) return;
     manualDisconnect = false;
     matchmakingRole = 'random';
     localPlayer = null;
-    onlineAbilityChoices = { 1: null, 2: null };
-    onlineReadyState = { 1: false, 2: false };
-    onlineUsernames = { 1: null, 2: null };
-    randomMatchAutoStarted = false;
-    randomQueuePending = true;
-    onlineMode = false;
-    spectatorMode = false;
-    setGameMode('online');
-    document.getElementById('room-share-area').classList.add('hidden');
-    setMatchmakingStatus('ランダムマッチの準備完了を押すと接続します。');
-    updateMatchmakingPlayerSummary();
-    updateReadyButton();
-}
-
-function startRandomMatch() {
-    if (onlineSocket && onlineSocket.readyState === WebSocket.OPEN) return;
     onlineMode = true;
     randomQueuePending = false;
     onlineAbilityChoices = { 1: null, 2: null };
     onlineReadyState = { 1: false, 2: false };
     onlineUsernames = { 1: null, 2: null };
     randomMatchAutoStarted = false;
+    spectatorMode = false;
+    setGameMode('online');
+    document.getElementById('room-share-area').classList.add('hidden');
+    setOnlineMatchTab('random');
     setMatchmakingStatus('接続中... ランダムマッチングを開始しています。', 'searching');
     updateMatchmakingPlayerSummary();
     connectOnlineSocket({ random: true });
@@ -1172,25 +1165,13 @@ function updateOnlineStartAvailability() {
 function updateReadyButton() {
     const readyBtn = document.getElementById('btn-online-ready');
     if (!readyBtn) return;
-    if (matchmakingRole === 'random' && activePhase === 'setup' && (!onlineSocket || onlineSocket.readyState !== WebSocket.OPEN)) {
-        readyBtn.disabled = false;
-        readyBtn.classList.remove('ready');
-        readyBtn.textContent = '準備完了して接続';
-        return;
-    }
+    if (matchmakingRole === 'random') return;
     readyBtn.disabled = !onlineMode || !localPlayer || !onlineSocket || onlineSocket.readyState !== WebSocket.OPEN;
     readyBtn.classList.toggle('ready', Boolean(localPlayer && onlineReadyState[localPlayer]));
-    readyBtn.textContent =
-        matchmakingRole === 'random' && onlineSocket && onlineSocket.readyState === WebSocket.OPEN
-            ? 'マッチング中'
-            : (localPlayer && onlineReadyState[localPlayer] ? '準備完了済み' : '準備完了');
+    readyBtn.textContent = localPlayer && onlineReadyState[localPlayer] ? '準備完了済み' : '準備完了';
 }
 
 function markOnlineReady() {
-    if (matchmakingRole === 'random' && (!onlineSocket || onlineSocket.readyState !== WebSocket.OPEN)) {
-        startRandomMatch();
-        return;
-    }
     if (!onlineMode || !localPlayer) return;
     onlineAbilityChoices[localPlayer] = getOnlineAbilityChoice();
     onlineReadyState[localPlayer] = true;
