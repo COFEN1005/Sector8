@@ -178,6 +178,28 @@ header {
     box-shadow: var(--shadow-magenta);
 }
 
+.status-alert {
+    width: min(860px, calc(100vw - 1rem));
+    margin: 0 auto 0.7rem;
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--neon-gold);
+    border-radius: 10px;
+    background: rgba(18, 10, 2, 0.92);
+    color: var(--neon-gold);
+    font-family: var(--font-mono);
+    font-weight: 800;
+    text-align: center;
+    letter-spacing: 0.5px;
+    box-shadow: 0 0 18px rgba(255, 183, 0, 0.24);
+}
+
+.status-alert.system {
+    border-color: var(--neon-cyan);
+    color: var(--neon-cyan);
+    background: rgba(3, 12, 18, 0.92);
+    box-shadow: 0 0 18px rgba(0, 240, 255, 0.2);
+}
+
 /* Glassmorphism panel helper */
 .glass-panel {
     background: var(--panel-bg);
@@ -549,6 +571,18 @@ details li {
     animation: cell-pulse-gold 1.5s infinite;
 }
 
+.cell.highlight-preview-move {
+    background: rgba(255, 255, 255, 0.08) !important;
+    border: 2px dashed rgba(255, 255, 255, 0.7) !important;
+    box-shadow: 0 0 12px rgba(255, 255, 255, 0.2);
+}
+
+.cell.highlight-preview-attack {
+    background: rgba(255, 183, 0, 0.16) !important;
+    border: 2px dashed var(--neon-gold) !important;
+    box-shadow: 0 0 12px rgba(255, 183, 0, 0.28);
+}
+
 /* Selected state cell */
 .cell.selected {
     background: rgba(255, 255, 255, 0.08) !important;
@@ -660,6 +694,10 @@ details li {
 .unit.ability-princess { box-shadow: 0 0 12px rgba(255, 0, 127, 0.36), inset 0 0 10px rgba(255, 0, 127, 0.16); }
 .unit.ability-blast { box-shadow: 0 0 14px rgba(255, 89, 0, 0.45), inset 0 0 10px rgba(255, 89, 0, 0.2); }
 .unit.ability-assassin { box-shadow: 0 0 14px rgba(157, 78, 221, 0.45), inset 0 0 10px rgba(157, 78, 221, 0.2); }
+.unit.ability-blind { box-shadow: 0 0 14px rgba(255, 255, 255, 0.38), inset 0 0 10px rgba(255, 255, 255, 0.14); }
+.unit.ability-medic { box-shadow: 0 0 14px rgba(32, 201, 151, 0.38), inset 0 0 10px rgba(32, 201, 151, 0.14); }
+.unit.ability-watch { box-shadow: 0 0 14px rgba(255, 214, 10, 0.38), inset 0 0 10px rgba(255, 214, 10, 0.14); }
+.unit.ability-camouflage { box-shadow: 0 0 14px rgba(124, 196, 102, 0.38), inset 0 0 10px rgba(124, 196, 102, 0.14); }
 
 .kill-counter {
     position: absolute;
@@ -698,6 +736,15 @@ details li {
     align-items: center;
     border-color: var(--neon-gold);
     box-shadow: 0 0 15px rgba(255, 183, 0, 0.1);
+}
+
+#action-controls.preview-mode {
+    border-color: rgba(255, 255, 255, 0.45);
+    box-shadow: 0 0 16px rgba(255, 255, 255, 0.08);
+}
+
+#action-controls.preview-mode .action-buttons {
+    display: none;
 }
 
 #selected-unit-info {
@@ -1109,6 +1156,19 @@ details li {
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.2s;
+}
+
+.develop-mode-badge {
+    margin-bottom: 0.8rem;
+    padding: 0.45rem 0.75rem;
+    border: 1px solid var(--neon-cyan);
+    border-radius: 999px;
+    color: var(--neon-cyan);
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    font-weight: 800;
+    text-align: center;
+    box-shadow: 0 0 12px rgba(0, 240, 255, 0.16);
 }
 
 .keepalive-warning.show {
@@ -1598,6 +1658,13 @@ body.opponent-turn #turn-indicator {
     #turn-indicator {
         padding: 0.4rem 1rem;
         border-radius: 30px;
+    }
+
+    .status-alert {
+        width: calc(100vw - 1rem);
+        font-size: 0.76rem;
+        padding: 0.65rem 0.75rem;
+        margin-bottom: 0.5rem;
     }
 
     .turn-label { font-size: 0.85rem; }

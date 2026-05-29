@@ -25,6 +25,7 @@
                 </div>
             </div>
         </header>
+        <div id="status-alert" class="status-alert hidden"></div>
 
         <!-- MAIN LAYOUT -->
         <main>
@@ -56,11 +57,13 @@
                         <ul>
                             <li><strong>千里眼</strong>: 1方向の直線全マスを可視化</li>
                             <li><strong>鼓舞</strong>: 次ターン周囲1マスの味方移動・視界+1</li>
-                            <li><strong>足跡</strong>: パッシブ：前ターンの視界情報を維持</li>
-                            <li><strong>歴戦王</strong>: パッシブ：自身の移動+1・視界+1</li>
-                            <li><strong>戦姫</strong>: パッシブ：敵甲撃破時、味方丙・丁の視界+1</li>
+                            <li><strong>足跡</strong>: パッシブ：直近2ターン分の視界情報を維持</li>
+                            <li><strong>歴戦王</strong>: パッシブ：敵撃破時に行動済み解除</li>
+                            <li><strong>戦姫</strong>: パッシブ：撃破数に応じて自軍を昇格</li>
                             <li><strong>爆破</strong>: 周囲2マスの全マス破壊して自滅</li>
-                            <li><strong>暗殺者</strong>: パッシブ：マンハッタン移動5・直線視界5。敵撃破時、進行方向から1マス後退してターン終了。</li>
+                            <li><strong>暗殺者</strong>: パッシブ：直線移動5・直線視界5。敵撃破時、進行方向から1マス後退。</li>
+                            <li><strong>盲目</strong>: パッシブ：周囲移動5・視界周囲1。</li>
+                            <li><strong>衛生兵 / 監視 / 迷彩</strong>: develop mode 解放アビリティ。</li>
                         </ul>
                     </details>
                     <details>
@@ -120,6 +123,7 @@
 
                 <div id="setup-panel" class="hub-section">
                     <h3>GAME CONFIGURATION</h3>
+                    <div id="develop-mode-badge" class="develop-mode-badge hidden">DEVELOP MODE</div>
 
                     <!-- Mode tabs -->
                     <div class="mode-tabs">

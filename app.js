@@ -23,9 +23,13 @@ const MAP_SIZES = {
 const PORTAL_COLS = [0, 1, 9, 10];
 const WALLS_PER_MAP = 12;
 const SCOUT_REINFORCE_INTERVAL = 10;
+const MEDIC_SCOUT_REINFORCE_INTERVAL = 6;
 const SCOUT_LIMIT_PER_PLAYER = 2;
 const ACTIONS_PER_TURN = 2;
 const KEEPALIVE_WARNING_MS = 10 * 60 * 1000;
+const DEVELOP_MODE_SEQUENCE = '12312321213';
+const BASE_ABILITY_OPTIONS = ['千里眼', '鼓舞', '足跡', '歴戦王', '戦姫', '爆破', '暗殺者', '盲目'];
+const DEVELOP_ONLY_ABILITIES = ['衛生兵', '監視', '迷彩'];
 
 function getPortalDestination(mapName, r, c) {
     if (!PORTAL_COLS.includes(c)) return null;
@@ -106,8 +110,11 @@ let gameSeed = 1;
 let actionsThisTurn = 0;
 let actedUnitIds = new Set();
 let lastKeepAliveAt = Date.now();
+let developModeEnabled = false;
+let developModeSequence = '';
 
 let selectedUnit = null;
+let previewUnit = null;
 let selectedAction = 'move';
 let activePhase = 'setup';
 let activeMap = 'area1';
@@ -198,6 +205,7 @@ class Unit {
         this.warPrincessKills = 0;
         this.warPrincessTeiPromoted = false;
         this.warPrincessHeiPromoted = false;
+        this.camouflaged = false;
 
         this.configureTypeStats(type);
     }
@@ -264,8 +272,21 @@ class Unit {
 
     get abilityDescription() {
         if (this.type === 'koh') {
-            const ability = this.player === 1 ? p1Ability : p2Ability;
-            return `【甲特有: ${ability}】`;
+            const ability = getPlayerAbility(this.player);
+            const descriptions = {
+                '千里眼': '【甲特有: 千里眼】1方向の直線全マスを可視化。',
+                '鼓舞': '【甲特有: 鼓舞】周囲1マスの味方の移動・視界を強化。',
+                '足跡': '【甲特有: 足跡】直近2ターン分の視界を保持。',
+                '歴戦王': '【甲特有: 歴戦王】敵撃破時、行動済み状態を解除。',
+                '戦姫': '【甲特有: 戦姫】撃破数に応じて自軍を昇格。',
+                '爆破': '【甲特有: 爆破】周囲2マスを破壊して自滅。',
+                '暗殺者': '【甲特有: 暗殺者】直線移動5・視界5。撃破時1マス後退。',
+                '盲目': '【甲特有: 盲目】周囲移動5、視界周囲1。',
+                '衛生兵': '【甲特有: 衛生兵】生存中は偵察兵補充が6ターン周期。',
+                '監視': '【甲特有: 監視】周囲移動1、視界周囲2。視界内の敵移動-1。',
+                '迷彩': '【甲特有: 迷彩】発動で周囲視界1となり、次の移動まで偵察兵以外から不可視。'
+            };
+            return descriptions[ability] || `【甲特有: ${ability}】`;
         }
         if (this.type === 'otsu') {
             return `【乙特有: 切り崩し】敵本拠地で敵撃破時、周囲1マスの全コマを追加破壊。`;
@@ -279,18 +300,24 @@ class Unit {
     getMovementRange() {
         let r = this.baseMove;
         if (this.type === 'koh') {
-            const ability = this.player === 1 ? p1Ability : p2Ability;
+            const ability = getPlayerAbility(this.player);
             if (ability === '暗殺者') { return 5; }
+            if (ability === '盲目') { return 5; }
+            if (ability === '監視') { return 1; }
         }
+        r -= getMonitorPenalty(this);
         if (this.inspirationTurns > 0) r += 1;
-        return r;
+        return Math.max(0, r);
     }
 
     getVisionRange() {
         let v = this.baseVision;
         if (this.type === 'koh') {
-            const ability = this.player === 1 ? p1Ability : p2Ability;
+            const ability = getPlayerAbility(this.player);
             if (ability === '暗殺者') v = 5; // 直線視界5 (special: handled separately)
+            if (ability === '盲目') v = 1;
+            if (ability === '監視') v = 2;
+            if (ability === '迷彩' && this.camouflaged) v = 1;
         }
         if (this.inspirationTurns > 0) v += 1;
         return v;
@@ -298,16 +325,27 @@ class Unit {
 
     getEffectiveMoveType() {
         if (this.type === 'koh') {
-            const ability = this.player === 1 ? p1Ability : p2Ability;
+            const ability = getPlayerAbility(this.player);
             if (ability === '暗殺者') return 'straight';
+            if (ability === '盲目' || ability === '監視') return 'square';
         }
         return this.moveType;
+    }
+
+    getVisionShape() {
+        if (this.type === 'koh') {
+            const ability = getPlayerAbility(this.player);
+            if (ability === '暗殺者') return 'beam';
+            if (ability === '盲目' || ability === '監視' || (ability === '迷彩' && this.camouflaged)) return 'square';
+        }
+        return 'manhattan';
     }
 }
 
 // --- INITIALIZATION ---
 document.addEventListener('DOMContentLoaded', () => {
     applyDeviceProfile();
+    syncAbilitySelectOptions();
     setupUIEventListeners();
     setupMapTabs();
     setupGameModeTabs();
@@ -332,9 +370,64 @@ function getAbilityClass(player) {
         '歴戦王': 'ability-veteran',
         '戦姫': 'ability-princess',
         '爆破': 'ability-blast',
-        '暗殺者': 'ability-assassin'
+        '暗殺者': 'ability-assassin',
+        '盲目': 'ability-blind',
+        '衛生兵': 'ability-medic',
+        '監視': 'ability-watch',
+        '迷彩': 'ability-camouflage'
     };
     return classMap[ability] || 'ability-unknown';
+}
+
+function getPlayerAbility(player) {
+    return player === 1 ? p1Ability : p2Ability;
+}
+
+function getAllAbilityOptions() {
+    return developModeEnabled
+        ? [...BASE_ABILITY_OPTIONS, ...DEVELOP_ONLY_ABILITIES]
+        : [...BASE_ABILITY_OPTIONS];
+}
+
+function syncAbilitySelectOptions() {
+    const selects = ['p1-ability-choice', 'p2-ability-choice', 'online-ability-choice']
+        .map(id => document.getElementById(id))
+        .filter(Boolean);
+
+    selects.forEach(select => {
+        const currentValue = select.value;
+        select.innerHTML = '';
+        getAllAbilityOptions().forEach(ability => {
+            const option = document.createElement('option');
+            option.value = ability;
+            option.textContent = ability;
+            select.appendChild(option);
+        });
+
+        const fallbackValue =
+            select.id === 'p2-ability-choice' ? '歴戦王' :
+            select.id === 'online-ability-choice' ? '足跡' :
+            '足跡';
+        select.value = getAllAbilityOptions().includes(currentValue) ? currentValue : fallbackValue;
+    });
+}
+
+function setDevelopModeEnabled(enabled) {
+    developModeEnabled = enabled;
+    syncAbilitySelectOptions();
+    const badge = document.getElementById('develop-mode-badge');
+    if (badge) badge.classList.toggle('hidden', !enabled);
+}
+
+function registerMapTabSequence(mapName) {
+    if (activePhase !== 'setup' || developModeEnabled) return;
+    const token = mapName === 'area1' ? '1' : mapName === 'area2' ? '2' : '3';
+    developModeSequence = (developModeSequence + token).slice(-DEVELOP_MODE_SEQUENCE.length);
+    if (developModeSequence === DEVELOP_MODE_SEQUENCE) {
+        setDevelopModeEnabled(true);
+        addConsoleLog('DEVELOP MODE: 追加アビリティを解放しました。', 'system');
+        showStatusAlert('DEVELOP MODE 起動: 衛生兵 / 監視 / 迷彩 を解放', 'system', 5000);
+    }
 }
 
 function setupUIEventListeners() {
@@ -416,6 +509,7 @@ function setupGameModeTabs() {
 
 function switchActiveMap(mapName) {
     activeMap = mapName;
+    registerMapTabSequence(mapName);
     document.querySelectorAll('.map-tab').forEach(tab => {
         tab.classList.toggle('active', tab.getAttribute('data-map') === mapName);
     });
@@ -721,8 +815,10 @@ async function extendRenderSession() {
         await fetch('/keepalive', { cache: 'no-store' });
         addConnectionLog('Render接続を延長しました。');
         sendOnlineMessage({ kind: 'keepalive' });
+        clearStatusAlert();
     } catch {
         addConnectionLog('接続延長リクエストに失敗しました。');
+        showStatusAlert('接続延長に失敗しました。少し待って再試行してください。', 'warning', 5000);
     }
 }
 
@@ -739,17 +835,28 @@ function startKeepAliveWarningTimer() {
 }
 
 function showKeepAliveWarning() {
-    let warning = document.getElementById('keepalive-warning');
-    if (!warning) {
-        warning = document.createElement('div');
-        warning.id = 'keepalive-warning';
-        warning.className = 'keepalive-warning';
-        warning.textContent = '接続延長を押してください';
-        document.body.appendChild(warning);
+    showStatusAlert('10分以上延長していません。ONLINE欄の EXTEND を押してください。', 'warning', 0);
+}
+
+function clearStatusAlert() {
+    const alert = document.getElementById('status-alert');
+    if (!alert) return;
+    alert.className = 'status-alert hidden';
+    alert.textContent = '';
+    window.clearTimeout(clearStatusAlert.timer);
+}
+
+function showStatusAlert(message, tone = 'warning', durationMs = 4000) {
+    const alert = document.getElementById('status-alert');
+    if (!alert) return;
+    alert.textContent = message;
+    alert.className = `status-alert ${tone}`;
+    window.clearTimeout(clearStatusAlert.timer);
+    if (durationMs > 0) {
+        clearStatusAlert.timer = window.setTimeout(() => {
+            alert.classList.add('hidden');
+        }, durationMs);
     }
-    warning.classList.add('show');
-    window.clearTimeout(showKeepAliveWarning.timer);
-    showKeepAliveWarning.timer = window.setTimeout(() => warning.classList.remove('show'), 4000);
 }
 
 function applyRemoteAction(action) {
@@ -793,6 +900,8 @@ function startGame(config = null, fromOnline = false) {
     actionsThisTurn = 0;
     actedUnitIds = new Set();
     lastKeepAliveAt = Date.now();
+    previewUnit = null;
+    developModeSequence = '';
 
     p1KohDestroyed = false;
     p2KohDestroyed = false;
@@ -821,6 +930,7 @@ function startGame(config = null, fromOnline = false) {
     addConsoleLog("GAME INITIATED. PLAYER 1 (BLUE) TURN.", 'system');
     showTurnBanner();
     startKeepAliveWarningTimer();
+    clearStatusAlert();
 
     if (onlineMode && !fromOnline) {
         sendOnlineMessage({ kind: 'start', config: { p1Ability, p2Ability, seed: gameSeed } });
@@ -1111,6 +1221,64 @@ function applyWarPrincessKills(unit, killCount) {
     }
 }
 
+function isCellWithinUnitVision(unit, mapName, row, col) {
+    if (!unit || unit.map !== mapName) return false;
+    const vRange = unit.getVisionRange();
+    const dr = row - unit.row;
+    const dc = col - unit.col;
+    const distance = Math.abs(dr) + Math.abs(dc);
+    const shape = unit.getVisionShape();
+
+    if (shape === 'beam') {
+        return (
+            (row === unit.row && Math.abs(dc) <= vRange) ||
+            (col === unit.col && Math.abs(dr) <= vRange)
+        );
+    }
+    if (shape === 'square') {
+        return Math.max(Math.abs(dr), Math.abs(dc)) <= vRange;
+    }
+    return distance <= vRange;
+}
+
+function getKohUnit(player) {
+    return units.find(unit => unit.player === player && unit.type === 'koh') || null;
+}
+
+function getMonitorPenalty(unit) {
+    if (!unit || unit.type === 'core') return 0;
+    const enemyPlayer = unit.player === 1 ? 2 : 1;
+    if (getPlayerAbility(enemyPlayer) !== '監視') return 0;
+    const watcher = getKohUnit(enemyPlayer);
+    if (!watcher) return 0;
+    return isCellWithinUnitVision(watcher, unit.map, unit.row, unit.col) ? 1 : 0;
+}
+
+function canScoutRevealCamouflage(viewerPlayer, mapName, row, col) {
+    return units.some(unit =>
+        unit.player === viewerPlayer &&
+        unit.type === 'scout' &&
+        isCellWithinUnitVision(unit, mapName, row, col)
+    );
+}
+
+function isUnitVisibleToViewer(unit, viewerPlayer, activeVisionSet) {
+    if (!unit) return false;
+    if (gameMode === 'debug') return true;
+    if (unit.player === viewerPlayer) return true;
+    if (!activeVisionSet.has(`${unit.row},${unit.col}`)) return false;
+    if (!unit.camouflaged) return true;
+    return canScoutRevealCamouflage(viewerPlayer, unit.map, unit.row, unit.col);
+}
+
+function maybeClearCamouflageAfterMove(unit) {
+    if (unit.type !== 'koh' || !unit.camouflaged) return;
+    const ability = getPlayerAbility(unit.player);
+    if (ability !== '迷彩') return;
+    unit.camouflaged = false;
+    addConsoleLog(`ABILITY: 迷彩解除 - ${unit.name} が移動したため姿を現しました。`, 'ability');
+}
+
 // --- FOG OF WAR / VISIBILITY ---
 function calculateVisibility() {
     Object.keys(p1Vision).forEach(map => p1Vision[map].clear());
@@ -1142,38 +1310,18 @@ function calculateVisibility() {
     }
 
     units.forEach(unit => {
-        const ability = unit.type === 'koh' ? (unit.player === 1 ? p1Ability : p2Ability) : null;
-
-        // 暗殺者: 直線視界5 (4方向ビーム)
-        if (unit.type === 'koh' && ability === '暗殺者') {
-            const map = unit.map;
-            const size = MAP_SIZES[map];
-            const targetSet = unit.player === 1 ? p1Vision[map] : p2Vision[map];
-            targetSet.add(`${unit.row},${unit.col}`);
-            [[-1,0],[1,0],[0,-1],[0,1]].forEach(([dr,dc]) => {
-                for (let s = 1; s <= 5; s++) {
-                    const nr = unit.row + dr * s;
-                    const nc = unit.col + dc * s;
-                    if (nr < 0 || nr >= size.rows || nc < 0 || nc >= size.cols) break;
-                    targetSet.add(`${nr},${nc}`);
-                }
-            });
-            return;
-        }
-
         const vRange = unit.getVisionRange();
         const mapSize = MAP_SIZES[unit.map];
         const startR = Math.max(0, unit.row - vRange);
         const endR = Math.min(mapSize.rows - 1, unit.row + vRange);
         const startC = Math.max(0, unit.col - vRange);
         const endC = Math.min(mapSize.cols - 1, unit.col + vRange);
+        const visionSet = unit.player === 1 ? p1Vision[unit.map] : p2Vision[unit.map];
 
         for (let r = startR; r <= endR; r++) {
             for (let c = startC; c <= endC; c++) {
-                const manhattanDist = Math.abs(r - unit.row) + Math.abs(c - unit.col);
-                if (manhattanDist <= vRange) {
-                    if (unit.player === 1) p1Vision[unit.map].add(`${r},${c}`);
-                    else p2Vision[unit.map].add(`${r},${c}`);
+                if (isCellWithinUnitVision(unit, unit.map, r, c)) {
+                    visionSet.add(`${r},${c}`);
                 }
             }
         }
@@ -1266,8 +1414,7 @@ function renderBoard() {
 
             if (cellData.unit) {
                 const u = cellData.unit;
-                const isEnemy = u.player !== viewerPlayer;
-                const isHiddenByFog = isEnemy && !activeVision.has(coordStr);
+                const isHiddenByFog = !isUnitVisibleToViewer(u, viewerPlayer, activeVision);
 
                 if (!isHiddenByFog) {
                     const unitEl = document.createElement('div');
@@ -1284,7 +1431,7 @@ function renderBoard() {
                         }
                     }
                     unitEl.setAttribute('data-rank', u.symbol);
-                    unitEl.title = `${u.name} (P${u.player})\n移動: ${u.getEffectiveMoveType() === 'straight' ? '直線' : 'マンハッタン'}${u.getMovementRange()}\n視界: ${u.getVisionRange()}\n${u.abilityDescription}`;
+                    unitEl.title = `${u.name} (P${u.player})\n移動: ${getMoveTypeLabel(u.getEffectiveMoveType())}${u.getMovementRange()}\n視界: ${getVisionShapeLabel(u.getVisionShape())}${u.getVisionRange()}\n${u.abilityDescription}`;
                     if (u.type === 'core') unitEl.classList.add('core');
                     cellEl.appendChild(unitEl);
                 }
@@ -1311,7 +1458,7 @@ function updateTabIndicators() {
                 if (u) {
                     if (u.type === 'core' && u.col !== c) continue;
                     if (u.player === viewerPlayer) alliesCount++;
-                    else if (activeVision[map].has(`${r},${c}`)) visibleEnemies++;
+                    else if (isUnitVisibleToViewer(u, viewerPlayer, activeVision[map])) visibleEnemies++;
                 }
             }
         }
@@ -1350,7 +1497,7 @@ function renderMinimaps() {
                 if (boardCell.isTeleport) cell.classList.add('teleport');
                 if (boardCell.isCoreTile) cell.classList.add('core-tile');
                 const unit = boardCell.unit;
-                const visible = gameMode === 'debug' || !unit || unit.player === viewerPlayer || vision[mapName].has(`${r},${c}`);
+                const visible = gameMode === 'debug' || !unit || isUnitVisibleToViewer(unit, viewerPlayer, vision[mapName]);
                 if (unit && visible) cell.classList.add(unit.player === 1 ? 'p1' : 'p2');
                 else if (!vision[mapName].has(`${r},${c}`) && gameMode !== 'debug') cell.classList.add('fog');
                 grid.appendChild(cell);
@@ -1367,6 +1514,18 @@ function getViewerAreaLabel(mapName, viewerPlayer = getViewerPlayer()) {
         if (mapName === 'area1') return 'AREA 3: 敵陣';
     }
     return getAreaLabel(mapName);
+}
+
+function getMoveTypeLabel(moveType) {
+    if (moveType === 'straight') return '直線';
+    if (moveType === 'square') return '周囲';
+    return 'マンハッタン';
+}
+
+function getVisionShapeLabel(shape) {
+    if (shape === 'beam') return '直線';
+    if (shape === 'square') return '周囲';
+    return 'マンハッタン';
 }
 
 // --- MOVEMENT & PATHFINDING ---
@@ -1412,11 +1571,16 @@ function getValidMoves(unit) {
             }
         });
     } else {
-        // BFS manhattan movement
+        // BFS manhattan / square movement
         const queue = [{ row: unit.row, col: unit.col, steps: 0 }];
         const visited = new Set();
         visited.add(`${unit.row},${unit.col}`);
-        const dirs = [{ r: -1, c: 0 }, { r: 1, c: 0 }, { r: 0, c: -1 }, { r: 0, c: 1 }];
+        const dirs = effectiveMoveType === 'square'
+            ? [
+                { r: -1, c: 0 }, { r: 1, c: 0 }, { r: 0, c: -1 }, { r: 0, c: 1 },
+                { r: -1, c: -1 }, { r: -1, c: 1 }, { r: 1, c: -1 }, { r: 1, c: 1 }
+            ]
+            : [{ r: -1, c: 0 }, { r: 1, c: 0 }, { r: 0, c: -1 }, { r: 0, c: 1 }];
 
         while (queue.length > 0) {
             const curr = queue.shift();
@@ -1510,10 +1674,16 @@ function getScoutWarpTargets(scout) {
 // --- CELL CLICK HANDLER ---
 function handleCellClick(row, col) {
     if (isGameOver) return;
-    if (!canControlCurrentTurn()) return;
-    if (currentPlayer === 2 && vsAI) return;
-
     const cell = boards[activeMap][row][col];
+    const viewerPlayer = getViewerPlayer();
+    const activeVision = viewerPlayer === 1 ? p1Vision[activeMap] : p2Vision[activeMap];
+    const clickedVisibleEnemy = cell.unit && cell.unit.player !== viewerPlayer && isUnitVisibleToViewer(cell.unit, viewerPlayer, activeVision);
+
+    if (!canControlCurrentTurn() || (currentPlayer === 2 && vsAI)) {
+        if (clickedVisibleEnemy) showEnemyPreview(cell.unit);
+        else cancelSelection();
+        return;
+    }
 
     if (selectedUnit) {
         const moveTarget = document.querySelector(`.cell[data-row="${row}"][data-col="${col}"].highlight-move`);
@@ -1523,10 +1693,40 @@ function handleCellClick(row, col) {
         if (moveTarget || attackTarget) { executeMove(selectedUnit, row, col); return; }
         if (abilityTarget) { executeAbility(selectedUnit, row, col); return; }
         if (cell.unit && cell.unit.player === currentPlayer) selectUnit(cell.unit);
+        else if (clickedVisibleEnemy) showEnemyPreview(cell.unit);
         else cancelSelection();
     } else {
         if (cell.unit && cell.unit.player === currentPlayer) selectUnit(cell.unit);
+        else if (clickedVisibleEnemy) showEnemyPreview(cell.unit);
+        else cancelSelection();
     }
+}
+
+function showEnemyPreview(unit) {
+    if (!unit) return;
+    previewUnit = unit;
+    selectedUnit = null;
+    selectedAction = 'move';
+    clearHighlights();
+
+    const actionCtrl = document.getElementById('action-controls');
+    actionCtrl.classList.remove('hidden');
+    actionCtrl.classList.add('preview-mode');
+    actionCtrl.querySelector('.unit-badge').textContent = unit.symbol;
+    const abilityName = unit.type === 'koh' ? getPlayerAbility(unit.player) : null;
+    actionCtrl.querySelector('.unit-name').textContent = abilityName
+        ? `ENEMY PREVIEW / ${unit.name} / ${abilityName}`
+        : `ENEMY PREVIEW / ${unit.name}`;
+    actionCtrl.querySelector('.unit-coords').textContent = `[${unit.col}, ${unit.row}]`;
+
+    const selectedCell = document.querySelector(`.cell[data-row="${unit.row}"][data-col="${unit.col}"]`);
+    if (selectedCell) selectedCell.classList.add('selected');
+
+    getValidMoves(unit).forEach(move => {
+        const el = document.querySelector(`.cell[data-row="${move.row}"][data-col="${move.col}"]`);
+        if (!el) return;
+        el.classList.add(move.type === 'attack' ? 'highlight-preview-attack' : 'highlight-preview-move');
+    });
 }
 
 function selectUnit(unit) {
@@ -1545,10 +1745,12 @@ function selectUnit(unit) {
     }
 
     selectedUnit = unit;
+    previewUnit = null;
     selectedAction = 'move';
 
     const actionCtrl = document.getElementById('action-controls');
     actionCtrl.classList.remove('hidden');
+    actionCtrl.classList.remove('preview-mode');
     actionCtrl.querySelector('.unit-badge').textContent = unit.symbol;
     const selectedAbilityName = unit.type === 'koh' ? (unit.player === 1 ? p1Ability : p2Ability) : null;
     actionCtrl.querySelector('.unit-name').textContent = selectedAbilityName ? `${unit.name} / ${selectedAbilityName}` : unit.name;
@@ -1561,7 +1763,8 @@ function selectUnit(unit) {
     if (unit.type === 'koh') {
         abilityBtn.classList.remove('hidden');
         if (abilityName === '千里眼') abilityBtn.textContent = `方向選択: ${abilityName}`;
-        else abilityBtn.textContent = `即時発動: ${abilityName}`;
+        else if (abilityName === '鼓舞' || abilityName === '爆破' || abilityName === '迷彩') abilityBtn.textContent = `即時発動: ${abilityName}`;
+        else abilityBtn.textContent = `特性確認: ${abilityName}`;
     } else if (unit.type === 'scout') {
         abilityBtn.classList.remove('hidden');
         abilityBtn.textContent = 'ワープ先を選択';
@@ -1603,24 +1806,27 @@ function selectActionType(type) {
             const abilityName = currentPlayer === 1 ? p1Ability : p2Ability;
             if (abilityName === '千里眼') {
                 document.getElementById('direction-overlay').classList.remove('hidden');
-            } else if (abilityName === '鼓舞' || abilityName === '爆破') {
+            } else if (abilityName === '鼓舞' || abilityName === '爆破' || abilityName === '迷彩') {
                 executeAbility(selectedUnit, null, null);
             }
-            // パッシブ系（足跡、歴戦王、戦姫、暗殺者）はアビリティボタンで何もしない
+            // パッシブ系はアビリティボタンで何もしない
         }
     }
 }
 
 function clearHighlights() {
     document.querySelectorAll('.cell').forEach(c => {
-        c.classList.remove('highlight-move', 'highlight-attack', 'highlight-ability', 'selected');
+        c.classList.remove('highlight-move', 'highlight-attack', 'highlight-ability', 'highlight-preview-move', 'highlight-preview-attack', 'selected');
     });
 }
 
 function cancelSelection() {
     selectedUnit = null;
+    previewUnit = null;
     clearHighlights();
-    document.getElementById('action-controls').classList.add('hidden');
+    const actionCtrl = document.getElementById('action-controls');
+    actionCtrl.classList.add('hidden');
+    actionCtrl.classList.remove('preview-mode');
 }
 
 // --- MOVEMENT EXECUTION ---
@@ -1708,6 +1914,7 @@ function executeMove(unit, destRow, destCol) {
             addConsoleLog(`ABILITY: 暗殺者 - ${unit.name}が${captureNames}を撃破し、1マス後退。`, 'ability');
             if (resolved.portalDest && unit.player === currentPlayer) activeMap = finalMap;
             if (resolved.portalDest) unit.refreshActedAfterAction = true;
+            maybeClearCamouflageAfterMove(unit);
             sendOnlineMessage({ kind: 'action', action: { type: 'move', unitId: unit.id, row: destRow, col: destCol } });
             completeUnitAction(unit);
             return;
@@ -1741,6 +1948,7 @@ function executeMove(unit, destRow, destCol) {
         unit.refreshActedAfterAction = true;
         addConsoleLog(`SYSTEM: テレポート使用により行動済み状態を解除。`, 'system');
     }
+    maybeClearCamouflageAfterMove(unit);
     sendOnlineMessage({ kind: 'action', action: { type: 'move', unitId: unit.id, row: destRow, col: destCol } });
     completeUnitAction(unit);
 }
@@ -1778,6 +1986,12 @@ function executeAbility(unit, destRow, destCol) {
                 }
             }
             addConsoleLog(`ABILITY: 甲の「鼓舞」発動！同マップ周囲 ${affectedCount} 体の味方の移動・視界+1。`, 'ability');
+            sendOnlineMessage({ kind: 'action', action: { type: 'ability', unitId: unit.id } });
+            completeUnitAction(unit);
+
+        } else if (abilityName === '迷彩') {
+            unit.camouflaged = true;
+            addConsoleLog(`ABILITY: 甲の「迷彩」発動。次の移動まで偵察兵以外から視認されません。`, 'ability');
             sendOnlineMessage({ kind: 'action', action: { type: 'ability', unitId: unit.id } });
             completeUnitAction(unit);
 
@@ -1937,7 +2151,7 @@ function endTurn() {
     actedUnitIds = new Set();
     if (currentPlayer === 1) {
         gameTurn++;
-        if (gameTurn % SCOUT_REINFORCE_INTERVAL === 0) reinforceScouts();
+        reinforceScouts();
     }
 
     calculateVisibility();
@@ -1981,6 +2195,8 @@ function showTurnBanner() {
 
 function reinforceScouts() {
     [1, 2].forEach(player => {
+        const interval = getScoutReinforceInterval(player);
+        if (gameTurn % interval !== 0) return;
         const scoutCount = units.filter(unit => unit.player === player && unit.type === 'scout').length;
         if (scoutCount >= SCOUT_LIMIT_PER_PLAYER) {
             addConsoleLog(`SUPPLY: Player ${player} の偵察兵は上限${SCOUT_LIMIT_PER_PLAYER}体です。`, 'system');
@@ -2006,6 +2222,12 @@ function reinforceScouts() {
         );
         addConsoleLog(`SUPPLY: Player ${player} に偵察兵を1体補充しました。`, player === 1 ? 'p1' : 'p2');
     });
+}
+
+function getScoutReinforceInterval(player) {
+    const koh = getKohUnit(player);
+    if (koh && getPlayerAbility(player) === '衛生兵') return MEDIC_SCOUT_REINFORCE_INTERVAL;
+    return SCOUT_REINFORCE_INTERVAL;
 }
 
 // --- WIN / LOSE ---
@@ -2043,14 +2265,18 @@ function forfeitGame() {
 }
 
 function resetToSetup(fromOnline = false) {
+    activePhase = 'setup';
     document.getElementById('game-over-overlay').classList.add('hidden');
     document.getElementById('game-info-panel').classList.add('hidden');
     document.getElementById('setup-panel').classList.remove('hidden');
 
     boards = { area1: [], area2: [], area3: [] };
     units = [];
+    previewUnit = null;
+    developModeSequence = '';
     clearHighlights();
     document.getElementById('board').innerHTML = '';
+    clearStatusAlert();
     addConsoleLog("SYSTEM REBOOTED. STANDBY FOR CONFIGURATION...", 'system');
 
     if (onlineMode && !fromOnline) sendOnlineMessage({ kind: 'reset' });
@@ -2217,6 +2443,16 @@ function executeAITurn() {
                         bestAction = { type: 'ability', unit: u, action: '鼓舞' };
                     }
                 }
+            } else if (aiAbility === '迷彩') {
+                const enemyNearby = units.some(enemy =>
+                    enemy.player === 1 &&
+                    enemy.map === map &&
+                    Math.abs(enemy.row - u.row) + Math.abs(enemy.col - u.col) <= 4
+                );
+                if (!u.camouflaged && enemyNearby && 140 > bestScore) {
+                    bestScore = 140;
+                    bestAction = { type: 'ability', unit: u, action: '迷彩' };
+                }
             } else if (aiAbility === '千里眼') {
                 const score = 90;
                 if (score > bestScore) {
@@ -2235,7 +2471,7 @@ function executeAITurn() {
             } else if (bestAction.type === 'warp') {
                 executeAbility(bestAction.unit, bestAction.row, bestAction.col);
             } else if (bestAction.type === 'ability') {
-                if (bestAction.action === '爆破' || bestAction.action === '鼓舞') {
+                if (bestAction.action === '爆破' || bestAction.action === '鼓舞' || bestAction.action === '迷彩') {
                     executeAbility(bestAction.unit, null, null);
                 } else if (bestAction.action === '千里眼') {
                     selectedUnit = bestAction.unit;
