@@ -32,6 +32,7 @@ const DEVELOP_MODE_SEQUENCE = '12312321213';
 const ALL_ABILITY_OPTIONS = ['千里眼', '鼓舞', '足跡', '歴戦王', '戦姫', '爆破', '暗殺者', '盲目', '衛生兵', '監視', '迷彩'];
 const USERNAME_STORAGE_KEY = 'sector8_username';
 const ONLINE_SESSION_STORAGE_KEY = 'sector8_online_session';
+const AUTH_SESSION_STORAGE_KEY = 'sector8_auth_session';
 
 function getPortalDestination(mapName, r, c) {
     if (!PORTAL_COLS.includes(c)) return null;
@@ -142,6 +143,8 @@ let visionSaturation = 1;
 let afkTurnTimer = null;
 let afkTurnPopupShown = false;
 let lastTurnOwner = null;
+let currentMatchKey = null;
+let currentMatchStartedAt = 0;
 
 let selectedUnit = null;
 let previewUnit = null;
@@ -197,6 +200,8 @@ let spectatorViewPlayer = 1;
 let reconnectTimer = null;
 let manualDisconnect = false;
 let onlineSession = null;
+let authSession = null;
+let authProfile = null;
 // Matchmaking state
 let matchmakingMode = false;
 let matchmakingRole = null; // 'host' or 'guest'
@@ -227,6 +232,20 @@ function sanitizeUsername(name) {
     return (name || '').trim().replace(/\s+/g, ' ').slice(0, 20);
 }
 
+function sanitizePlayerIdInput(value) {
+    return (value || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 16);
+}
+
+function sanitizeFriendCodeInput(value) {
+    return (value || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
+}
+
+function formatFriendCodeDisplay(code) {
+    const normalized = sanitizeFriendCodeInput(code);
+    if (normalized.length !== 12) return normalized;
+    return `${normalized.slice(0, 4)}-${normalized.slice(4, 8)}-${normalized.slice(8, 12)}`;
+}
+
 function loadSavedOnlineSession() {
     try {
         const raw = window.localStorage.getItem(ONLINE_SESSION_STORAGE_KEY);
@@ -254,6 +273,51 @@ function loadSavedUsername() {
     }
 }
 
+function loadSavedAuthSession() {
+    try {
+        const raw = window.localStorage.getItem(AUTH_SESSION_STORAGE_KEY);
+        if (!raw) return;
+        const saved = JSON.parse(raw);
+        if (!saved?.token || !saved?.profile) return;
+        authSession = { token: saved.token };
+        authProfile = saved.profile;
+        if (authProfile?.name) {
+            localUsername = sanitizeUsername(authProfile.name) || getDefaultUsername();
+        }
+    } catch {}
+}
+
+function saveAuthSession() {
+    try {
+        if (authSession?.token && authProfile) {
+            window.localStorage.setItem(AUTH_SESSION_STORAGE_KEY, JSON.stringify({
+                token: authSession.token,
+                profile: authProfile
+            }));
+        } else {
+            window.localStorage.removeItem(AUTH_SESSION_STORAGE_KEY);
+        }
+    } catch {}
+}
+
+async function apiRequest(path, { method = 'GET', body = null, auth = true } = {}) {
+    const headers = { 'Content-Type': 'application/json' };
+    if (auth && authSession?.token) headers.Authorization = `Bearer ${authSession.token}`;
+    const response = await fetch(path, {
+        method,
+        headers,
+        body: body ? JSON.stringify(body) : undefined
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || data.ok === false) {
+        const error = new Error(data.error || `HTTP_${response.status}`);
+        error.status = response.status;
+        error.data = data;
+        throw error;
+    }
+    return data;
+}
+
 function updateUsernameUI() {
     const input = document.getElementById('username-input');
     const saved = document.getElementById('username-saved');
@@ -268,6 +332,7 @@ function saveUsername(notify = true) {
     try {
         window.localStorage.setItem(USERNAME_STORAGE_KEY, localUsername);
     } catch {}
+    if (authSession?.token && authProfile) updateAccountName(nextName).catch(() => {});
     updateUsernameUI();
     updateUI();
     updateMatchmakingPlayerSummary();
@@ -276,6 +341,147 @@ function saveUsername(notify = true) {
         sendOnlineMessage({ kind: 'profile', username: localUsername });
     }
     if (notify) showStatusAlert(`ユーザー名を保存しました: ${localUsername}`, 'system', 2500);
+}
+
+function updateAccountUI() {
+    const statusEl = document.getElementById('account-status');
+    const playerIdEl = document.getElementById('account-player-id');
+    const friendCodeEl = document.getElementById('account-friend-code');
+    const levelEl = document.getElementById('account-level');
+    const ratingEl = document.getElementById('account-rating');
+    const expEl = document.getElementById('account-exp');
+    const loginBtn = document.getElementById('btn-account-login');
+    const registerBtn = document.getElementById('btn-account-register');
+    const logoutBtn = document.getElementById('btn-account-logout');
+    const loggedIn = Boolean(authSession?.token && authProfile);
+
+    if (statusEl) {
+        statusEl.textContent = loggedIn ? `LOGIN OK / ${authProfile.name}` : '未ログイン';
+        statusEl.classList.toggle('logged-in', loggedIn);
+    }
+    if (playerIdEl) playerIdEl.textContent = loggedIn ? authProfile.playerId : '--------';
+    if (friendCodeEl) friendCodeEl.textContent = loggedIn ? formatFriendCodeDisplay(authProfile.friendCode) : '--- --- ---';
+    if (levelEl) levelEl.textContent = loggedIn ? `LV ${authProfile.level}` : 'LV -';
+    if (ratingEl) ratingEl.textContent = loggedIn ? String(authProfile.rating) : '-';
+    if (expEl) expEl.textContent = loggedIn ? `${authProfile.exp}/100` : '0/100';
+    if (loginBtn) loginBtn.disabled = !document.getElementById('account-player-id-input')?.value || !document.getElementById('account-pin-input')?.value;
+    if (registerBtn) registerBtn.disabled = !document.getElementById('account-pin-input')?.value || !document.getElementById('username-input')?.value;
+    if (logoutBtn) logoutBtn.disabled = !loggedIn;
+}
+
+function applyAuthProfile(profile, token) {
+    authProfile = profile || null;
+    authSession = token ? { token } : null;
+    saveAuthSession();
+    if (authProfile?.name) {
+        localUsername = sanitizeUsername(authProfile.name) || getDefaultUsername();
+        const usernameInput = document.getElementById('username-input');
+        if (usernameInput) usernameInput.value = localUsername;
+        try { window.localStorage.setItem(USERNAME_STORAGE_KEY, localUsername); } catch {}
+    }
+    updateUsernameUI();
+    updateAccountUI();
+}
+
+async function restoreAuthSession() {
+    if (!authSession?.token) return false;
+    try {
+        const result = await apiRequest('/api/auth/restore', { method: 'POST', body: { token: authSession.token }, auth: false });
+        applyAuthProfile(result.profile, authSession.token);
+        showStatusAlert(`LOGIN RESTORED: ${result.profile.name}`, 'system', 2500);
+        return true;
+    } catch {
+        authSession = null;
+        authProfile = null;
+        saveAuthSession();
+        updateAccountUI();
+        return false;
+    }
+}
+
+async function registerAccount() {
+    const name = sanitizeUsername(document.getElementById('username-input')?.value) || getDefaultUsername();
+    const pin = String(document.getElementById('account-pin-input')?.value || '').trim();
+    const result = await apiRequest('/api/auth/register', { method: 'POST', body: { name, pin }, auth: false });
+    applyAuthProfile(result.profile, result.token);
+    showStatusAlert(`REGISTERED: ${result.profile.playerId}`, 'success', 3500);
+    return result.profile;
+}
+
+async function loginAccount() {
+    const playerId = sanitizePlayerIdInput(document.getElementById('account-player-id-input')?.value);
+    const pin = String(document.getElementById('account-pin-input')?.value || '').trim();
+    const result = await apiRequest('/api/auth/login', {
+        method: 'POST',
+        body: { playerId, pin, deviceLabel: sanitizeUsername(navigator.userAgent) || 'browser' },
+        auth: false
+    });
+    applyAuthProfile(result.profile, result.token);
+    showStatusAlert(`LOGIN OK: ${result.profile.name}`, 'success', 2500);
+    return result.profile;
+}
+
+async function logoutAccount() {
+    if (authSession?.token) {
+        try {
+            await apiRequest('/api/auth/logout', { method: 'POST', body: { token: authSession.token }, auth: false });
+        } catch {}
+    }
+    authSession = null;
+    authProfile = null;
+    saveAuthSession();
+    updateAccountUI();
+    showStatusAlert('LOGGED OUT', 'system', 2500);
+}
+
+async function updateAccountName(nextName) {
+    if (!authSession?.token) return null;
+    const result = await apiRequest('/api/account/name', {
+        method: 'POST',
+        body: { name: nextName },
+        auth: true
+    });
+    applyAuthProfile(result.profile, authSession.token);
+    updateMatchmakingPlayerSummary();
+    return result.profile;
+}
+
+function startMatchTracking() {
+    currentMatchStartedAt = Date.now();
+    currentMatchKey = onlineMode
+        ? `${matchRoomId || 'online'}:${gameSeed}`
+        : `local:${gameSeed}:${Date.now()}`;
+}
+
+async function submitMatchHistory(reason, winnerId) {
+    if (!authSession?.token || !authProfile) return;
+    const viewerWon = authProfile.id === winnerId;
+    const opponentName = onlineMode
+        ? getOnlineDisplayName(localPlayer === 1 ? 2 : 1)
+        : (vsAI ? 'AI BOT' : 'PLAYER 2');
+    const payload = {
+        matchKey: currentMatchKey || `local:${Date.now()}`,
+        player1Id: authProfile.id,
+        player1Name: authProfile.name,
+        player2Name: opponentName,
+        winner: viewerWon ? authProfile.name : opponentName,
+        loser: viewerWon ? opponentName : authProfile.name,
+        result: viewerWon ? 'win' : 'lose',
+        player1Level: authProfile.level,
+        player2Level: 1,
+        startedTime: currentMatchStartedAt || Date.now(),
+        endedTime: Date.now(),
+        timeTaken: Math.max(0, Date.now() - (currentMatchStartedAt || Date.now())),
+        surrenderByPlayerId: !viewerWon && reason === 'forfeit' ? authProfile.id : null,
+        winnerPlayerId: winnerId,
+        loserPlayerId: viewerWon ? null : authProfile.id
+    };
+    try {
+        const result = await apiRequest('/api/matches', { method: 'POST', body: payload, auth: true });
+        if (result.player1) applyAuthProfile(result.player1, authSession.token);
+    } catch (error) {
+        console.warn('match history save failed', error);
+    }
 }
 
 function getOnlineDisplayName(player) {
@@ -487,6 +693,7 @@ class Unit {
 document.addEventListener('DOMContentLoaded', () => {
     applyDeviceProfile();
     loadSavedUsername();
+    loadSavedAuthSession();
     loadSavedOnlineSession();
     syncAbilitySelectOptions();
     setupUIEventListeners();
@@ -495,6 +702,8 @@ document.addEventListener('DOMContentLoaded', () => {
     setupOnlineMode();
     updateModeVisibility();
     updateUsernameUI();
+    updateAccountUI();
+    restoreAuthSession().catch(() => {});
     addConsoleLog("SYSTEM READY. SELECT CONFIGURATION AND PRESS 'SYSTEM INITIATE'.", 'system');
 });
 
@@ -637,6 +846,32 @@ function setupUIEventListeners() {
             if (event.key === 'Enter') saveUsername();
         });
         usernameInput.addEventListener('blur', () => saveUsername(false));
+    }
+    const accountRegisterBtn = document.getElementById('btn-account-register');
+    if (accountRegisterBtn) accountRegisterBtn.addEventListener('click', () => registerAccount().catch(() => {}));
+    const accountLoginBtn = document.getElementById('btn-account-login');
+    if (accountLoginBtn) accountLoginBtn.addEventListener('click', () => loginAccount().catch(() => {}));
+    const accountLogoutBtn = document.getElementById('btn-account-logout');
+    if (accountLogoutBtn) accountLogoutBtn.addEventListener('click', () => logoutAccount().catch(() => {}));
+    const accountPlayerIdInput = document.getElementById('account-player-id-input');
+    if (accountPlayerIdInput) {
+        accountPlayerIdInput.addEventListener('input', () => {
+            accountPlayerIdInput.value = sanitizePlayerIdInput(accountPlayerIdInput.value);
+            updateAccountUI();
+        });
+        accountPlayerIdInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') loginAccount().catch(() => {});
+        });
+    }
+    const accountPinInput = document.getElementById('account-pin-input');
+    if (accountPinInput) {
+        accountPinInput.addEventListener('input', () => {
+            accountPinInput.value = accountPinInput.value.replace(/[^0-9]/g, '').slice(0, 4);
+            updateAccountUI();
+        });
+        accountPinInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') loginAccount().catch(() => {});
+        });
     }
     const sfxVolumeSlider = document.getElementById('sfx-volume');
     if (sfxVolumeSlider) sfxVolumeSlider.addEventListener('input', handleSfxVolumeChange);
@@ -1004,7 +1239,8 @@ function connectOnlineSocket({ roomId = null, player = null, random = false, rec
     const playerParam = player ? `player=${player}` : '';
     const randomParam = random ? `${playerParam ? '&' : ''}random=1` : '';
     const tokenParam = reconnectToken ? `${playerParam || randomParam || roomParam ? '&' : ''}token=${encodeURIComponent(reconnectToken)}` : '';
-    const query = [playerParam, roomParam.replace(/^&/, ''), randomParam.replace(/^&/, ''), tokenParam.replace(/^&/, '')].filter(Boolean).join('&');
+    const authParam = authSession?.token ? `${playerParam || randomParam || roomParam || tokenParam ? '&' : ''}authToken=${encodeURIComponent(authSession.token)}` : '';
+    const query = [playerParam, roomParam.replace(/^&/, ''), randomParam.replace(/^&/, ''), tokenParam.replace(/^&/, ''), authParam.replace(/^&/, '')].filter(Boolean).join('&');
     onlineSocket = new WebSocket(`${protocol}//${window.location.host}/ws?${query}`);
 
     onlineSocket.addEventListener('open', () => {
@@ -1469,6 +1705,7 @@ function startGame(config = null, fromOnline = false) {
     }
     gameSeed = config?.seed || Math.floor(Math.random() * 0xFFFFFFFF);
     vsAI = onlineMode ? false : vsAI;
+    startMatchTracking();
 
     activePhase = 'battle';
     isGameOver = false;
@@ -3053,6 +3290,7 @@ function triggerWin(winnerId, fromOnline = false, reason = 'core') {
     }
 
     document.getElementById('game-over-overlay').classList.remove('hidden');
+    submitMatchHistory(reason, winnerId);
     if (onlineMode && !fromOnline) sendOnlineMessage({ kind: 'win', winner: winnerId });
 }
 

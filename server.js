@@ -7,10 +7,19 @@ const crypto = require('crypto');
 const fs = require('fs');
 const http = require('http');
 const path = require('path');
+const {
+    createStore,
+    calculateRatingDelta,
+    formatFriendCode,
+    normalizeFriendCode,
+    normalizePlayerId,
+    sanitizeDisplayName
+} = require('./account-store');
 
 const root = __dirname;
 const port = Number(process.env.PORT || 8787);
 const MAX_SPECTATORS = 2;
+const accountStore = createStore();
 
 const rooms = new Map();
 const clients = new Map();
@@ -75,6 +84,46 @@ function sendRandomQueueStatus() {
         if (!room.random) return;
         roomSockets(room).forEach(socket => sendFrame(socket, payload));
     });
+}
+
+function sendJson(res, statusCode, payload) {
+    res.writeHead(statusCode, {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Cache-Control': 'no-cache'
+    });
+    res.end(JSON.stringify(payload));
+}
+
+function readRequestBody(req) {
+    return new Promise((resolve, reject) => {
+        let raw = '';
+        req.on('data', chunk => {
+            raw += chunk;
+            if (raw.length > 1_000_000) {
+                reject(new Error('payload too large'));
+                req.destroy();
+            }
+        });
+        req.on('end', () => resolve(raw));
+        req.on('error', reject);
+    });
+}
+
+function readJsonBody(req) {
+    return readRequestBody(req).then(raw => {
+        if (!raw) return {};
+        try {
+            return JSON.parse(raw);
+        } catch {
+            throw new Error('invalid json');
+        }
+    });
+}
+
+function getBearerToken(req) {
+    const header = req.headers.authorization || '';
+    const match = /^Bearer\s+(.+)$/i.exec(header);
+    return match ? match[1].trim() : '';
 }
 
 function sendFrame(socket, payload) {
@@ -292,8 +341,165 @@ function trackRoomState(room, message, senderInfo) {
     }
 }
 
-const server = http.createServer((req, res) => {
+const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, `http://${req.headers.host}`);
+
+    try {
+        if (url.pathname.startsWith('/api/')) {
+            const method = req.method || 'GET';
+            const body = method === 'GET' || method === 'HEAD' ? {} : await readJsonBody(req);
+            const sessionToken = body.token || body.sessionToken || getBearerToken(req);
+            const session = sessionToken ? accountStore.getSession(sessionToken) : null;
+
+            if (method === 'GET' && url.pathname === '/api/auth/me') {
+                if (!session) return sendJson(res, 401, { ok: false, error: 'unauthorized' });
+                return sendJson(res, 200, { ok: true, profile: session.profile });
+            }
+
+            if (method === 'POST' && url.pathname === '/api/auth/register') {
+                const result = accountStore.registerPlayer({ name: body.name, pin: body.pin });
+                if (!result.ok) return sendJson(res, 400, { ok: false, error: result.error });
+                return sendJson(res, 200, {
+                    ok: true,
+                    token: result.token,
+                    profile: result.profile
+                });
+            }
+
+            if (method === 'POST' && url.pathname === '/api/auth/login') {
+                const result = accountStore.loginPlayer({
+                    playerId: body.playerId,
+                    pin: body.pin,
+                    deviceLabel: sanitizeDisplayName(body.deviceLabel || body.device || '')
+                });
+                if (!result.ok) {
+                    return sendJson(res, result.error === 'locked' ? 423 : 401, {
+                        ok: false,
+                        error: result.error,
+                        lockedUntil: result.lockedUntil || null
+                    });
+                }
+                return sendJson(res, 200, { ok: true, token: result.token, profile: result.profile });
+            }
+
+            if (method === 'POST' && url.pathname === '/api/auth/restore') {
+                const result = accountStore.restoreSession(body.token || sessionToken);
+                if (!result.ok) return sendJson(res, 401, { ok: false, error: result.error });
+                return sendJson(res, 200, { ok: true, profile: result.profile });
+            }
+
+            if (method === 'POST' && url.pathname === '/api/auth/logout') {
+                accountStore.logoutSession(body.token || sessionToken);
+                return sendJson(res, 200, { ok: true });
+            }
+
+            if (method === 'POST' && url.pathname === '/api/account/name') {
+                if (!session) return sendJson(res, 401, { ok: false, error: 'unauthorized' });
+                const result = accountStore.updatePlayerName(session.profile.id, body.name);
+                if (!result.ok) return sendJson(res, 400, { ok: false, error: result.error });
+                return sendJson(res, 200, { ok: true, profile: result.profile });
+            }
+
+            if (method === 'GET' && url.pathname === '/api/players/lookup') {
+                const friendCode = normalizeFriendCode(url.searchParams.get('friendCode') || '');
+                if (!friendCode) return sendJson(res, 400, { ok: false, error: 'friend_code_missing' });
+                const profile = accountStore.getPlayerByFriendCode(friendCode);
+                if (!profile) return sendJson(res, 404, { ok: false, error: 'not_found' });
+                return sendJson(res, 200, { ok: true, player: profile });
+            }
+
+            if (method === 'GET' && url.pathname === '/api/friends') {
+                if (!session) return sendJson(res, 401, { ok: false, error: 'unauthorized' });
+                return sendJson(res, 200, { ok: true, friends: accountStore.listFriends(session.profile.id) });
+            }
+
+            if (method === 'GET' && url.pathname === '/api/friends/requests') {
+                if (!session) return sendJson(res, 401, { ok: false, error: 'unauthorized' });
+                return sendJson(res, 200, { ok: true, requests: accountStore.listFriendRequests(session.profile.id) });
+            }
+
+            if (method === 'POST' && url.pathname === '/api/friends/request') {
+                if (!session) return sendJson(res, 401, { ok: false, error: 'unauthorized' });
+                const result = accountStore.sendFriendRequest(session.profile.id, body.friendCode || '');
+                if (!result.ok) return sendJson(res, 400, { ok: false, error: result.error });
+                return sendJson(res, 200, { ok: true, requestId: result.requestId });
+            }
+
+            if (method === 'POST' && url.pathname.startsWith('/api/friends/requests/')) {
+                if (!session) return sendJson(res, 401, { ok: false, error: 'unauthorized' });
+                const match = url.pathname.match(/^\/api\/friends\/requests\/(\d+)\/respond$/);
+                const requestId = Number(match?.[1] || 0);
+                const result = accountStore.respondFriendRequest(session.profile.id, requestId, body.action);
+                if (!result.ok) return sendJson(res, 400, { ok: false, error: result.error });
+                return sendJson(res, 200, { ok: true, status: result.status });
+            }
+
+            if (method === 'GET' && url.pathname === '/api/matches') {
+                if (!session) return sendJson(res, 401, { ok: false, error: 'unauthorized' });
+                const limit = Math.min(50, Math.max(1, Number(url.searchParams.get('limit') || 20)));
+                return sendJson(res, 200, { ok: true, matches: accountStore.listRecentMatches(session.profile.id, limit) });
+            }
+
+            if (method === 'POST' && url.pathname === '/api/matches') {
+                if (!session) return sendJson(res, 401, { ok: false, error: 'unauthorized' });
+                const matchKey = String(body.matchKey || '').trim();
+                if (matchKey) {
+                    const existing = accountStore.db.prepare('SELECT id FROM match_history WHERE match_key = ?').get(matchKey);
+                    if (existing) return sendJson(res, 200, { ok: true, id: existing.id, duplicate: true });
+                }
+
+                const player1Id = body.player1Id ? Number(body.player1Id) : null;
+                const player2Id = body.player2Id ? Number(body.player2Id) : null;
+                const winnerPlayerId = body.winnerPlayerId ? Number(body.winnerPlayerId) : null;
+                const loserPlayerId = body.loserPlayerId ? Number(body.loserPlayerId) : null;
+                let player1Profile = player1Id ? accountStore.getPlayerById(player1Id) : null;
+                let player2Profile = player2Id ? accountStore.getPlayerById(player2Id) : null;
+                let player1RatingDelta = 0;
+                let player2RatingDelta = 0;
+
+                if (player1Profile && player2Profile && winnerPlayerId) {
+                    const p1Wins = winnerPlayerId === player1Profile.id;
+                    player1RatingDelta = calculateRatingDelta(player1Profile.rating, player2Profile.rating, p1Wins);
+                    player2RatingDelta = calculateRatingDelta(player2Profile.rating, player1Profile.rating, !p1Wins);
+                    player1Profile = accountStore.updatePlayerProgress(player1Profile.id, player1RatingDelta, 50);
+                    player2Profile = accountStore.updatePlayerProgress(player2Profile.id, player2RatingDelta, 50);
+                } else if (player1Profile && !player2Profile) {
+                    if (body.result === 'win' || winnerPlayerId === player1Profile.id) {
+                        player1RatingDelta = 10;
+                    } else if (body.result === 'lose' || body.result === 'surrender') {
+                        player1RatingDelta = -10;
+                    }
+                    player1Profile = accountStore.updatePlayerProgress(player1Profile.id, player1RatingDelta, 50);
+                }
+
+                const matchId = accountStore.recordMatchHistory({
+                    matchKey,
+                    player1Id: player1Profile?.id || player1Id,
+                    player2Id: player2Profile?.id || player2Id,
+                    player1Name: body.player1Name || player1Profile?.name || 'PLAYER 1',
+                    player2Name: body.player2Name || player2Profile?.name || 'PLAYER 2',
+                    winner: body.winner || (winnerPlayerId === player1Profile?.id ? (player1Profile?.name || 'PLAYER 1') : (player2Profile?.name || 'PLAYER 2')),
+                    loser: body.loser || (loserPlayerId === player1Profile?.id ? (player1Profile?.name || 'PLAYER 1') : (player2Profile?.name || 'PLAYER 2')),
+                    result: body.result || 'win',
+                    player1RatingDelta,
+                    player2RatingDelta,
+                    player1Level: player1Profile?.level || 1,
+                    player2Level: player2Profile?.level || 1,
+                    startedTime: body.startedTime,
+                    endedTime: body.endedTime,
+                    timeTaken: body.timeTaken,
+                    surrenderByPlayerId: body.surrenderByPlayerId || null
+                });
+                return sendJson(res, 200, {
+                    ok: true,
+                    id: matchId,
+                    player1: player1Profile,
+                    player2: player2Profile
+                });
+            }
+
+            return sendJson(res, 404, { ok: false, error: 'not_found' });
+        }
 
     if (url.pathname === '/p1') {
         res.writeHead(302, { Location: '/index.html?online=1&player=1' });
@@ -330,6 +536,9 @@ const server = http.createServer((req, res) => {
         });
         res.end(data);
     });
+    } catch (error) {
+        sendJson(res, 500, { ok: false, error: error.message || 'server_error' });
+    }
 });
 
 server.on('upgrade', (req, socket) => {
@@ -354,6 +563,7 @@ server.on('upgrade', (req, socket) => {
     const requestedRoomId = url.searchParams.get('room');
     const random = url.searchParams.get('random') === '1';
     const token = url.searchParams.get('token') || '';
+    const authToken = url.searchParams.get('authToken') || '';
 
     const joined = random
         ? joinRandomRoom(socket, token)
@@ -365,7 +575,7 @@ server.on('upgrade', (req, socket) => {
     }
 
     const { room, role, player, token: reconnectToken } = joined;
-    clients.set(socket, { roomId: room.id, role, player, token: reconnectToken });
+    clients.set(socket, { roomId: room.id, role, player, token: reconnectToken, authToken });
     sendFrame(socket, {
         kind: 'hello',
         player,
@@ -416,11 +626,15 @@ server.on('error', (error) => {
     }
 });
 
-server.listen(port, '0.0.0.0', () => {
-    console.log('');
-    console.log('SECTOR-8 SERVER ONLINE');
-    console.log(`Local:  http://localhost:${port}/`);
-    console.log(`LAN:    http://<your-ip>:${port}/`);
-    console.log('Render: deploy this repo as a Node web service');
-    console.log('');
-});
+if (require.main === module) {
+    server.listen(port, '0.0.0.0', () => {
+        console.log('');
+        console.log('SECTOR-8 SERVER ONLINE');
+        console.log(`Local:  http://localhost:${port}/`);
+        console.log(`LAN:    http://<your-ip>:${port}/`);
+        console.log('Render: deploy this repo as a Node web service');
+        console.log('');
+    });
+}
+
+module.exports = server;

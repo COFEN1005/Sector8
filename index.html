@@ -232,6 +232,27 @@
                         <div id="username-saved" class="username-saved">現在: Commander</div>
                     </div>
 
+                    <div class="config-group account-group">
+                        <label>PLAYER ACCOUNT</label>
+                        <div class="account-credential-grid">
+                            <input id="account-player-id-input" class="neon-input" type="text" maxlength="16" placeholder="PLAYER ID" autocapitalize="characters" autocomplete="off" spellcheck="false" />
+                            <input id="account-pin-input" class="neon-input" type="password" maxlength="4" placeholder="4-DIGIT PIN" inputmode="numeric" autocomplete="new-password" />
+                        </div>
+                        <div class="account-actions">
+                            <button id="btn-account-register" class="small-tool-btn" type="button">REGISTER</button>
+                            <button id="btn-account-login" class="small-tool-btn" type="button">LOGIN</button>
+                            <button id="btn-account-logout" class="small-tool-btn" type="button">LOGOUT</button>
+                        </div>
+                        <div class="account-summary">
+                            <div class="account-summary-row"><span>PLAYER ID</span><strong id="account-player-id">--------</strong></div>
+                            <div class="account-summary-row"><span>FRIEND CODE</span><strong id="account-friend-code">--- --- ---</strong></div>
+                            <div class="account-summary-row"><span>LEVEL</span><strong id="account-level">LV -</strong></div>
+                            <div class="account-summary-row"><span>EXP</span><strong id="account-exp">0/100</strong></div>
+                            <div class="account-summary-row"><span>RATING</span><strong id="account-rating">-</strong></div>
+                        </div>
+                        <div id="account-status" class="account-status">未ログイン</div>
+                    </div>
+
                     <!-- Mode tabs -->
                     <div class="mode-tabs">
                         <button id="tab-mode-debug" class="mode-tab hidden" onclick="setModeTab('debug')">DEBUG</button>
