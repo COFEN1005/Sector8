@@ -383,6 +383,7 @@ details li {
 #board.viewer-player-2 .unit,
 #board.viewer-player-2 .cell::before,
 #board.viewer-player-2 .cell::after {
+    --unit-rotation: 180deg;
     transform: rotate(180deg);
 }
 
@@ -575,7 +576,7 @@ details li {
 }
 
 .cell:hover .unit {
-    transform: scale(1.08);
+    transform: rotate(var(--unit-rotation, 0deg)) scale(1.08);
 }
 
 .unit.acted {
@@ -659,6 +660,26 @@ details li {
 .unit.ability-princess { box-shadow: 0 0 12px rgba(255, 0, 127, 0.36), inset 0 0 10px rgba(255, 0, 127, 0.16); }
 .unit.ability-blast { box-shadow: 0 0 14px rgba(255, 89, 0, 0.45), inset 0 0 10px rgba(255, 89, 0, 0.2); }
 .unit.ability-assassin { box-shadow: 0 0 14px rgba(157, 78, 221, 0.45), inset 0 0 10px rgba(157, 78, 221, 0.2); }
+
+.kill-counter {
+    position: absolute;
+    top: -0.42rem;
+    right: -0.42rem;
+    min-width: 1.05rem;
+    height: 1.05rem;
+    padding: 0 0.18rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: rgba(3, 5, 10, 0.95);
+    border: 1px solid var(--neon-gold);
+    color: var(--neon-gold);
+    font-size: 0.58rem;
+    line-height: 1;
+    box-shadow: 0 0 8px rgba(255, 183, 0, 0.35);
+    pointer-events: none;
+}
 
 /* Unit tier indicator tag */
 .unit::before {

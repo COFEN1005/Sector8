@@ -116,6 +116,8 @@ let p1Vision = { area1: new Set(), area2: new Set(), area3: new Set() };
 let p2Vision = { area1: new Set(), area2: new Set(), area3: new Set() };
 let p1LastVision = { area1: new Set(), area2: new Set(), area3: new Set() };
 let p2LastVision = { area1: new Set(), area2: new Set(), area3: new Set() };
+let p1VisionHistory = [];
+let p2VisionHistory = [];
 
 let p1KohDestroyed = false;
 let p2KohDestroyed = false;
@@ -193,7 +195,14 @@ class Unit {
         this.col = col;
         this.isFrontline = isFrontline;
         this.inspirationTurns = 0;
+        this.warPrincessKills = 0;
+        this.warPrincessTeiPromoted = false;
+        this.warPrincessHeiPromoted = false;
 
+        this.configureTypeStats(type);
+    }
+
+    configureTypeStats(type) {
         this.baseVision = 2;
         this.baseMove = 2;
         this.moveType = 'straight';
@@ -271,7 +280,6 @@ class Unit {
         let r = this.baseMove;
         if (this.type === 'koh') {
             const ability = this.player === 1 ? p1Ability : p2Ability;
-            if (ability === '歴戦王') r += 1;
             if (ability === '暗殺者') { return 5; }
         }
         if (this.inspirationTurns > 0) r += 1;
@@ -282,14 +290,7 @@ class Unit {
         let v = this.baseVision;
         if (this.type === 'koh') {
             const ability = this.player === 1 ? p1Ability : p2Ability;
-            if (ability === '歴戦王') v += 1;
             if (ability === '暗殺者') v = 5; // 直線視界5 (special: handled separately)
-        }
-        if (this.type === 'hei' || this.type === 'tei') {
-            const hasWarPrincess = this.player === 1 ?
-                (p1Ability === '戦姫' && p2KohDestroyed) :
-                (p2Ability === '戦姫' && p1KohDestroyed);
-            if (hasWarPrincess) v += 1;
         }
         if (this.inspirationTurns > 0) v += 1;
         return v;
@@ -802,6 +803,8 @@ function startGame(config = null, fromOnline = false) {
 
     p1LastVision = { area1: new Set(), area2: new Set(), area3: new Set() };
     p2LastVision = { area1: new Set(), area2: new Set(), area3: new Set() };
+    p1VisionHistory = [];
+    p2VisionHistory = [];
 
     // Hide setup panels, show game
     document.getElementById('setup-panel').classList.add('hidden');
@@ -1070,6 +1073,44 @@ function captureUnit(victim, attackerPlayer) {
     return false;
 }
 
+function promoteUnitType(unit, type) {
+    unit.type = type;
+    unit.configureTypeStats(type);
+}
+
+function applyWarPrincessKills(unit, killCount) {
+    if (!killCount || unit.type !== 'koh') return;
+    const ability = unit.player === 1 ? p1Ability : p2Ability;
+    if (ability !== '戦姫') return;
+
+    unit.warPrincessKills = (unit.warPrincessKills || 0) + killCount;
+    addConsoleLog(`ABILITY: 戦姫 - 撃破数 ${unit.warPrincessKills}。`, 'ability');
+
+    if (!unit.warPrincessTeiPromoted && unit.warPrincessKills >= 4) {
+        unit.warPrincessTeiPromoted = true;
+        let promoted = 0;
+        units.forEach(ally => {
+            if (ally.player === unit.player && ally.type === 'tei') {
+                promoteUnitType(ally, 'hei');
+                promoted++;
+            }
+        });
+        if (promoted > 0) addConsoleLog(`ABILITY: 戦姫 - 自軍の丁 ${promoted}体を丙へ昇格。`, 'ability');
+    }
+
+    if (!unit.warPrincessHeiPromoted && unit.warPrincessKills >= 10) {
+        unit.warPrincessHeiPromoted = true;
+        let promoted = 0;
+        units.forEach(ally => {
+            if (ally.player === unit.player && ally.type === 'hei') {
+                promoteUnitType(ally, 'otsu');
+                promoted++;
+            }
+        });
+        if (promoted > 0) addConsoleLog(`ABILITY: 戦姫 - 自軍の丙 ${promoted}体を乙へ昇格。`, 'ability');
+    }
+}
+
 // --- FOG OF WAR / VISIBILITY ---
 function calculateVisibility() {
     Object.keys(p1Vision).forEach(map => p1Vision[map].clear());
@@ -1142,13 +1183,17 @@ function calculateVisibility() {
     if (p2ClairvoyanceDir) applyClairvoyanceSight(p2ClairvoyanceDir, p2Vision[p2ClairvoyanceDir.map]);
 
     if (p1Ability === '足跡' && !p1KohDestroyed) {
-        Object.keys(p1Vision).forEach(map => {
-            p1LastVision[map].forEach(coord => p1Vision[map].add(coord));
+        p1VisionHistory.forEach(snapshot => {
+            Object.keys(p1Vision).forEach(map => {
+                snapshot[map].forEach(coord => p1Vision[map].add(coord));
+            });
         });
     }
     if (p2Ability === '足跡' && !p2KohDestroyed) {
-        Object.keys(p2Vision).forEach(map => {
-            p2LastVision[map].forEach(coord => p2Vision[map].add(coord));
+        p2VisionHistory.forEach(snapshot => {
+            Object.keys(p2Vision).forEach(map => {
+                snapshot[map].forEach(coord => p2Vision[map].add(coord));
+            });
         });
     }
 }
@@ -1170,10 +1215,22 @@ function applyClairvoyanceSight(clairObj, targetVisionSet) {
 }
 
 function saveTurnVision() {
-    Object.keys(boards).forEach(map => {
-        p1LastVision[map] = new Set(p1Vision[map]);
-        p2LastVision[map] = new Set(p2Vision[map]);
-    });
+    const p1Snapshot = {
+        area1: new Set(p1Vision.area1),
+        area2: new Set(p1Vision.area2),
+        area3: new Set(p1Vision.area3)
+    };
+    const p2Snapshot = {
+        area1: new Set(p2Vision.area1),
+        area2: new Set(p2Vision.area2),
+        area3: new Set(p2Vision.area3)
+    };
+    p1LastVision = p1Snapshot;
+    p2LastVision = p2Snapshot;
+    p1VisionHistory.unshift(p1Snapshot);
+    p2VisionHistory.unshift(p2Snapshot);
+    p1VisionHistory = p1VisionHistory.slice(0, 2);
+    p2VisionHistory = p2VisionHistory.slice(0, 2);
 }
 
 // --- BOARD RENDERER ---
@@ -1219,6 +1276,12 @@ function renderBoard() {
                     if (u.type === 'koh') {
                         unitEl.classList.add('koh-ability', getAbilityClass(u.player));
                         unitEl.setAttribute('data-ability', u.player === 1 ? p1Ability : p2Ability);
+                        if ((u.player === 1 ? p1Ability : p2Ability) === '戦姫') {
+                            const killCounter = document.createElement('span');
+                            killCounter.className = 'kill-counter';
+                            killCounter.textContent = u.warPrincessKills || 0;
+                            unitEl.appendChild(killCounter);
+                        }
                     }
                     unitEl.setAttribute('data-rank', u.symbol);
                     unitEl.title = `${u.name} (P${u.player})\n移動: ${u.getEffectiveMoveType() === 'straight' ? '直線' : 'マンハッタン'}${u.getMovementRange()}\n視界: ${u.getVisionRange()}\n${u.abilityDescription}`;
@@ -1338,8 +1401,9 @@ function getValidMoves(unit) {
                     const hasEnemyTarget =
                         (resolved.localOccupant && resolved.localOccupant.player !== unit.player) ||
                         (resolved.portalDest && resolved.destOccupant && resolved.destOccupant.player !== unit.player);
+                    const visibleEnemyTarget = isVisibleEnemyMoveTarget(unit, resolved, targetR, targetC);
 
-                    valid.push({ row: targetR, col: targetC, type: hasEnemyTarget ? 'attack' : 'move' });
+                    valid.push({ row: targetR, col: targetC, type: hasEnemyTarget && visibleEnemyTarget ? 'attack' : 'move' });
 
                     if (resolved.localOccupant || resolved.portalDest) break;
                 } else {
@@ -1371,10 +1435,11 @@ function getValidMoves(unit) {
                     const hasEnemyTarget =
                         (resolved.localOccupant && resolved.localOccupant.player !== unit.player) ||
                         (resolved.portalDest && resolved.destOccupant && resolved.destOccupant.player !== unit.player);
+                    const visibleEnemyTarget = isVisibleEnemyMoveTarget(unit, resolved, nextR, nextC);
 
                     if (!visited.has(key)) {
                         visited.add(key);
-                        valid.push({ row: nextR, col: nextC, type: hasEnemyTarget ? 'attack' : 'move' });
+                        valid.push({ row: nextR, col: nextC, type: hasEnemyTarget && visibleEnemyTarget ? 'attack' : 'move' });
                         if (!resolved.localOccupant && !resolved.portalDest) {
                             queue.push({ row: nextR, col: nextC, steps: curr.steps + 1 });
                         }
@@ -1400,6 +1465,26 @@ function isValidPath(unit, pathCells) {
         }
     }
     return true;
+}
+
+function isVisibleEnemyMoveTarget(unit, resolved, localRow, localCol) {
+    const vision = unit.player === 1 ? p1Vision : p2Vision;
+    if (
+        resolved.localOccupant &&
+        resolved.localOccupant.player !== unit.player &&
+        vision[unit.map].has(`${localRow},${localCol}`)
+    ) {
+        return true;
+    }
+    if (
+        resolved.portalDest &&
+        resolved.destOccupant &&
+        resolved.destOccupant.player !== unit.player &&
+        vision[resolved.targetMap].has(`${resolved.targetRow},${resolved.targetCol}`)
+    ) {
+        return true;
+    }
+    return false;
 }
 
 function getScoutWarpTargets(scout) {
@@ -1584,11 +1669,16 @@ function executeMove(unit, destRow, destCol) {
     });
 
     if (isGameOver) return;
+    applyWarPrincessKills(unit, captured.length);
 
     // 暗殺者: 撃破時、進行方向から1マス戻る
     let finalRow = targetRow, finalCol = targetCol, finalMap = targetMap;
     if (unit.type === 'koh' && captured.length > 0) {
         const ability = unit.player === 1 ? p1Ability : p2Ability;
+        if (ability === '歴戦王') {
+            unit.refreshActedAfterAction = true;
+            addConsoleLog(`ABILITY: 歴戦王 - 撃破により行動済み状態を解除。`, 'ability');
+        }
         if (ability === '暗殺者') {
             // Calculate move direction (from start to dest on same map; ignore portal for direction)
             const dr = destRow - startRow;
@@ -1617,6 +1707,7 @@ function executeMove(unit, destRow, destCol) {
             const captureNames = captured.map(v => v.unit.name).join(', ');
             addConsoleLog(`ABILITY: 暗殺者 - ${unit.name}が${captureNames}を撃破し、1マス後退。`, 'ability');
             if (resolved.portalDest && unit.player === currentPlayer) activeMap = finalMap;
+            if (resolved.portalDest) unit.refreshActedAfterAction = true;
             sendOnlineMessage({ kind: 'action', action: { type: 'move', unitId: unit.id, row: destRow, col: destCol } });
             completeUnitAction(unit);
             return;
@@ -1646,6 +1737,10 @@ function executeMove(unit, destRow, destCol) {
 
     addConsoleLog(logMsg, logType);
     if (resolved.portalDest && unit.player === currentPlayer) activeMap = targetMap;
+    if (resolved.portalDest) {
+        unit.refreshActedAfterAction = true;
+        addConsoleLog(`SYSTEM: テレポート使用により行動済み状態を解除。`, 'system');
+    }
     sendOnlineMessage({ kind: 'action', action: { type: 'move', unitId: unit.id, row: destRow, col: destCol } });
     completeUnitAction(unit);
 }
@@ -1795,7 +1890,10 @@ function executeOtsuBreakthrough(mapName, centerR, centerC) {
 // --- TURN TRANSITION ---
 function completeUnitAction(unit) {
     if (isGameOver) return;
-    actedUnitIds.add(unit.id);
+    const refreshActed = unit.refreshActedAfterAction;
+    unit.refreshActedAfterAction = false;
+    if (!refreshActed) actedUnitIds.add(unit.id);
+    else actedUnitIds.delete(unit.id);
     actionsThisTurn++;
     cancelSelection();
     calculateVisibility();
@@ -1851,6 +1949,17 @@ function endTurn() {
     addConsoleLog(`TURN ${gameTurn} - ${playerName} の戦術行動フェーズ。`, logColor);
     showTurnBanner();
 
+    if (!hasAvailableActionUnit(currentPlayer)) {
+        const otherPlayer = currentPlayer === 1 ? 2 : 1;
+        if (!hasAvailableActionUnit(otherPlayer)) {
+            addConsoleLog('TURN HOLD: 両プレイヤーとも行動可能なコマがありません。', 'system');
+            return;
+        }
+        addConsoleLog(`TURN SKIP: Player ${currentPlayer} は行動可能なコマがありません。`, 'system');
+        setTimeout(endTurn, 500);
+        return;
+    }
+
     if (currentPlayer === 2 && vsAI) {
         setTimeout(executeAITurn, 1000);
     }
@@ -1904,19 +2013,21 @@ function triggerWin(winnerId, fromOnline = false) {
     isGameOver = true;
     const titleEl = document.getElementById('game-over-title');
     const subtitleEl = document.getElementById('game-over-subtitle');
+    const viewerPlayer = onlineMode && localPlayer ? localPlayer : 1;
+    const viewerWon = winnerId === viewerPlayer;
 
-    if (winnerId === 1) {
+    if (viewerWon) {
         titleEl.textContent = 'VICTORY';
-        titleEl.className = 'glitch-text text-cyan';
-        subtitleEl.textContent = 'PLAYER 1 (BLUE) が敵のコア領域を完全破壊し、勝利を収めました。';
-        addConsoleLog("SYSTEM OVERRIDE: PLAYER 1 VICTORY. ENEMY CORE PURGED.", 'system');
+        titleEl.className = `glitch-text ${winnerId === 1 ? 'text-cyan' : 'text-magenta'}`;
+        subtitleEl.textContent = `PLAYER ${winnerId} が敵のコア領域を完全破壊し、勝利を収めました。`;
+        addConsoleLog(`SYSTEM OVERRIDE: PLAYER ${winnerId} VICTORY. ENEMY CORE PURGED.`, 'system');
     } else {
         titleEl.textContent = 'DEFEAT';
-        titleEl.className = 'glitch-text text-magenta';
+        titleEl.className = `glitch-text ${winnerId === 1 ? 'text-cyan' : 'text-magenta'}`;
         subtitleEl.textContent = vsAI ?
             '対戦AI (RED) によって自軍コアが消滅しました。再接続を推奨します。' :
-            'PLAYER 2 (MAGENTA) が敵のコア領域を完全破壊し、勝利を収めました。';
-        addConsoleLog("SYSTEM OVERRIDE: PLAYER 2 VICTORY. HOME CORE PURGED.", 'system');
+            `PLAYER ${winnerId} が敵のコア領域を完全破壊し、勝利を収めました。`;
+        addConsoleLog(`SYSTEM OVERRIDE: PLAYER ${winnerId} VICTORY. HOME CORE PURGED.`, 'system');
     }
 
     document.getElementById('game-over-overlay').classList.remove('hidden');
