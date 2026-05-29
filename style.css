@@ -529,6 +529,10 @@ details li {
     display: inline-flex;
 }
 
+#board.viewer-player-2 .unit.core::before {
+    transform: rotate(180deg);
+}
+
 #board.viewer-player-2 .military-flag {
     transform: rotate(180deg);
 }
