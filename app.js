@@ -1658,7 +1658,7 @@ function isVisibleEnemyMoveTarget(unit, resolved, localRow, localCol) {
     if (
         resolved.localOccupant &&
         resolved.localOccupant.player !== unit.player &&
-        vision[unit.map].has(`${localRow},${localCol}`)
+        isUnitVisibleToViewer(resolved.localOccupant, unit.player, vision[unit.map])
     ) {
         return true;
     }
@@ -1666,7 +1666,7 @@ function isVisibleEnemyMoveTarget(unit, resolved, localRow, localCol) {
         resolved.portalDest &&
         resolved.destOccupant &&
         resolved.destOccupant.player !== unit.player &&
-        vision[resolved.targetMap].has(`${resolved.targetRow},${resolved.targetCol}`)
+        isUnitVisibleToViewer(resolved.destOccupant, unit.player, vision[resolved.targetMap])
     ) {
         return true;
     }
