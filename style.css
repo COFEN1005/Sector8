@@ -61,6 +61,12 @@ header {
     height: 70px;
 }
 
+.audio-controls {
+    display: flex;
+    gap: 0.45rem;
+    align-items: center;
+}
+
 .logo {
     display: flex;
     flex-direction: column;

@@ -28,8 +28,7 @@ const SCOUT_LIMIT_PER_PLAYER = 2;
 const ACTIONS_PER_TURN = 2;
 const KEEPALIVE_WARNING_MS = 10 * 60 * 1000;
 const DEVELOP_MODE_SEQUENCE = '12312321213';
-const BASE_ABILITY_OPTIONS = ['千里眼', '鼓舞', '足跡', '歴戦王', '戦姫', '爆破', '暗殺者', '盲目'];
-const DEVELOP_ONLY_ABILITIES = ['衛生兵', '監視', '迷彩'];
+const ALL_ABILITY_OPTIONS = ['千里眼', '鼓舞', '足跡', '歴戦王', '戦姫', '爆破', '暗殺者', '盲目', '衛生兵', '監視', '迷彩'];
 
 function getPortalDestination(mapName, r, c) {
     if (!PORTAL_COLS.includes(c)) return null;
@@ -112,6 +111,11 @@ let actedUnitIds = new Set();
 let lastKeepAliveAt = Date.now();
 let developModeEnabled = false;
 let developModeSequence = '';
+let audioInitialized = false;
+let moveSfxEnabled = true;
+let bgmEnabled = true;
+let moveSfx = null;
+let bgmTrack = null;
 
 let selectedUnit = null;
 let previewUnit = null;
@@ -168,7 +172,6 @@ let matchmakingRole = null; // 'host' or 'guest'
 let matchRoomId = null;
 let onlineAbilityChoices = { 1: null, 2: null };
 let onlineReadyState = { 1: false, 2: false };
-let onlineDevelopState = { 1: false, 2: false };
 
 function detectDeviceProfile() {
     const coarsePointer = window.matchMedia('(pointer: coarse)').matches;
@@ -385,13 +388,7 @@ function getPlayerAbility(player) {
 }
 
 function getAllAbilityOptions() {
-    return shouldShowDevelopAbilityOptions()
-        ? [...BASE_ABILITY_OPTIONS, ...DEVELOP_ONLY_ABILITIES]
-        : [...BASE_ABILITY_OPTIONS];
-}
-
-function shouldShowDevelopAbilityOptions() {
-    return developModeEnabled || onlineDevelopState[1] || onlineDevelopState[2];
+    return [...ALL_ABILITY_OPTIONS];
 }
 
 function syncAbilitySelectOptions() {
@@ -421,7 +418,7 @@ function setDevelopModeEnabled(enabled) {
     developModeEnabled = enabled;
     syncAbilitySelectOptions();
     const badge = document.getElementById('develop-mode-badge');
-    if (badge) badge.classList.toggle('hidden', !shouldShowDevelopAbilityOptions());
+    if (badge) badge.classList.toggle('hidden', !enabled);
 }
 
 function registerMapTabSequence(mapName) {
@@ -430,13 +427,13 @@ function registerMapTabSequence(mapName) {
     developModeSequence = (developModeSequence + token).slice(-DEVELOP_MODE_SEQUENCE.length);
     if (developModeSequence === DEVELOP_MODE_SEQUENCE) {
         setDevelopModeEnabled(true);
-        addConsoleLog('DEVELOP MODE: 追加アビリティを解放しました。', 'system');
-        showStatusAlert('DEVELOP MODE 起動: 衛生兵 / 監視 / 迷彩 を解放', 'system', 5000);
-        if (onlineMode && localPlayer) sendOnlineMessage({ kind: 'develop_state', enabled: true });
+        addConsoleLog('DEVELOP MODE: 開発モードを起動しました。', 'system');
+        showStatusAlert('DEVELOP MODE 起動', 'system', 5000);
     }
 }
 
 function setupUIEventListeners() {
+    document.addEventListener('pointerdown', initializeAudio, { once: true });
     document.getElementById('btn-start-game').addEventListener('click', () => startGame());
     document.getElementById('btn-opt-ai').addEventListener('click', () => setOpponent(true));
     document.getElementById('btn-opt-human').addEventListener('click', () => setOpponent(false));
@@ -485,6 +482,10 @@ function setupUIEventListeners() {
     }
     const keepAliveBtn = document.getElementById('btn-keepalive');
     if (keepAliveBtn) keepAliveBtn.addEventListener('click', extendRenderSession);
+    const toggleMoveSfxBtn = document.getElementById('btn-toggle-sfx');
+    if (toggleMoveSfxBtn) toggleMoveSfxBtn.addEventListener('click', toggleMoveSfx);
+    const toggleBgmBtn = document.getElementById('btn-toggle-bgm');
+    if (toggleBgmBtn) toggleBgmBtn.addEventListener('click', toggleBgm);
 }
 
 function setupMapTabs() {
@@ -581,7 +582,6 @@ function hostRoom() {
     localPlayer = 1;
     onlineAbilityChoices = { 1: getOnlineAbilityChoice(), 2: null };
     onlineReadyState = { 1: false, 2: false };
-    onlineDevelopState = { 1: developModeEnabled, 2: false };
     onlineMode = true;
     setGameMode('online');
     updateReadyButton();
@@ -600,7 +600,6 @@ function joinRoom() {
     localPlayer = 2;
     onlineAbilityChoices = { 1: null, 2: getOnlineAbilityChoice() };
     onlineReadyState = { 1: false, 2: false };
-    onlineDevelopState = { 1: false, 2: developModeEnabled };
     onlineMode = true;
     setGameMode('online');
     updateReadyButton();
@@ -616,7 +615,6 @@ function cancelMatchmaking() {
     matchRoomId = null;
     onlineAbilityChoices = { 1: null, 2: null };
     onlineReadyState = { 1: false, 2: false };
-    onlineDevelopState = { 1: false, 2: false };
     syncAbilitySelectOptions();
     setDevelopModeEnabled(developModeEnabled);
     showLocalPanel();
@@ -667,9 +665,7 @@ function connectOnlineSocket(roomId, player) {
         addConnectionLog(`Player ${player} として接続しました。`);
         onlineAbilityChoices[player] = getOnlineAbilityChoice();
         onlineReadyState[player] = false;
-        onlineDevelopState[player] = developModeEnabled;
         updateReadyButton();
-        sendOnlineMessage({ kind: 'develop_state', enabled: developModeEnabled });
         sendOnlineMessage({ kind: 'ability_choice', ability: onlineAbilityChoices[player] });
     });
 
@@ -702,21 +698,12 @@ function handleOnlineMessage(message) {
         addConnectionLog('対戦相手が接続しました。');
         document.getElementById('matchmaking-status').textContent = '対戦相手が接続しました。準備完了を押してください。';
         onlineAbilityChoices[localPlayer] = getOnlineAbilityChoice();
-        sendOnlineMessage({ kind: 'develop_state', enabled: developModeEnabled });
         sendOnlineMessage({ kind: 'ability_choice', ability: onlineAbilityChoices[localPlayer] });
         updateOnlineStartAvailability();
         return;
     }
 
     if (message.player === localPlayer) return;
-
-    if (message.kind === 'develop_state') {
-        onlineDevelopState[message.player] = Boolean(message.enabled);
-        syncAbilitySelectOptions();
-        const badge = document.getElementById('develop-mode-badge');
-        if (badge) badge.classList.toggle('hidden', !shouldShowDevelopAbilityOptions());
-        return;
-    }
 
     if (message.kind === 'ability_choice') {
         onlineAbilityChoices[message.player] = message.ability;
@@ -881,6 +868,56 @@ function showStatusAlert(message, tone = 'warning', durationMs = 4000) {
     }
 }
 
+function initializeAudio() {
+    if (audioInitialized) return;
+    audioInitialized = true;
+
+    moveSfx = new Audio('audio/sfx_move.wav');
+    moveSfx.preload = 'auto';
+    moveSfx.volume = 0.55;
+
+    bgmTrack = new Audio('audio/bgm_main.mp3');
+    bgmTrack.preload = 'auto';
+    bgmTrack.loop = true;
+    bgmTrack.volume = 0.35;
+
+    updateAudioButtons();
+    if (bgmEnabled && activePhase === 'battle') {
+        void bgmTrack.play().catch(() => {});
+    }
+}
+
+function updateAudioButtons() {
+    const sfxBtn = document.getElementById('btn-toggle-sfx');
+    const bgmBtn = document.getElementById('btn-toggle-bgm');
+    if (sfxBtn) sfxBtn.textContent = moveSfxEnabled ? 'SFX ON' : 'SFX OFF';
+    if (bgmBtn) bgmBtn.textContent = bgmEnabled ? 'BGM ON' : 'BGM OFF';
+}
+
+function playMoveSfx() {
+    if (!moveSfxEnabled || !moveSfx) return;
+    try {
+        moveSfx.currentTime = 0;
+        void moveSfx.play().catch(() => {});
+    } catch {}
+}
+
+function toggleMoveSfx() {
+    initializeAudio();
+    moveSfxEnabled = !moveSfxEnabled;
+    updateAudioButtons();
+}
+
+function toggleBgm() {
+    initializeAudio();
+    bgmEnabled = !bgmEnabled;
+    if (bgmTrack) {
+        if (bgmEnabled && activePhase === 'battle') void bgmTrack.play().catch(() => {});
+        else bgmTrack.pause();
+    }
+    updateAudioButtons();
+}
+
 function applyRemoteAction(action) {
     const unit = units.find(u => u.id === action.unitId);
     if (!unit) {
@@ -924,6 +961,7 @@ function startGame(config = null, fromOnline = false) {
     lastKeepAliveAt = Date.now();
     previewUnit = null;
     developModeSequence = '';
+    initializeAudio();
 
     p1KohDestroyed = false;
     p2KohDestroyed = false;
@@ -953,6 +991,8 @@ function startGame(config = null, fromOnline = false) {
     showTurnBanner();
     startKeepAliveWarningTimer();
     clearStatusAlert();
+    if (bgmEnabled && bgmTrack) void bgmTrack.play().catch(() => {});
+    updateAudioButtons();
 
     if (onlineMode && !fromOnline) {
         sendOnlineMessage({ kind: 'start', config: { p1Ability, p2Ability, seed: gameSeed } });
@@ -1970,6 +2010,7 @@ function executeMove(unit, destRow, destCol) {
         unit.refreshActedAfterAction = true;
         addConsoleLog(`SYSTEM: テレポート使用により行動済み状態を解除。`, 'system');
     }
+    playMoveSfx();
     maybeClearCamouflageAfterMove(unit);
     sendOnlineMessage({ kind: 'action', action: { type: 'move', unitId: unit.id, row: destRow, col: destCol } });
     completeUnitAction(unit);
@@ -1984,6 +2025,7 @@ function executeAbility(unit, destRow, destCol) {
         boards[map][destRow][destCol].unit = unit;
         unit.row = destRow; unit.col = destCol;
         addConsoleLog(`Player ${unit.player}: 偵察兵が [${startCol},${startRow}] から [${destCol},${destRow}] へワープ転送。`, 'ability');
+        playMoveSfx();
         sendOnlineMessage({ kind: 'action', action: { type: 'ability', unitId: unit.id, row: destRow, col: destCol } });
         completeUnitAction(unit);
         return;
@@ -2296,6 +2338,7 @@ function resetToSetup(fromOnline = false) {
     units = [];
     previewUnit = null;
     developModeSequence = '';
+    if (bgmTrack) bgmTrack.pause();
     clearHighlights();
     document.getElementById('board').innerHTML = '';
     clearStatusAlert();

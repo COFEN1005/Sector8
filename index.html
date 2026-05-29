@@ -24,6 +24,10 @@
                     <span id="current-player-name">PLAYER 1</span>
                 </div>
             </div>
+            <div class="audio-controls">
+                <button id="btn-toggle-sfx" class="small-tool-btn" type="button">SFX ON</button>
+                <button id="btn-toggle-bgm" class="small-tool-btn" type="button">BGM ON</button>
+            </div>
         </header>
         <div id="status-alert" class="status-alert hidden"></div>
 
@@ -63,7 +67,9 @@
                             <li><strong>爆破</strong>: 周囲2マスの全マス破壊して自滅</li>
                             <li><strong>暗殺者</strong>: パッシブ：直線移動5・直線視界5。敵撃破時、進行方向から1マス後退。</li>
                             <li><strong>盲目</strong>: パッシブ：周囲移動5・視界周囲1。</li>
-                            <li><strong>衛生兵 / 監視 / 迷彩</strong>: develop mode 解放アビリティ。</li>
+                            <li><strong>衛生兵</strong>: パッシブ：生存中、偵察兵補充が6ターン周期。</li>
+                            <li><strong>監視</strong>: パッシブ：周囲移動1・視界周囲2。視界内の敵移動-1。</li>
+                            <li><strong>迷彩</strong>: 発動型：次の移動まで偵察兵以外から不可視、視界は周囲1。</li>
                         </ul>
                     </details>
                     <details>
