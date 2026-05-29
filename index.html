@@ -29,6 +29,16 @@
                     <summary class="small-tool-btn">NEWS</summary>
                     <div class="news-menu-panel">
                         <details class="news-item" open>
+                            <summary>PATCH 0.7.2</summary>
+                            <ul class="news-list">
+                                <li>オンライン対戦成立後に盤面を見てから甲アビリティを選ぶよう変更</li>
+                                <li>ランダムマッチにランクマッチ / ノーマルマッチを追加</li>
+                                <li>ノーマルマッチではレートが変動しないよう変更</li>
+                                <li>1P / 2P の先手を毎試合ランダム化</li>
+                                <li>ターンスキップの同期を修正</li>
+                            </ul>
+                        </details>
+                        <details class="news-item" open>
                             <summary>PATCH 0.7.0</summary>
                             <ul class="news-list">
                                 <li>4桁PINの失敗ロックを一時無効化</li>
@@ -312,19 +322,6 @@
 
                     <!-- Online matchmaking panel -->
                     <div id="matchmaking-panel" class="hidden">
-                        <div class="matchmaking-section">
-                            <h4 class="match-subhead">甲アビリティ選択</h4>
-                            <select id="online-ability-choice" class="neon-select">
-                                <option value="千里眼">千里眼</option>
-                                <option value="鼓舞">鼓舞</option>
-                                <option value="足跡" selected>足跡</option>
-                                <option value="歴戦王">歴戦王</option>
-                                <option value="戦姫">戦姫</option>
-                                <option value="爆破">爆破</option>
-                                <option value="暗殺者">暗殺者</option>
-                            </select>
-                            <button id="btn-online-ready" class="neon-btn ready-btn" type="button" disabled>準備完了</button>
-                        </div>
                         <div class="online-match-tabs">
                             <button id="tab-online-random" class="online-match-tab active" type="button">ランダム接続</button>
                             <button id="tab-online-private" class="online-match-tab" type="button">プライベートマッチ</button>
@@ -340,7 +337,7 @@
                                         <button id="btn-copy-room" class="copy-room-btn" type="button">COPY</button>
                                     </div>
                                     <p class="room-hint">このIDを対戦相手に伝えてください。<br>対戦相手が接続したらゲームを開始できます。</p>
-                                    <button id="btn-start-online-match" class="neon-btn pulse" disabled onclick="startGame()">ONLINE MATCH START</button>
+                                    <button id="btn-start-online-match" class="neon-btn pulse" disabled onclick="startOnlineBattle()">ONLINE MATCH START</button>
                                 </div>
                             </div>
 
@@ -356,6 +353,10 @@
                             <div class="matchmaking-section">
                                 <h4 class="match-subhead">🎲 ランダムマッチ</h4>
                                 <p class="room-hint">マッチング開始を押すと、そのままランダムマッチングを開始します。</p>
+                                <div class="online-match-tabs tier-tabs">
+                                    <button id="tab-online-rank" class="online-match-tab active" type="button">ランクマッチ</button>
+                                    <button id="tab-online-normal" class="online-match-tab" type="button">ノーマルマッチ</button>
+                                </div>
                                 <button id="btn-random-match" class="neon-btn">マッチング開始</button>
                             </div>
                         </div>
@@ -388,6 +389,24 @@
                         </div>
                     </div>
 
+                    <div id="online-prebattle-panel" class="hub-section hidden">
+                        <h3>ONLINE PRE-BATTLE</h3>
+                        <p class="room-hint">マッチ成立後は、盤面を確認してから甲アビリティを選択してください。</p>
+                        <div class="matchmaking-section">
+                            <h4 class="match-subhead">甲アビリティ選択</h4>
+                            <select id="online-ability-choice" class="neon-select">
+                                <option value="千里眼">千里眼</option>
+                                <option value="鼓舞">鼓舞</option>
+                                <option value="足跡" selected>足跡</option>
+                                <option value="歴戦王">歴戦王</option>
+                                <option value="戦姫">戦姫</option>
+                                <option value="爆破">爆破</option>
+                                <option value="暗殺者">暗殺者</option>
+                            </select>
+                            <button id="btn-online-ready" class="neon-btn ready-btn" type="button" disabled>準備完了</button>
+                        </div>
+                    </div>
+
                     <div id="minimap-panel" class="minimap-panel"></div>
 
                     <div id="online-tools-panel" class="online-tools-panel">
@@ -403,7 +422,7 @@
                         </div>
                     </div>
 
-                    <div id="combat-feed-panel">
+                <div id="combat-feed-panel">
                         <h3>COMBAT FEED</h3>
                         <div id="log-feed">
                             <div class="log-entry system">GAME INITIALIZED. SELECT CONFIG AND INITIATE.</div>
@@ -442,7 +461,7 @@
         </div>
     </div>
 
-    <div class="patch-badge">PATCH ver.0.7.0</div>
+    <div class="patch-badge">PATCH ver.0.7.2</div>
     <script>
     // Mode tab switching helper (called from inline onclick)
     function setModeTab(mode) {

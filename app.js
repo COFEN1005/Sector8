@@ -210,9 +210,28 @@ let onlineAbilityChoices = { 1: null, 2: null };
 let onlineReadyState = { 1: false, 2: false };
 let localUsername = '';
 let onlineUsernames = { 1: null, 2: null };
+let onlineMatchTier = 'rank';
+let onlineMatchPreviewActive = false;
 let randomMatchAutoStarted = false;
 let randomQueuePending = false;
 let randomWaitingCount = 0;
+
+function hashStringToSeed(value) {
+    let hash = 0x811c9dc5;
+    String(value || '').split('').forEach(char => {
+        hash ^= char.charCodeAt(0);
+        hash = Math.imul(hash, 0x01000193);
+    });
+    return hash >>> 0;
+}
+
+function getOnlineMatchTier() {
+    return onlineMatchTier === 'normal' ? 'normal' : 'rank';
+}
+
+function isRankedMatch() {
+    return onlineMode && getOnlineMatchTier() === 'rank';
+}
 
 function detectDeviceProfile() {
     const coarsePointer = window.matchMedia('(pointer: coarse)').matches;
@@ -467,6 +486,7 @@ async function submitMatchHistory(reason, winnerId) {
         winner: viewerWon ? authProfile.name : opponentName,
         loser: viewerWon ? opponentName : authProfile.name,
         result: viewerWon ? 'win' : 'lose',
+        matchType: isRankedMatch() ? 'rank' : 'normal',
         player1Level: authProfile.level,
         player2Level: 1,
         startedTime: currentMatchStartedAt || Date.now(),
@@ -809,10 +829,10 @@ function setupUIEventListeners() {
     if (onlineAbilityChoice) {
         onlineAbilityChoice.addEventListener('change', () => {
             if (!onlineMode || !localPlayer) return;
+            const wasReady = Boolean(onlineReadyState[localPlayer]);
             onlineAbilityChoices[localPlayer] = getOnlineAbilityChoice();
             onlineReadyState[localPlayer] = false;
-            sendOnlineMessage({ kind: 'ability_choice', ability: onlineAbilityChoices[localPlayer] });
-            sendOnlineMessage({ kind: 'ready_state', ready: false });
+            if (wasReady) sendOnlineMessage({ kind: 'ready_state', ready: false });
             updateReadyButton();
             updateOnlineStartAvailability();
         });
@@ -911,6 +931,10 @@ function setupGameModeTabs() {
     if (tabPrivate) tabPrivate.addEventListener('click', () => setOnlineMatchTab('private'));
     const tabRandom = document.getElementById('tab-online-random');
     if (tabRandom) tabRandom.addEventListener('click', () => setOnlineMatchTab('random'));
+    const tabRank = document.getElementById('tab-online-rank');
+    if (tabRank) tabRank.addEventListener('click', () => { if (!onlineSocket) setOnlineMatchTier('rank'); });
+    const tabNormal = document.getElementById('tab-online-normal');
+    if (tabNormal) tabNormal.addEventListener('click', () => { if (!onlineSocket) setOnlineMatchTier('normal'); });
 }
 
 function switchActiveMap(mapName) {
@@ -967,6 +991,8 @@ function updateModeVisibility() {
     if (feedPanel) feedPanel.classList.toggle('hidden', !(gameMode === 'debug' && developModeEnabled));
     const onlinePanel = document.getElementById('online-tools-panel');
     if (onlinePanel) onlinePanel.classList.toggle('hidden', gameMode !== 'online');
+    const prebattlePanel = document.getElementById('online-prebattle-panel');
+    if (prebattlePanel) prebattlePanel.classList.toggle('hidden', !(onlineMode && onlineMatchPreviewActive && activePhase === 'setup'));
 }
 
 function showMatchmakingPanel() {
@@ -974,9 +1000,13 @@ function showMatchmakingPanel() {
     setGameMode('online');
     document.getElementById('matchmaking-panel').classList.remove('hidden');
     document.getElementById('setup-local-panel').classList.add('hidden');
+    document.getElementById('game-info-panel').classList.add('hidden');
+    document.getElementById('online-prebattle-panel')?.classList.add('hidden');
+    onlineMatchPreviewActive = false;
     updateUsernameUI();
     updateMatchmakingPlayerSummary();
     setOnlineMatchTab(matchmakingRole === 'host' || matchmakingRole === 'guest' ? 'private' : 'random');
+    updateReadyButton();
     // highlight online tab
     document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active'));
     const tabOnline = document.getElementById('tab-mode-online');
@@ -1000,11 +1030,14 @@ function resetOnlineMatchmakingState(keepPanel = true) {
     spectatorMode = false;
     matchmakingRole = null;
     matchRoomId = null;
+    onlineMatchTier = 'rank';
+    onlineMatchPreviewActive = false;
     randomQueuePending = false;
     randomMatchAutoStarted = false;
     onlineAbilityChoices = { 1: null, 2: null };
     onlineReadyState = { 1: false, 2: false };
     onlineUsernames = { 1: null, 2: null };
+    onlineMatchPreviewActive = false;
     clearOnlineSession();
     updateRandomQueueCount(0);
     if (keepPanel) {
@@ -1023,10 +1056,35 @@ function setOnlineMatchTab(tab, options = {}) {
     document.getElementById('online-random-panel')?.classList.toggle('hidden', !isRandom);
     document.getElementById('tab-online-private')?.classList.toggle('active', !isRandom);
     document.getElementById('tab-online-random')?.classList.toggle('active', isRandom);
-    document.getElementById('btn-online-ready')?.classList.toggle('hidden', isRandom);
+    document.getElementById('tab-online-rank')?.classList.toggle('active', isRandom && getOnlineMatchTier() === 'rank');
+    document.getElementById('tab-online-normal')?.classList.toggle('active', isRandom && getOnlineMatchTier() === 'normal');
+    if (isRandom && options.tier) setOnlineMatchTier(options.tier);
     if (isRandom && !onlineSocket) {
-        setMatchmakingStatus('マッチング開始を押すとランダムマッチングを開始します。');
+        setMatchmakingStatus(onlineMatchTier === 'rank' ? 'ランクマッチを検索します。' : 'ノーマルマッチを検索します。');
     }
+}
+
+function setOnlineMatchTier(tier) {
+    onlineMatchTier = tier === 'normal' ? 'normal' : 'rank';
+    document.getElementById('tab-online-rank')?.classList.toggle('active', onlineMatchTier === 'rank');
+    document.getElementById('tab-online-normal')?.classList.toggle('active', onlineMatchTier === 'normal');
+    if (!onlineSocket) {
+        setMatchmakingStatus(onlineMatchTier === 'rank' ? 'ランクマッチを検索します。' : 'ノーマルマッチを検索します。');
+    }
+}
+
+function revealOnlineMatchPreview() {
+    onlineMatchPreviewActive = true;
+    document.getElementById('setup-panel').classList.add('hidden');
+    document.getElementById('game-info-panel').classList.remove('hidden');
+    document.getElementById('online-prebattle-panel')?.classList.remove('hidden');
+    updateModeVisibility();
+}
+
+function hideOnlineMatchPreview() {
+    onlineMatchPreviewActive = false;
+    document.getElementById('online-prebattle-panel')?.classList.add('hidden');
+    updateModeVisibility();
 }
 
 // Simple room-based matchmaking via WebSocket
@@ -1039,10 +1097,11 @@ function hostRoom() {
     matchRoomId = roomId;
     matchmakingRole = 'host';
     localPlayer = 1;
-    onlineAbilityChoices = { 1: getOnlineAbilityChoice(), 2: null };
+    onlineAbilityChoices = { 1: null, 2: null };
     onlineReadyState = { 1: false, 2: false };
     onlineUsernames = { 1: localUsername, 2: null };
     randomMatchAutoStarted = false;
+    onlineMatchPreviewActive = false;
     onlineMode = true;
     spectatorMode = false;
     setGameMode('online');
@@ -1062,10 +1121,11 @@ function joinRoom() {
     matchRoomId = roomId;
     matchmakingRole = 'guest';
     localPlayer = 2;
-    onlineAbilityChoices = { 1: null, 2: getOnlineAbilityChoice() };
+    onlineAbilityChoices = { 1: null, 2: null };
     onlineReadyState = { 1: false, 2: false };
     onlineUsernames = { 1: null, 2: localUsername };
     randomMatchAutoStarted = false;
+    onlineMatchPreviewActive = false;
     onlineMode = true;
     spectatorMode = false;
     setGameMode('online');
@@ -1087,10 +1147,11 @@ function startRandomMatch() {
     onlineUsernames = { 1: null, 2: null };
     randomMatchAutoStarted = false;
     spectatorMode = false;
+    onlineMatchPreviewActive = false;
     setGameMode('online');
     document.getElementById('room-share-area').classList.add('hidden');
     setOnlineMatchTab('random');
-    setMatchmakingStatus('接続中... ランダムマッチングを開始しています。', 'searching');
+    setMatchmakingStatus(`${getOnlineMatchTier() === 'rank' ? 'ランク' : 'ノーマル'}マッチングを開始しています。`, 'searching');
     updateMatchmakingPlayerSummary();
     connectOnlineSocket({ random: true });
 }
@@ -1101,8 +1162,12 @@ function cancelMatchmaking() {
     onlineMode = false;
     localPlayer = null;
     spectatorMode = false;
+    activePhase = 'setup';
+    isGameOver = false;
+    currentPlayer = 1;
     matchmakingMode = false;
     matchRoomId = null;
+    onlineMatchPreviewActive = false;
     randomQueuePending = false;
     onlineAbilityChoices = { 1: null, 2: null };
     onlineReadyState = { 1: false, 2: false };
@@ -1110,6 +1175,12 @@ function cancelMatchmaking() {
     randomMatchAutoStarted = false;
     syncAbilitySelectOptions();
     setDevelopModeEnabled(developModeEnabled);
+    document.getElementById('online-prebattle-panel')?.classList.add('hidden');
+    document.getElementById('game-info-panel').classList.add('hidden');
+    boards = { area1: [], area2: [], area3: [] };
+    units = [];
+    document.getElementById('board').innerHTML = '';
+    clearHighlights();
     showLocalPanel();
     setMatchmakingStatus('');
     updateMatchmakingPlayerSummary();
@@ -1198,7 +1269,7 @@ function updateMatchmakingPlayerSummary() {
         return;
     }
     if (isRandomMatchRoom()) {
-        summaryEl.textContent = `${localUsername || 'Commander'} / MATCHING...`;
+        summaryEl.textContent = `${localUsername || 'Commander'} / ${getOnlineMatchTier() === 'rank' ? 'RANK' : 'NORMAL'} MATCHING...`;
         return;
     }
     if (matchmakingRole === 'random' && randomQueuePending) {
@@ -1228,7 +1299,9 @@ function maybeAutoStartRandomMatch() {
     if (localPlayer === 1 && !randomMatchAutoStarted) {
         randomMatchAutoStarted = true;
         window.setTimeout(() => {
-            if (onlineMode && isRandomMatchRoom() && activePhase === 'setup') startGame();
+            if (onlineMode && isRandomMatchRoom() && activePhase === 'setup') {
+                startOnlineBattle();
+            }
         }, 900);
     }
 }
@@ -1238,9 +1311,10 @@ function connectOnlineSocket({ roomId = null, player = null, random = false, rec
     const roomParam = roomId ? `&room=${encodeURIComponent(roomId)}` : '';
     const playerParam = player ? `player=${player}` : '';
     const randomParam = random ? `${playerParam ? '&' : ''}random=1` : '';
+    const tierParam = random ? `${playerParam || roomParam ? '&' : ''}matchTier=${encodeURIComponent(getOnlineMatchTier())}` : '';
     const tokenParam = reconnectToken ? `${playerParam || randomParam || roomParam ? '&' : ''}token=${encodeURIComponent(reconnectToken)}` : '';
     const authParam = authSession?.token ? `${playerParam || randomParam || roomParam || tokenParam ? '&' : ''}authToken=${encodeURIComponent(authSession.token)}` : '';
-    const query = [playerParam, roomParam.replace(/^&/, ''), randomParam.replace(/^&/, ''), tokenParam.replace(/^&/, ''), authParam.replace(/^&/, '')].filter(Boolean).join('&');
+    const query = [playerParam, roomParam.replace(/^&/, ''), randomParam.replace(/^&/, ''), tierParam.replace(/^&/, ''), tokenParam.replace(/^&/, ''), authParam.replace(/^&/, '')].filter(Boolean).join('&');
     onlineSocket = new WebSocket(`${protocol}//${window.location.host}/ws?${query}`);
 
     onlineSocket.addEventListener('open', () => {
@@ -1248,17 +1322,11 @@ function connectOnlineSocket({ roomId = null, player = null, random = false, rec
         addConnectionLog(`${localUsername} として接続しました。`);
         if (matchmakingRole === 'random') setMatchmakingStatus('マッチング中...', 'searching');
         if (player) {
-            onlineAbilityChoices[player] = getOnlineAbilityChoice();
-            onlineReadyState[player] = matchmakingRole === 'random';
             onlineUsernames[player] = localUsername;
         }
         updateReadyButton();
         updateMatchmakingPlayerSummary();
         sendOnlineMessage({ kind: 'profile', username: localUsername });
-        if (player) {
-            sendOnlineMessage({ kind: 'ability_choice', ability: onlineAbilityChoices[player] });
-            if (onlineReadyState[player]) sendOnlineMessage({ kind: 'ready_state', ready: true });
-        }
     });
 
     onlineSocket.addEventListener('message', (event) => {
@@ -1281,6 +1349,103 @@ function connectOnlineSocket({ roomId = null, player = null, random = false, rec
     });
 }
 
+function revealAllPreviewVision() {
+    const allCells = new Set();
+    Object.keys(MAP_SIZES).forEach(mapName => {
+        for (let r = 0; r < MAP_SIZES[mapName].rows; r++) {
+            for (let c = 0; c < MAP_SIZES[mapName].cols; c++) {
+                allCells.add(`${r},${c}`);
+            }
+        }
+    });
+    p1Vision = { area1: new Set(allCells), area2: new Set(allCells), area3: new Set(allCells) };
+    p2Vision = { area1: new Set(allCells), area2: new Set(allCells), area3: new Set(allCells) };
+}
+
+function prepareOnlineMatchPreview(seed = null) {
+    const previewSeed = Number.isFinite(seed) ? seed : hashStringToSeed(matchRoomId || onlineSession?.roomId || 'online');
+    gameSeed = previewSeed;
+    onlineMatchPreviewActive = true;
+    onlineAbilityChoices = { 1: null, 2: null };
+    onlineReadyState = { 1: false, 2: false };
+    activePhase = 'setup';
+    isGameOver = false;
+    currentPlayer = 1;
+    gameTurn = 1;
+    selectedUnit = null;
+    previewUnit = null;
+    scoutReinforcementSerial = 0;
+    militaryFlagSerial = 0;
+    actionsThisTurn = 0;
+    actedUnitIds = new Set();
+    militaryFlags = [];
+    lastKeepAliveAt = Date.now();
+    developModeSequence = '';
+    p1KohDestroyed = false;
+    p2KohDestroyed = false;
+    p1ClairvoyanceDir = null;
+    p2ClairvoyanceDir = null;
+    p1ClairvoyanceAge = 0;
+    p2ClairvoyanceAge = 0;
+    p1LastVision = { area1: new Set(), area2: new Set(), area3: new Set() };
+    p2LastVision = { area1: new Set(), area2: new Set(), area3: new Set() };
+    p1VisionHistory = [];
+    p2VisionHistory = [];
+    currentMatchStartedAt = 0;
+    currentMatchKey = onlineMode
+        ? `${matchRoomId || onlineSession?.roomId || 'online'}:${gameSeed}`
+        : `preview:${gameSeed}`;
+
+    p1Ability = onlineAbilityChoices[1] || '足跡';
+    p2Ability = onlineAbilityChoices[2] || '歴戦王';
+    vsAI = false;
+
+    initializeAudio();
+    initializeBoards();
+    initializeUnits();
+    generateRandomWalls(gameSeed);
+    revealAllPreviewVision();
+    calculateVisibility();
+
+    document.getElementById('setup-panel').classList.add('hidden');
+    document.getElementById('game-info-panel').classList.remove('hidden');
+    document.getElementById('online-prebattle-panel')?.classList.remove('hidden');
+    switchActiveMap(getViewerPlayer() === 2 ? 'area3' : 'area1');
+    renderBoard();
+    updateUI();
+    updateReadyButton();
+    updateOnlineStartAvailability();
+    clearStatusAlert();
+    syncBgmPlayback();
+    updateAudioButtons();
+    setMatchmakingStatus('盤面を確認して、甲アビリティを選択してください。', 'success');
+}
+
+function startOnlineBattle() {
+    const config = {
+        p1Ability: onlineAbilityChoices[1] || '足跡',
+        p2Ability: onlineAbilityChoices[2] || '歴戦王',
+        seed: gameSeed || hashStringToSeed(matchRoomId || onlineSession?.roomId || 'online'),
+        matchType: getOnlineMatchTier()
+    };
+
+    if (onlineMode && (!onlineAbilityChoices[1] || !onlineAbilityChoices[2])) {
+        setMatchmakingStatus('双方の甲アビリティを選択してから開始してください。');
+        return;
+    }
+
+    if (!onlineMatchPreviewActive || activePhase !== 'setup' || !boards.area1.length) {
+        prepareOnlineMatchPreview(config.seed);
+    }
+
+    p1Ability = config.p1Ability;
+    p2Ability = config.p2Ability;
+    startGame(config, true);
+    if (onlineMode && localPlayer === 1) {
+        sendOnlineMessage({ kind: 'start', config });
+    }
+}
+
 function handleOnlineMessage(message) {
     if (message.kind === 'hello') {
         localPlayer = message.player || null;
@@ -1294,6 +1459,10 @@ function handleOnlineMessage(message) {
             role: message.role || 'player',
             randomRoom: Boolean(message.randomRoom)
         };
+        if (message.randomTier) {
+            onlineMatchTier = message.randomTier === 'normal' ? 'normal' : 'rank';
+            setOnlineMatchTier(onlineMatchTier);
+        }
         saveOnlineSession();
         updateRandomQueueCount(message.randomWaitingCount ?? randomWaitingCount);
         if (message.profiles) {
@@ -1302,14 +1471,17 @@ function handleOnlineMessage(message) {
         }
         if (localPlayer) onlineUsernames[localPlayer] = localUsername;
         if (localPlayer && onlineSocket?.readyState === WebSocket.OPEN) {
-            onlineAbilityChoices[localPlayer] = getOnlineAbilityChoice();
-            if (matchmakingRole === 'random') onlineReadyState[localPlayer] = true;
             sendOnlineMessage({ kind: 'profile', username: localUsername });
-            sendOnlineMessage({ kind: 'ability_choice', ability: onlineAbilityChoices[localPlayer] });
-            if (onlineReadyState[localPlayer]) sendOnlineMessage({ kind: 'ready_state', ready: true });
         }
         updateMatchmakingPlayerSummary();
         if (isRandomMatchRoom()) setMatchmakingStatus('マッチング中...', 'searching');
+        if (!message.snapshot?.started && !onlineMatchPreviewActive && onlineMode && message.role !== 'spectator' && message.profiles?.[1] && message.profiles?.[2]) {
+            if (localPlayer === 1) {
+                const previewSeed = hashStringToSeed(`${message.roomId || matchRoomId || onlineSession?.roomId || 'online'}:${Date.now()}`);
+                prepareOnlineMatchPreview(previewSeed);
+                sendOnlineMessage({ kind: 'preview_seed', seed: previewSeed, matchTier: getOnlineMatchTier() });
+            }
+        }
         if (message.snapshot?.started && activePhase !== 'battle') {
             startGame(message.snapshot.config, true);
             applyingRemoteAction = true;
@@ -1335,16 +1507,13 @@ function handleOnlineMessage(message) {
         addConnectionLog('対戦相手が接続しました。');
         setMatchmakingStatus(
             isRandomMatchRoom()
-                ? '対戦相手を確保しました。名前を同期しています...'
-                : '対戦相手が接続しました。準備完了を押してください。'
+                ? '対戦相手を確保しました。盤面を展開します...'
+                : '対戦相手が接続しました。盤面を展開します。'
         );
-        if (localPlayer) {
-            onlineAbilityChoices[localPlayer] = getOnlineAbilityChoice();
-            sendOnlineMessage({ kind: 'ability_choice', ability: onlineAbilityChoices[localPlayer] });
-            if (matchmakingRole === 'random') {
-                onlineReadyState[localPlayer] = true;
-                sendOnlineMessage({ kind: 'ready_state', ready: true });
-            }
+        if (onlineMode && !onlineMatchPreviewActive && localPlayer === 1) {
+            const previewSeed = hashStringToSeed(`${matchRoomId || onlineSession?.roomId || 'online'}:${Date.now()}`);
+            prepareOnlineMatchPreview(previewSeed);
+            sendOnlineMessage({ kind: 'preview_seed', seed: previewSeed, matchTier: getOnlineMatchTier() });
         }
         updateMatchmakingPlayerSummary();
         updateOnlineStartAvailability();
@@ -1353,7 +1522,22 @@ function handleOnlineMessage(message) {
     }
 
     if (message.kind === 'queue_status') {
+        if (message.matchTier) {
+            onlineMatchTier = message.matchTier === 'normal' ? 'normal' : 'rank';
+            setOnlineMatchTier(onlineMatchTier);
+        }
         updateRandomQueueCount(message.waiting);
+        return;
+    }
+
+    if (message.kind === 'preview_seed') {
+        if (!onlineMatchPreviewActive && activePhase !== 'battle') {
+            if (message.matchTier) {
+                onlineMatchTier = message.matchTier === 'normal' ? 'normal' : 'rank';
+                setOnlineMatchTier(onlineMatchTier);
+            }
+            prepareOnlineMatchPreview(Number(message.seed) || hashStringToSeed(matchRoomId || onlineSession?.roomId || 'online'));
+        }
         return;
     }
 
@@ -1373,16 +1557,8 @@ function handleOnlineMessage(message) {
         setMatchmakingStatus(
             isRandomMatchRoom()
                 ? '相手の準備情報を受信しました。マッチ確定を待っています...'
-                : '相手の甲アビリティ選択を受信しました。内容はゲーム開始まで非表示です。'
+                : '相手の甲アビリティ選択を受信しました。'
         );
-        sendOnlineMessage({ kind: 'ability_ack', ability: getOnlineAbilityChoice() });
-        updateOnlineStartAvailability();
-        maybeAutoStartRandomMatch();
-        return;
-    }
-
-    if (message.kind === 'ability_ack') {
-        onlineAbilityChoices[message.player] = message.ability;
         updateOnlineStartAvailability();
         maybeAutoStartRandomMatch();
         return;
@@ -1435,25 +1611,26 @@ function sendOnlineMessage(message) {
 
 function updateOnlineStartAvailability() {
     const btnStart = document.getElementById('btn-start-online-match');
-    if (!btnStart) return;
-    const ready = Boolean(onlineAbilityChoices[1] && onlineAbilityChoices[2] && onlineReadyState[1] && onlineReadyState[2]);
-    btnStart.disabled = !(localPlayer === 1 && ready) || isRandomMatchRoom();
-    if (localPlayer === 1) {
-        btnStart.textContent = isRandomMatchRoom() ? 'AUTO START' : (ready ? 'ONLINE MATCH START' : 'WAITING FOR READY');
+    if (btnStart) {
+        const ready = Boolean(onlineAbilityChoices[1] && onlineAbilityChoices[2] && onlineReadyState[1] && onlineReadyState[2]);
+        btnStart.disabled = !(localPlayer === 1 && ready);
+        if (localPlayer === 1) {
+            btnStart.textContent = ready ? 'ONLINE MATCH START' : 'WAITING FOR READY';
+        }
     }
 }
 
 function updateReadyButton() {
     const readyBtn = document.getElementById('btn-online-ready');
     if (!readyBtn) return;
-    if (matchmakingRole === 'random') return;
-    readyBtn.disabled = !onlineMode || !localPlayer || !onlineSocket || onlineSocket.readyState !== WebSocket.OPEN;
+    readyBtn.classList.toggle('hidden', !(onlineMode && onlineMatchPreviewActive && activePhase === 'setup'));
+    readyBtn.disabled = !onlineMode || !localPlayer || !onlineSocket || onlineSocket.readyState !== WebSocket.OPEN || !onlineMatchPreviewActive;
     readyBtn.classList.toggle('ready', Boolean(localPlayer && onlineReadyState[localPlayer]));
     readyBtn.textContent = localPlayer && onlineReadyState[localPlayer] ? '準備完了済み' : '準備完了';
 }
 
 function markOnlineReady() {
-    if (!onlineMode || !localPlayer) return;
+    if (!onlineMode || !localPlayer || !onlineMatchPreviewActive) return;
     onlineAbilityChoices[localPlayer] = getOnlineAbilityChoice();
     onlineReadyState[localPlayer] = true;
     sendOnlineMessage({ kind: 'ability_choice', ability: onlineAbilityChoices[localPlayer] });
@@ -1462,6 +1639,7 @@ function markOnlineReady() {
     updateMatchmakingPlayerSummary();
     updateReadyButton();
     updateOnlineStartAvailability();
+    maybeAutoStartRandomMatch();
 }
 
 function addConnectionLog(text) {
@@ -1676,6 +1854,10 @@ function syncBgmPlayback() {
 }
 
 function applyRemoteAction(action) {
+    if (action.type === 'skip') {
+        endTurn();
+        return;
+    }
     const unit = units.find(u => u.id === action.unitId);
     if (!unit) {
         console.error(`[ONLINE] Unit not found: ${action.unitId}`);
@@ -1694,9 +1876,12 @@ function applyRemoteAction(action) {
 
 function startGame(config = null, fromOnline = false) {
     if (onlineMode && localPlayer !== 1 && !fromOnline) return;
+    const reusePreview = onlineMode && onlineMatchPreviewActive && activePhase === 'setup' && boards.area1.length > 0;
 
     if (onlineMode) {
-        onlineAbilityChoices[localPlayer || 1] = getOnlineAbilityChoice();
+        if (!reusePreview && localPlayer) {
+            onlineAbilityChoices[localPlayer] = getOnlineAbilityChoice();
+        }
         p1Ability = config ? config.p1Ability : (onlineAbilityChoices[1] || '足跡');
         p2Ability = config ? config.p2Ability : (onlineAbilityChoices[2] || '歴戦王');
     } else {
@@ -1735,19 +1920,28 @@ function startGame(config = null, fromOnline = false) {
     p1VisionHistory = [];
     p2VisionHistory = [];
 
+    if (!reusePreview) {
+        initializeBoards();
+        initializeUnits();
+        generateRandomWalls(gameSeed);
+    } else {
+        hideOnlineMatchPreview();
+    }
+
+    const firstPlayer = createRng(gameSeed ^ 0x9E3779B9)() < 0.5 ? 1 : 2;
+    currentPlayer = firstPlayer;
+
     // Hide setup panels, show game
     document.getElementById('setup-panel').classList.add('hidden');
     document.getElementById('game-info-panel').classList.remove('hidden');
-
-    initializeBoards();
-    initializeUnits();
-    generateRandomWalls(gameSeed);
+    document.getElementById('online-prebattle-panel')?.classList.add('hidden');
+    onlineMatchPreviewActive = false;
     calculateVisibility();
     switchActiveMap(getViewerPlayer() === 2 ? 'area3' : 'area1');
     renderBoard();
     updateUI();
 
-    addConsoleLog("GAME INITIATED. PLAYER 1 (BLUE) TURN.", 'system');
+    addConsoleLog(`GAME INITIATED. PLAYER ${firstPlayer} TURN.`, 'system');
     showTurnBanner();
     if (lastTurnOwner !== currentPlayer) playTurnSfx();
     lastTurnOwner = currentPlayer;
@@ -3331,6 +3525,7 @@ function forfeitGame() {
 function skipTurn() {
     if (isGameOver || !canControlCurrentTurn() || activePhase !== 'battle') return;
     addConsoleLog(`TURN SKIP: Player ${currentPlayer} が手動でターンを終了。`, 'system');
+    if (onlineMode) sendOnlineMessage({ kind: 'action', action: { type: 'skip' } });
     endTurn();
 }
 
@@ -3338,7 +3533,9 @@ function resetToSetup(fromOnline = false) {
     activePhase = 'setup';
     document.getElementById('game-over-overlay').classList.add('hidden');
     document.getElementById('game-info-panel').classList.add('hidden');
+    document.getElementById('online-prebattle-panel')?.classList.add('hidden');
     document.getElementById('setup-panel').classList.remove('hidden');
+    onlineMatchPreviewActive = false;
 
     boards = { area1: [], area2: [], area3: [] };
     units = [];

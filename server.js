@@ -24,6 +24,7 @@ const accountStore = createStore();
 const rooms = new Map();
 const clients = new Map();
 let pendingRandomRoomId = null;
+const pendingRandomRoomIds = { rank: null, normal: null };
 let randomRoomSerial = 1;
 
 const mimeTypes = {
@@ -42,6 +43,7 @@ function createRoom(roomId, random = false) {
     const room = {
         id: roomId,
         random,
+        randomTier: null,
         started: false,
         startConfig: null,
         history: [],
@@ -72,16 +74,16 @@ function getRoomSnapshot(room) {
     };
 }
 
-function countRandomWaitingPlayers() {
-    const room = pendingRandomRoomId ? rooms.get(pendingRandomRoomId) : null;
+function countRandomWaitingPlayers(matchTier = 'rank') {
+    const room = pendingRandomRoomIds[matchTier] ? rooms.get(pendingRandomRoomIds[matchTier]) : null;
     if (!room || room.started) return 0;
     return room.seats[1].socket && !room.seats[2].socket ? 1 : 0;
 }
 
-function sendRandomQueueStatus() {
-    const payload = { kind: 'queue_status', waiting: countRandomWaitingPlayers() };
+function sendRandomQueueStatus(matchTier = 'rank') {
+    const payload = { kind: 'queue_status', waiting: countRandomWaitingPlayers(matchTier), matchTier };
     rooms.forEach(room => {
-        if (!room.random) return;
+        if (!room.random || room.randomTier !== matchTier) return;
         roomSockets(room).forEach(socket => sendFrame(socket, payload));
     });
 }
@@ -224,8 +226,9 @@ function cleanupRoomIfEmpty(room) {
     if (roomHasLiveConnections(room)) return;
     if (!room.started) {
         if (pendingRandomRoomId === room.id) pendingRandomRoomId = null;
+        if (room.randomTier && pendingRandomRoomIds[room.randomTier] === room.id) pendingRandomRoomIds[room.randomTier] = null;
         rooms.delete(room.id);
-        sendRandomQueueStatus();
+        if (room.randomTier) sendRandomQueueStatus(room.randomTier);
     }
 }
 
@@ -288,7 +291,8 @@ function joinSpecificRoom(socket, roomId, desiredPlayer, token) {
     return { room, role: 'spectator', player: null, token: spectator.token };
 }
 
-function joinRandomRoom(socket, token) {
+function joinRandomRoom(socket, token, matchTier = 'rank') {
+    const tier = matchTier === 'normal' ? 'normal' : 'rank';
     if (token) {
         const matched = findRoomByToken(token);
         if (matched) {
@@ -304,18 +308,19 @@ function joinRandomRoom(socket, token) {
         }
     }
 
-    let room = pendingRandomRoomId ? rooms.get(pendingRandomRoomId) : null;
+    let room = pendingRandomRoomIds[tier] ? rooms.get(pendingRandomRoomIds[tier]) : null;
     if (!room || room.started || room.seats[2].socket) {
         room = createRoom(`RANDOM-${String(randomRoomSerial++).padStart(4, '0')}`, true);
-        pendingRandomRoomId = room.id;
+        room.randomTier = tier;
+        pendingRandomRoomIds[tier] = room.id;
         room.seats[1].socket = socket;
-        sendRandomQueueStatus();
+        sendRandomQueueStatus(tier);
         return { room, role: 'player', player: 1, token: room.seats[1].token };
     }
 
     room.seats[2].socket = socket;
-    pendingRandomRoomId = null;
-    sendRandomQueueStatus();
+    pendingRandomRoomIds[tier] = null;
+    sendRandomQueueStatus(tier);
     return { room, role: 'player', player: 2, token: room.seats[2].token };
 }
 
@@ -451,18 +456,19 @@ const server = http.createServer(async (req, res) => {
                 const player2Id = body.player2Id ? Number(body.player2Id) : null;
                 const winnerPlayerId = body.winnerPlayerId ? Number(body.winnerPlayerId) : null;
                 const loserPlayerId = body.loserPlayerId ? Number(body.loserPlayerId) : null;
+                const matchType = String(body.matchType || 'normal');
                 let player1Profile = player1Id ? accountStore.getPlayerById(player1Id) : null;
                 let player2Profile = player2Id ? accountStore.getPlayerById(player2Id) : null;
                 let player1RatingDelta = 0;
                 let player2RatingDelta = 0;
 
-                if (player1Profile && player2Profile && winnerPlayerId) {
+                if (matchType === 'rank' && player1Profile && player2Profile && winnerPlayerId) {
                     const p1Wins = winnerPlayerId === player1Profile.id;
                     player1RatingDelta = calculateRatingDelta(player1Profile.rating, player2Profile.rating, p1Wins);
                     player2RatingDelta = calculateRatingDelta(player2Profile.rating, player1Profile.rating, !p1Wins);
                     player1Profile = accountStore.updatePlayerProgress(player1Profile.id, player1RatingDelta, 50);
                     player2Profile = accountStore.updatePlayerProgress(player2Profile.id, player2RatingDelta, 50);
-                } else if (player1Profile && !player2Profile) {
+                } else if (matchType === 'rank' && player1Profile && !player2Profile) {
                     if (body.result === 'win' || winnerPlayerId === player1Profile.id) {
                         player1RatingDelta = 10;
                     } else if (body.result === 'lose' || body.result === 'surrender') {
@@ -561,11 +567,12 @@ server.on('upgrade', (req, socket) => {
     const desiredPlayer = Number(url.searchParams.get('player') || 0);
     const requestedRoomId = url.searchParams.get('room');
     const random = url.searchParams.get('random') === '1';
+    const matchTier = url.searchParams.get('matchTier') === 'normal' ? 'normal' : 'rank';
     const token = url.searchParams.get('token') || '';
     const authToken = url.searchParams.get('authToken') || '';
 
     const joined = random
-        ? joinRandomRoom(socket, token)
+        ? joinRandomRoom(socket, token, matchTier)
         : joinSpecificRoom(socket, requestedRoomId || 'default', desiredPlayer, token);
 
     if (!joined) {
@@ -581,7 +588,8 @@ server.on('upgrade', (req, socket) => {
         role,
         roomId: room.id,
         randomRoom: room.random,
-        randomWaitingCount: countRandomWaitingPlayers(),
+        randomTier: room.randomTier || 'rank',
+        randomWaitingCount: countRandomWaitingPlayers(room.randomTier || 'rank'),
         reconnectToken,
         snapshot: getRoomSnapshot(room),
         profiles: room.profiles
