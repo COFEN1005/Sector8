@@ -373,10 +373,9 @@ const server = http.createServer(async (req, res) => {
                     deviceLabel: sanitizeDisplayName(body.deviceLabel || body.device || '')
                 });
                 if (!result.ok) {
-                    return sendJson(res, result.error === 'locked' ? 423 : 401, {
+                    return sendJson(res, 401, {
                         ok: false,
-                        error: result.error,
-                        lockedUntil: result.lockedUntil || null
+                        error: result.error
                     });
                 }
                 return sendJson(res, 200, { ok: true, token: result.token, profile: result.profile });

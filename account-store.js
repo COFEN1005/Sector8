@@ -10,7 +10,6 @@ const DB_PATH = path.join(DATA_DIR, 'sector8.sqlite');
 const SAFE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 const PLAYER_ID_LENGTH = 14;
 const FRIEND_CODE_LENGTH = 12;
-const PIN_LOCK_MS = 15 * 60 * 1000;
 const LEVEL_EXP_PER_LEVEL = 100;
 const SESSION_TTL_MS = 365 * 24 * 60 * 60 * 1000;
 
@@ -273,20 +272,15 @@ function createStore() {
     }
 
     const ts = now();
-    if (row.pin_locked_until && row.pin_locked_until > ts) {
-      return { ok: false, error: 'locked', lockedUntil: row.pin_locked_until };
-    }
-
     const ok = verifyPin(cleanPin, row.pin_salt, row.pin_hash);
     if (!ok) {
       const failCount = row.pin_fail_count + 1;
-      const lockedUntil = failCount >= 5 ? ts + PIN_LOCK_MS : 0;
       db.prepare(`
         UPDATE players
-        SET pin_fail_count = ?, pin_locked_until = ?, updated_at = ?
+        SET pin_fail_count = ?, pin_locked_until = 0, updated_at = ?
         WHERE id = ?
-      `).run(failCount, lockedUntil, ts, row.id);
-      return { ok: false, error: failCount >= 5 ? 'locked' : 'credentials_invalid', lockedUntil };
+      `).run(failCount, ts, row.id);
+      return { ok: false, error: 'credentials_invalid' };
     }
 
     db.prepare(`

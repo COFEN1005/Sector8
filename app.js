@@ -2030,6 +2030,10 @@ function removeUnitEverywhere(unit) {
 }
 
 function addMilitaryFlagToBoard(flag) {
+    const current = boards[flag.map][flag.row][flag.col].flag;
+    if (current && current.id !== flag.id) {
+        removeMilitaryFlag(current);
+    }
     militaryFlags.push(flag);
     boards[flag.map][flag.row][flag.col].flag = flag;
 }
@@ -2041,11 +2045,11 @@ function removeMilitaryFlag(flag) {
     militaryFlags = militaryFlags.filter(entry => entry.id !== flag.id);
 }
 
-function clearFlagCarrier(unit) {
+function clearFlagCarrier(unit, preserveSurvivalTurns = false) {
     if (!unit) return;
     unit.carryingFlagPlayer = null;
     unit.carryingFlagAbility = null;
-    unit.flagSurvivalTurns = 0;
+    if (!preserveSurvivalTurns) unit.flagSurvivalTurns = 0;
 }
 
 function createMilitaryFlag(player, map, row, col, ability) {
@@ -2089,7 +2093,7 @@ function destroyMilitaryFlagAt(map, row, col, reason = '爆破') {
 }
 
 function tryPickupMilitaryFlag(unit) {
-    if (!unit || unit.type === 'core' || unit.type === 'koh' || unit.carryingFlagPlayer) return false;
+    if (!unit || unit.type === 'core' || unit.type === 'koh' || unit.type === 'scout' || unit.carryingFlagPlayer) return false;
     const flag = boards[unit.map]?.[unit.row]?.[unit.col]?.flag;
     if (!flag || flag.player !== unit.player) return false;
     unit.carryingFlagPlayer = flag.player;
@@ -2102,7 +2106,7 @@ function tryPickupMilitaryFlag(unit) {
 
 function promoteFlagBearer(unit) {
     const inheritedAbility = unit.carryingFlagAbility || getPlayerAbility(unit.player);
-    clearFlagCarrier(unit);
+    clearFlagCarrier(unit, true);
     promoteUnitType(unit, 'koh');
     unit.camouflaged = false;
     unit.veteranMomentumPenalty = false;
@@ -2123,6 +2127,12 @@ function updateFlagCarrierSurvival(player) {
             promoteFlagBearer(unit);
         }
     });
+}
+
+function isFlagVisibleToViewer(flag, viewerPlayer, activeVision) {
+    if (!flag) return false;
+    if (flag.player === viewerPlayer) return true;
+    return activeVision?.has(`${flag.row},${flag.col}`) || false;
 }
 
 function captureUnit(victim, attackerPlayer) {
@@ -2399,11 +2409,12 @@ function renderBoard() {
             if (cellData.isTeleport) cellEl.classList.add('teleport');
             if (cellData.isWall) cellEl.classList.add('wall');
             if (cellData.isCoreTile) cellEl.classList.add('core-tile');
-            if (cellData.flag) cellEl.classList.add('has-flag');
+            const flagVisible = isFlagVisibleToViewer(cellData.flag, viewerPlayer, activeVision);
+            if (flagVisible) cellEl.classList.add('has-flag');
 
             if (!activeVision.has(coordStr)) cellEl.classList.add('fog-grey');
 
-            if (cellData.flag) {
+            if (flagVisible) {
                 const flagEl = document.createElement('div');
                 flagEl.className = `military-flag player-${cellData.flag.player}`;
                 flagEl.title = `Player ${cellData.flag.player} の軍旗`;
@@ -2501,7 +2512,9 @@ function renderMinimaps() {
                 if (boardCell.isWall) cell.classList.add('wall');
                 if (boardCell.isTeleport) cell.classList.add('teleport');
                 if (boardCell.isCoreTile) cell.classList.add('core-tile');
-                if (boardCell.flag) cell.classList.add(`flag-p${boardCell.flag.player}`);
+                if (isFlagVisibleToViewer(boardCell.flag, viewerPlayer, vision[mapName])) {
+                    cell.classList.add(`flag-p${boardCell.flag.player}`);
+                }
                 const unit = boardCell.unit;
                 const visible = gameMode === 'debug' || !unit || isUnitVisibleToViewer(unit, viewerPlayer, vision[mapName]);
                 if (unit && visible) cell.classList.add(unit.player === 1 ? 'p1' : 'p2');
@@ -2577,7 +2590,7 @@ function getValidMoves(unit, options = {}) {
 
                     const localBlocked = resolved.localOccupant && !shouldIgnoreOccupantForPreview(unit, resolved.localOccupant, unit.map, options);
                     const portalBlocked = resolved.portalDest && resolved.destOccupant && !shouldIgnoreOccupantForPreview(unit, resolved.destOccupant, resolved.targetMap, options);
-                    if (localBlocked || portalBlocked || resolved.portalDest) break;
+                    if (localBlocked || portalBlocked) break;
                 } else {
                     break;
                 }
@@ -2624,7 +2637,7 @@ function getValidMoves(unit, options = {}) {
                         valid.push({ row: nextR, col: nextC, type: hasEnemyTarget && visibleEnemyTarget ? 'attack' : 'move' });
                         const localBlocked = resolved.localOccupant && !shouldIgnoreOccupantForPreview(unit, resolved.localOccupant, unit.map, options);
                         const portalBlocked = resolved.portalDest && resolved.destOccupant && !shouldIgnoreOccupantForPreview(unit, resolved.destOccupant, resolved.targetMap, options);
-                        if (!localBlocked && !portalBlocked && !resolved.portalDest) {
+                        if (!localBlocked && !portalBlocked) {
                             queue.push({ row: nextR, col: nextC, steps: curr.steps + 1 });
                         }
                     }
@@ -2640,7 +2653,6 @@ function isValidPath(unit, pathCells, options = {}) {
     for (let i = 0; i < pathCells.length; i++) {
         const { r, c } = pathCells[i];
         if (boards[map][r][c].isWall) return false;
-        if (i < pathCells.length - 1 && getPortalDestination(map, r, c)) return false;
         if (unit.type === 'scout' && map !== 'area2') return false;
         const occupant = boards[map][r][c].unit;
         if (occupant) {
