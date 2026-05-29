@@ -463,13 +463,15 @@ const server = http.createServer(async (req, res) => {
                 let player1RatingDelta = 0;
                 let player2RatingDelta = 0;
 
-                if (matchType === 'rank' && player1Profile && player2Profile) {
-                    if (player1Won) {
-                        player1RatingDelta = calculateRatingDelta(player1Profile.rating, player2Profile.rating, true);
-                        player2RatingDelta = calculateRatingDelta(player2Profile.rating, player1Profile.rating, false);
-                    } else {
-                        player1RatingDelta = calculateRatingDelta(player1Profile.rating, player2Profile.rating, false);
-                        player2RatingDelta = calculateRatingDelta(player2Profile.rating, player1Profile.rating, true);
+                if (player1Profile && player2Profile) {
+                    if (matchType === 'rank') {
+                        if (player1Won) {
+                            player1RatingDelta = calculateRatingDelta(player1Profile.rating, player2Profile.rating, true);
+                            player2RatingDelta = calculateRatingDelta(player2Profile.rating, player1Profile.rating, false);
+                        } else {
+                            player1RatingDelta = calculateRatingDelta(player1Profile.rating, player2Profile.rating, false);
+                            player2RatingDelta = calculateRatingDelta(player2Profile.rating, player1Profile.rating, true);
+                        }
                     }
                     player1Profile = accountStore.updatePlayerProgress(player1Profile.id, player1RatingDelta, 50);
                     player2Profile = accountStore.updatePlayerProgress(player2Profile.id, player2RatingDelta, 50);
