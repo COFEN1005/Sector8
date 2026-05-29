@@ -2632,8 +2632,7 @@ function executeMove(unit, destRow, destCol) {
     const targetCol = resolved.targetCol;
     const captured = [];
     let logType = unit.player === 1 ? 'p1' : 'p2';
-    const shouldFocusMove = !(vsAI && !onlineMode && unit.player === 2);
-    const suppressVisualForAi = vsAI && !onlineMode && unit.player === 2;
+    const shouldFocusMove = !shouldHideAiActionFeedback(unit.player);
 
     if (resolved.localOccupant && resolved.localOccupant.player !== unit.player) {
         captured.push({ unit: resolved.localOccupant, map: startMap, row: destRow, col: destCol });
@@ -2736,7 +2735,7 @@ function executeMove(unit, destRow, destCol) {
         unit.refreshActedAfterAction = true;
         addConsoleLog(`SYSTEM: テレポート使用により行動済み状態を解除。`, 'system');
     }
-    playMoveSfx();
+    if (!shouldHideAiActionFeedback(unit.player)) playMoveSfx();
     maybeClearCamouflageAfterMove(unit);
     sendOnlineMessage({ kind: 'action', action: { type: 'move', unitId: unit.id, row: destRow, col: destCol } });
     completeUnitAction(unit);
@@ -2752,7 +2751,7 @@ function executeAbility(unit, destRow, destCol) {
         unit.row = destRow; unit.col = destCol;
         tryPickupMilitaryFlag(unit);
         addConsoleLog(`Player ${unit.player}: 偵察兵が [${startCol},${startRow}] から [${destCol},${destRow}] へワープ転送。`, 'ability');
-        playMoveSfx();
+        if (!shouldHideAiActionFeedback(unit.player)) playMoveSfx();
         sendOnlineMessage({ kind: 'action', action: { type: 'ability', unitId: unit.id, row: destRow, col: destCol } });
         completeUnitAction(unit);
         return;
@@ -2888,6 +2887,7 @@ function executeOtsuBreakthrough(mapName, centerR, centerC) {
 function completeUnitAction(unit) {
     if (isGameOver) return;
     const refreshActed = unit.refreshActedAfterAction;
+    const hideAiFeedback = shouldHideAiActionFeedback();
     unit.refreshActedAfterAction = false;
     if (!refreshActed) actedUnitIds.add(unit.id);
     else actedUnitIds.delete(unit.id);
@@ -2895,21 +2895,28 @@ function completeUnitAction(unit) {
     actionsThisTurn++;
     cancelSelection();
     calculateVisibility();
-    renderBoard();
-    updateUI();
 
     if (actionsThisTurn >= ACTIONS_PER_TURN || !hasAvailableActionUnit(currentPlayer)) {
         endTurn();
         return;
     }
 
+    if (!hideAiFeedback) {
+        renderBoard();
+        updateUI();
+    }
+
     addConsoleLog(`ACTION ${actionsThisTurn}/${ACTIONS_PER_TURN}: Player ${currentPlayer} は別のコマをもう1体行動できます。`, currentPlayer === 1 ? 'p1' : 'p2');
-    showTurnBanner();
+    if (!hideAiFeedback) showTurnBanner();
     if (currentPlayer === 2 && vsAI) setTimeout(executeAITurn, 700);
 }
 
 function hasAvailableActionUnit(player) {
     return units.some(unit => unit.player === player && unit.type !== 'core' && !actedUnitIds.has(unit.id));
+}
+
+function shouldHideAiActionFeedback(player = currentPlayer) {
+    return vsAI && !onlineMode && player === 2;
 }
 
 function endTurn() {
