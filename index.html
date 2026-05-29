@@ -354,18 +354,7 @@
         document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active'));
         document.getElementById('tab-mode-' + mode).classList.add('active');
         window.gameMode = mode;
-        if (mode === 'online') {
-            document.getElementById('matchmaking-panel').classList.remove('hidden');
-            document.getElementById('setup-local-panel').classList.add('hidden');
-        } else {
-            document.getElementById('matchmaking-panel').classList.add('hidden');
-            document.getElementById('setup-local-panel').classList.remove('hidden');
-            if (mode === 'debug') {
-                document.getElementById('btn-opt-ai').click();
-            } else {
-                document.getElementById('btn-opt-human').click();
-            }
-        }
+        if (window.setSetupMode) window.setSetupMode(mode);
         if (window.setGameMode) window.setGameMode(mode);
     }
     </script>

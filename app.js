@@ -288,6 +288,25 @@ function clearOnlineSession() {
     try { window.localStorage.removeItem(ONLINE_SESSION_STORAGE_KEY); } catch {}
 }
 
+function deactivateOnlineMode(clearSession = true) {
+    manualDisconnect = true;
+    if (onlineSocket) {
+        try { onlineSocket.close(); } catch {}
+        onlineSocket = null;
+    }
+    onlineMode = false;
+    localPlayer = null;
+    spectatorMode = false;
+    matchmakingRole = null;
+    matchRoomId = null;
+    randomQueuePending = false;
+    randomMatchAutoStarted = false;
+    onlineAbilityChoices = { 1: null, 2: null };
+    onlineReadyState = { 1: false, 2: false };
+    onlineUsernames = { 1: null, 2: null };
+    if (clearSession) clearOnlineSession();
+}
+
 function getViewerPlayer() {
     if (spectatorMode) return spectatorViewPlayer;
     return onlineMode && localPlayer ? localPlayer : currentPlayer;
@@ -674,6 +693,19 @@ function setGameMode(mode) {
 }
 
 window.setGameMode = setGameMode;
+
+function setSetupMode(mode) {
+    if (mode === 'online') {
+        showMatchmakingPanel();
+        return;
+    }
+    deactivateOnlineMode();
+    showLocalPanel();
+    setGameMode(mode);
+    setOpponent(mode === 'debug');
+}
+
+window.setSetupMode = setSetupMode;
 
 function updateModeVisibility() {
     const feedPanel = document.getElementById('combat-feed-panel');
