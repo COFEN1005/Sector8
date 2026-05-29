@@ -280,12 +280,12 @@ class Unit {
         if (this.type === 'koh') {
             const ability = getPlayerAbility(this.player);
             const descriptions = {
-                '千里眼': '【甲特有: 千里眼】1方向の直線全マスを可視化。',
-                '鼓舞': '【甲特有: 鼓舞】周囲1マスの味方の移動・視界を強化。',
+                '千里眼': '【甲特有: 千里眼 / 発動型】1方向の直線全マスを可視化。',
+                '鼓舞': '【甲特有: 鼓舞 / 発動型】周囲1マスの味方の移動・視界を強化。',
                 '足跡': '【甲特有: 足跡】直近2ターン分の視界を保持。',
                 '歴戦王': '【甲特有: 歴戦王】敵撃破時、行動済み状態を解除。',
                 '戦姫': '【甲特有: 戦姫】撃破数に応じて自軍を昇格。',
-                '爆破': '【甲特有: 爆破】周囲2マスを破壊して自滅。',
+                '爆破': '【甲特有: 爆破 / 発動型】周囲2マスを破壊して自滅。',
                 '暗殺者': '【甲特有: 暗殺者】直線移動5・視界5。撃破時1マス後退。',
                 '盲目': '【甲特有: 盲目】周囲移動5、視界周囲1。',
                 '衛生兵': '【甲特有: 衛生兵】生存中は偵察兵補充が6ターン周期。',
@@ -333,7 +333,7 @@ class Unit {
         if (this.type === 'koh') {
             const ability = getPlayerAbility(this.player);
             if (ability === '暗殺者') return 'straight';
-            if (ability === '盲目' || ability === '監視') return 'square';
+            if (ability === '監視') return 'square';
         }
         return this.moveType;
     }
