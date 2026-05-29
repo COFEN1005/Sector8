@@ -451,6 +451,7 @@ class Unit {
             if (ability === '暗殺者') v = 5; // 直線視界5 (special: handled separately)
             if (ability === '盲目') v = 1;
             if (ability === '監視') v = 2;
+            if (ability === '歴戦王') v = 2;
             if (ability === '迷彩' && this.camouflaged) v = 1;
         }
         if (this.inspirationTurns > 0) v += 1;
