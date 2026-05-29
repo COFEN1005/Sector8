@@ -1080,7 +1080,9 @@ function handleOnlineMessage(message) {
             try {
                 (message.snapshot.history || []).forEach(entry => {
                     if (entry.kind === 'action') applyRemoteAction(entry.action);
-                    else if (entry.kind === 'forfeit' || entry.kind === 'win') triggerWin(entry.winner, true);
+                    else if (entry.kind === 'forfeit' || entry.kind === 'win') {
+                        triggerWin(entry.winner, true, entry.kind === 'forfeit' ? 'forfeit' : 'core');
+                    }
                 });
             } finally {
                 applyingRemoteAction = false;
@@ -1183,7 +1185,7 @@ function handleOnlineMessage(message) {
         } else if (message.kind === 'reset') {
             resetToSetup(true);
         } else if (message.kind === 'forfeit' || message.kind === 'win') {
-            triggerWin(message.winner, true);
+            triggerWin(message.winner, true, message.kind === 'forfeit' ? 'forfeit' : 'core');
         }
     } finally {
         applyingRemoteAction = false;
