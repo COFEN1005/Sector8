@@ -457,22 +457,27 @@ const server = http.createServer(async (req, res) => {
                 const winnerPlayerId = body.winnerPlayerId ? Number(body.winnerPlayerId) : null;
                 const loserPlayerId = body.loserPlayerId ? Number(body.loserPlayerId) : null;
                 const matchType = String(body.matchType || 'normal');
+                const player1Won = String(body.result || '') === 'win';
                 let player1Profile = player1Id ? accountStore.getPlayerById(player1Id) : null;
                 let player2Profile = player2Id ? accountStore.getPlayerById(player2Id) : null;
                 let player1RatingDelta = 0;
                 let player2RatingDelta = 0;
 
-                if (matchType === 'rank' && player1Profile && player2Profile && winnerPlayerId) {
-                    const p1Wins = winnerPlayerId === player1Profile.id;
-                    player1RatingDelta = calculateRatingDelta(player1Profile.rating, player2Profile.rating, p1Wins);
-                    player2RatingDelta = calculateRatingDelta(player2Profile.rating, player1Profile.rating, !p1Wins);
+                if (matchType === 'rank' && player1Profile && player2Profile) {
+                    if (player1Won) {
+                        player1RatingDelta = calculateRatingDelta(player1Profile.rating, player2Profile.rating, true);
+                        player2RatingDelta = calculateRatingDelta(player2Profile.rating, player1Profile.rating, false);
+                    } else {
+                        player1RatingDelta = calculateRatingDelta(player1Profile.rating, player2Profile.rating, false);
+                        player2RatingDelta = calculateRatingDelta(player2Profile.rating, player1Profile.rating, true);
+                    }
                     player1Profile = accountStore.updatePlayerProgress(player1Profile.id, player1RatingDelta, 50);
                     player2Profile = accountStore.updatePlayerProgress(player2Profile.id, player2RatingDelta, 50);
                 } else if (matchType === 'rank' && player1Profile && !player2Profile) {
-                    if (body.result === 'win' || winnerPlayerId === player1Profile.id) {
-                        player1RatingDelta = 10;
-                    } else if (body.result === 'lose' || body.result === 'surrender') {
-                        player1RatingDelta = -10;
+                    if (player1Won) {
+                        player1RatingDelta = calculateRatingDelta(player1Profile.rating, 1500, true);
+                    } else {
+                        player1RatingDelta = calculateRatingDelta(player1Profile.rating, 1500, false);
                     }
                     player1Profile = accountStore.updatePlayerProgress(player1Profile.id, player1RatingDelta, 50);
                 }

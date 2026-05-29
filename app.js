@@ -542,7 +542,8 @@ function startMatchTracking() {
 
 async function submitMatchHistory(reason, winnerId) {
     if (!authSession?.token || !authProfile) return;
-    const viewerWon = authProfile.id === winnerId;
+    const viewerSide = onlineMode && localPlayer ? localPlayer : 1;
+    const viewerWon = winnerId === viewerSide;
     const opponentName = onlineMode
         ? getOnlineDisplayName(localPlayer === 1 ? 2 : 1)
         : (vsAI ? 'AI BOT' : 'PLAYER 2');
