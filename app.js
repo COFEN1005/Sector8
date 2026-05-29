@@ -29,6 +29,7 @@ const ACTIONS_PER_TURN = 2;
 const KEEPALIVE_WARNING_MS = 10 * 60 * 1000;
 const DEVELOP_MODE_SEQUENCE = '12312321213';
 const ALL_ABILITY_OPTIONS = ['千里眼', '鼓舞', '足跡', '歴戦王', '戦姫', '爆破', '暗殺者', '盲目', '衛生兵', '監視', '迷彩'];
+const USERNAME_STORAGE_KEY = 'sector8_username';
 
 function getPortalDestination(mapName, r, c) {
     if (!PORTAL_COLS.includes(c)) return null;
@@ -174,6 +175,8 @@ let matchmakingRole = null; // 'host' or 'guest'
 let matchRoomId = null;
 let onlineAbilityChoices = { 1: null, 2: null };
 let onlineReadyState = { 1: false, 2: false };
+let localUsername = '';
+let onlineUsernames = { 1: null, 2: null };
 
 function detectDeviceProfile() {
     const coarsePointer = window.matchMedia('(pointer: coarse)').matches;
@@ -187,6 +190,49 @@ function applyDeviceProfile() {
     document.body.classList.toggle('device-mobile', profile === 'mobile');
     document.body.classList.toggle('device-pc', profile === 'pc');
     document.body.dataset.device = profile;
+}
+
+function sanitizeUsername(name) {
+    return (name || '').trim().replace(/\s+/g, ' ').slice(0, 20);
+}
+
+function getDefaultUsername() {
+    return 'Commander';
+}
+
+function loadSavedUsername() {
+    try {
+        localUsername = sanitizeUsername(window.localStorage.getItem(USERNAME_STORAGE_KEY)) || getDefaultUsername();
+    } catch {
+        localUsername = getDefaultUsername();
+    }
+}
+
+function updateUsernameUI() {
+    const input = document.getElementById('username-input');
+    const saved = document.getElementById('username-saved');
+    if (input) input.value = localUsername;
+    if (saved) saved.textContent = `現在: ${localUsername}`;
+}
+
+function saveUsername(notify = true) {
+    const input = document.getElementById('username-input');
+    const nextName = sanitizeUsername(input?.value) || getDefaultUsername();
+    localUsername = nextName;
+    try {
+        window.localStorage.setItem(USERNAME_STORAGE_KEY, localUsername);
+    } catch {}
+    updateUsernameUI();
+    updateUI();
+    if (onlineMode && localPlayer) {
+        onlineUsernames[localPlayer] = localUsername;
+        sendOnlineMessage({ kind: 'profile', username: localUsername });
+    }
+    if (notify) showStatusAlert(`ユーザー名を保存しました: ${localUsername}`, 'system', 2500);
+}
+
+function getOnlineDisplayName(player) {
+    return onlineUsernames[player] || `P${player}`;
 }
 
 function getViewerPlayer() {
@@ -351,12 +397,14 @@ class Unit {
 // --- INITIALIZATION ---
 document.addEventListener('DOMContentLoaded', () => {
     applyDeviceProfile();
+    loadSavedUsername();
     syncAbilitySelectOptions();
     setupUIEventListeners();
     setupMapTabs();
     setupGameModeTabs();
     setupOnlineMode();
     updateModeVisibility();
+    updateUsernameUI();
     addConsoleLog("SYSTEM READY. SELECT CONFIGURATION AND PRESS 'SYSTEM INITIATE'.", 'system');
 });
 
@@ -488,6 +536,15 @@ function setupUIEventListeners() {
     if (toggleMoveSfxBtn) toggleMoveSfxBtn.addEventListener('click', toggleMoveSfx);
     const toggleBgmBtn = document.getElementById('btn-toggle-bgm');
     if (toggleBgmBtn) toggleBgmBtn.addEventListener('click', toggleBgm);
+    const saveUsernameBtn = document.getElementById('btn-save-username');
+    if (saveUsernameBtn) saveUsernameBtn.addEventListener('click', () => saveUsername());
+    const usernameInput = document.getElementById('username-input');
+    if (usernameInput) {
+        usernameInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') saveUsername();
+        });
+        usernameInput.addEventListener('blur', () => saveUsername(false));
+    }
     const sfxVolumeSlider = document.getElementById('sfx-volume');
     if (sfxVolumeSlider) sfxVolumeSlider.addEventListener('input', handleSfxVolumeChange);
     const bgmVolumeSlider = document.getElementById('bgm-volume');
@@ -566,6 +623,7 @@ function showMatchmakingPanel() {
     setGameMode('online');
     document.getElementById('matchmaking-panel').classList.remove('hidden');
     document.getElementById('setup-local-panel').classList.add('hidden');
+    updateUsernameUI();
     // highlight online tab
     document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active'));
     const tabOnline = document.getElementById('tab-mode-online');
@@ -588,6 +646,7 @@ function hostRoom() {
     localPlayer = 1;
     onlineAbilityChoices = { 1: getOnlineAbilityChoice(), 2: null };
     onlineReadyState = { 1: false, 2: false };
+    onlineUsernames = { 1: localUsername, 2: null };
     onlineMode = true;
     setGameMode('online');
     updateReadyButton();
@@ -606,6 +665,7 @@ function joinRoom() {
     localPlayer = 2;
     onlineAbilityChoices = { 1: null, 2: getOnlineAbilityChoice() };
     onlineReadyState = { 1: false, 2: false };
+    onlineUsernames = { 1: null, 2: localUsername };
     onlineMode = true;
     setGameMode('online');
     updateReadyButton();
@@ -621,6 +681,7 @@ function cancelMatchmaking() {
     matchRoomId = null;
     onlineAbilityChoices = { 1: null, 2: null };
     onlineReadyState = { 1: false, 2: false };
+    onlineUsernames = { 1: null, 2: null };
     syncAbilitySelectOptions();
     setDevelopModeEnabled(developModeEnabled);
     showLocalPanel();
@@ -636,7 +697,7 @@ function setupOnlineMode() {
     setGameMode('online');
     vsAI = false;
     setOpponent(false);
-    document.getElementById('current-player-name').textContent = `PLAYER ${localPlayer || '?'} CONNECTING`;
+    document.getElementById('current-player-name').textContent = `${localUsername} CONNECTING`;
     if (localPlayer === 2) {
         document.getElementById('btn-start-game').disabled = true;
         document.getElementById('btn-start-game').textContent = 'WAITING FOR PLAYER 1';
@@ -667,11 +728,13 @@ function connectOnlineSocket(roomId, player) {
     onlineSocket = new WebSocket(`${protocol}//${window.location.host}/ws?player=${player}${roomParam}`);
 
     onlineSocket.addEventListener('open', () => {
-        addConsoleLog(`ONLINE: Player ${player} として接続しました。`, 'system');
-        addConnectionLog(`Player ${player} として接続しました。`);
+        addConsoleLog(`ONLINE: ${localUsername} として接続しました。`, 'system');
+        addConnectionLog(`${localUsername} (P${player}) として接続しました。`);
         onlineAbilityChoices[player] = getOnlineAbilityChoice();
         onlineReadyState[player] = false;
+        onlineUsernames[player] = localUsername;
         updateReadyButton();
+        sendOnlineMessage({ kind: 'profile', username: localUsername });
         sendOnlineMessage({ kind: 'ability_choice', ability: onlineAbilityChoices[player] });
     });
 
@@ -694,7 +757,8 @@ function connectOnlineSocket(roomId, player) {
 function handleOnlineMessage(message) {
     if (message.kind === 'hello') {
         localPlayer = message.player;
-        addConsoleLog(`ONLINE: あなたは Player ${localPlayer} です。`, 'system');
+        onlineUsernames[localPlayer] = localUsername;
+        addConsoleLog(`ONLINE: あなたは ${localUsername} / Player ${localPlayer} です。`, 'system');
         updateUI();
         return;
     }
@@ -710,6 +774,13 @@ function handleOnlineMessage(message) {
     }
 
     if (message.player === localPlayer) return;
+
+    if (message.kind === 'profile') {
+        onlineUsernames[message.player] = sanitizeUsername(message.username) || `P${message.player}`;
+        addConnectionLog(`${getOnlineDisplayName(message.player)} (P${message.player}) が参加しました。`);
+        updateUI();
+        return;
+    }
 
     if (message.kind === 'ability_choice') {
         onlineAbilityChoices[message.player] = message.ability;
@@ -735,7 +806,7 @@ function handleOnlineMessage(message) {
     }
 
     if (message.kind === 'chat') {
-        addChatMessage(`P${message.player}`, message.text);
+        addChatMessage(getOnlineDisplayName(message.player), message.text);
         return;
     }
 
@@ -819,7 +890,7 @@ function sendChatMessage() {
     const input = document.getElementById('chat-input');
     const text = input?.value.trim();
     if (!text) return;
-    addChatMessage('YOU', text);
+    addChatMessage(localUsername, text);
     sendOnlineMessage({ kind: 'chat', text });
     input.value = '';
 }
@@ -2271,8 +2342,9 @@ function showTurnBanner() {
         document.body.appendChild(banner);
     }
     const isMine = !onlineMode || localPlayer === currentPlayer;
+    const bannerName = onlineMode ? getOnlineDisplayName(currentPlayer) : `PLAYER ${currentPlayer}`;
     banner.className = `turn-banner player-${currentPlayer} show`;
-    banner.textContent = `TURN ${gameTurn} / PLAYER ${currentPlayer} / ${actionsThisTurn}/${ACTIONS_PER_TURN}${onlineMode ? (isMine ? ' - YOUR TURN' : ' - OPPONENT') : ''}`;
+    banner.textContent = `TURN ${gameTurn} / ${bannerName} / ${actionsThisTurn}/${ACTIONS_PER_TURN}${onlineMode ? (isMine ? ' - YOUR TURN' : ' - OPPONENT') : ''}`;
     window.clearTimeout(showTurnBanner.timer);
     showTurnBanner.timer = window.setTimeout(() => banner.classList.remove('show'), 1500);
 }
@@ -2373,17 +2445,18 @@ function updateUI() {
 
     const playerNameEl = document.getElementById('current-player-name');
     const playerDotEl = document.querySelector('.indicator-dot');
+    const currentTurnName = onlineMode ? getOnlineDisplayName(currentPlayer) : `PLAYER ${currentPlayer}`;
 
     if (currentPlayer === 1) {
         playerNameEl.textContent = onlineMode
-            ? `PLAYER 1 (BLUE)${localPlayer === 1 ? ` - YOUR TURN ${actionsThisTurn}/${ACTIONS_PER_TURN}` : ' - OPPONENT TURN'}`
+            ? `${currentTurnName} (P1)${localPlayer === 1 ? ` - YOUR TURN ${actionsThisTurn}/${ACTIONS_PER_TURN}` : ' - OPPONENT TURN'}`
             : 'PLAYER 1 (BLUE)';
         playerNameEl.className = 'text-cyan';
         playerDotEl.style.backgroundColor = 'var(--neon-cyan)';
         playerDotEl.style.boxShadow = '0 0 10px var(--neon-cyan)';
     } else {
         playerNameEl.textContent = onlineMode
-            ? `PLAYER 2 (RED)${localPlayer === 2 ? ` - YOUR TURN ${actionsThisTurn}/${ACTIONS_PER_TURN}` : ' - OPPONENT TURN'}`
+            ? `${currentTurnName} (P2)${localPlayer === 2 ? ` - YOUR TURN ${actionsThisTurn}/${ACTIONS_PER_TURN}` : ' - OPPONENT TURN'}`
             : (vsAI ? `AI BOT (RED) ${actionsThisTurn}/${ACTIONS_PER_TURN}` : 'PLAYER 2 (RED)');
         playerNameEl.className = 'text-magenta';
         playerDotEl.style.backgroundColor = 'var(--neon-magenta)';

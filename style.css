@@ -92,6 +92,29 @@ header {
     cursor: pointer;
 }
 
+.username-group {
+    margin-bottom: 0.9rem;
+}
+
+.username-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.username-input {
+    width: 100%;
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+.username-saved {
+    margin-top: 0.35rem;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
 .logo {
     display: flex;
     flex-direction: column;
