@@ -240,6 +240,37 @@ header {
     font-weight: 700;
 }
 
+.account-summary-copy-row {
+    align-items: center;
+}
+
+.account-summary-value {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    min-width: 0;
+    justify-content: flex-end;
+}
+
+.mini-tool-btn {
+    padding: 0.28rem 0.5rem;
+    border-radius: 999px;
+    border: 1px solid rgba(0, 240, 255, 0.28);
+    background: rgba(0, 240, 255, 0.08);
+    color: var(--neon-cyan);
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.mini-tool-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
 .account-status {
     margin-top: 0.65rem;
     font-family: var(--font-mono);

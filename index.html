@@ -34,6 +34,7 @@
                                 <li>PLAYER ACCOUNT の入力案内を追加</li>
                                 <li>アカウント入力欄を広くして見やすく調整</li>
                                 <li>REGISTER / LOGIN / LOGOUT の結果が画面に出るよう改善</li>
+                                <li>PLAYER ID と FRIEND CODE をコピーできるように変更</li>
                             </ul>
                         </details>
                         <details class="news-item" open>
@@ -274,8 +275,20 @@
                             <button id="btn-account-logout" class="small-tool-btn" type="button" title="ログアウトします">LOGOUT</button>
                         </div>
                         <div class="account-summary">
-                            <div class="account-summary-row"><span>PLAYER ID</span><strong id="account-player-id">--------</strong></div>
-                            <div class="account-summary-row"><span>FRIEND CODE</span><strong id="account-friend-code">--- --- ---</strong></div>
+                            <div class="account-summary-row account-summary-copy-row">
+                                <span>PLAYER ID</span>
+                                <div class="account-summary-value">
+                                    <strong id="account-player-id">--------</strong>
+                                    <button id="btn-copy-player-id" class="mini-tool-btn" type="button" title="PLAYER ID をコピー">COPY</button>
+                                </div>
+                            </div>
+                            <div class="account-summary-row account-summary-copy-row">
+                                <span>FRIEND CODE</span>
+                                <div class="account-summary-value">
+                                    <strong id="account-friend-code">--- --- ---</strong>
+                                    <button id="btn-copy-friend-code" class="mini-tool-btn" type="button" title="FRIEND CODE をコピー">COPY</button>
+                                </div>
+                            </div>
                             <div class="account-summary-row"><span>LEVEL</span><strong id="account-level">LV -</strong></div>
                             <div class="account-summary-row"><span>EXP</span><strong id="account-exp">0/100</strong></div>
                             <div class="account-summary-row"><span>RATING</span><strong id="account-rating">-</strong></div>

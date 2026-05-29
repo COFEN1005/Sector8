@@ -369,6 +369,8 @@ function updateAccountUI() {
     const levelEl = document.getElementById('account-level');
     const ratingEl = document.getElementById('account-rating');
     const expEl = document.getElementById('account-exp');
+    const copyPlayerIdBtn = document.getElementById('btn-copy-player-id');
+    const copyFriendCodeBtn = document.getElementById('btn-copy-friend-code');
     const loginBtn = document.getElementById('btn-account-login');
     const registerBtn = document.getElementById('btn-account-register');
     const logoutBtn = document.getElementById('btn-account-logout');
@@ -386,6 +388,8 @@ function updateAccountUI() {
     if (levelEl) levelEl.textContent = loggedIn ? `LV ${authProfile.level}` : 'LV -';
     if (ratingEl) ratingEl.textContent = loggedIn ? String(authProfile.rating) : '-';
     if (expEl) expEl.textContent = loggedIn ? `${authProfile.exp}/100` : '0/100';
+    if (copyPlayerIdBtn) copyPlayerIdBtn.disabled = !loggedIn;
+    if (copyFriendCodeBtn) copyFriendCodeBtn.disabled = !loggedIn;
     if (loginBtn) loginBtn.disabled = !document.getElementById('account-player-id-input')?.value || !document.getElementById('account-pin-input')?.value;
     if (registerBtn) registerBtn.disabled = !document.getElementById('account-pin-input')?.value;
     if (logoutBtn) logoutBtn.disabled = !loggedIn;
@@ -412,6 +416,40 @@ function getAccountErrorMessage(error, fallback) {
             return '保存されたログイン情報が見つかりません。';
         default:
             return fallback || '処理に失敗しました。';
+    }
+}
+
+async function copyTextToClipboard(text) {
+    const value = String(text || '').trim();
+    if (!value) return false;
+    if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(value);
+        return true;
+    }
+    const temp = document.createElement('textarea');
+    temp.value = value;
+    temp.setAttribute('readonly', 'readonly');
+    temp.style.position = 'fixed';
+    temp.style.opacity = '0';
+    document.body.appendChild(temp);
+    temp.select();
+    const ok = document.execCommand('copy');
+    temp.remove();
+    return ok;
+}
+
+async function copyAccountIdentifier(kind) {
+    if (!authSession?.token || !authProfile) {
+        showStatusAlert('先にログインしてください。', 'warning', 3000);
+        return;
+    }
+    const value = kind === 'friendCode' ? formatFriendCodeDisplay(authProfile.friendCode) : authProfile.playerId;
+    try {
+        const ok = await copyTextToClipboard(value);
+        if (!ok) throw new Error('copy_failed');
+        showStatusAlert(kind === 'friendCode' ? 'FRIEND CODE をコピーしました。' : 'PLAYER ID をコピーしました。', 'success', 2500);
+    } catch {
+        showStatusAlert('コピーに失敗しました。', 'warning', 3000);
     }
 }
 
@@ -927,6 +965,10 @@ function setupUIEventListeners() {
             showStatusAlert(message, 'warning', 4000);
         }
     });
+    const copyPlayerIdBtn = document.getElementById('btn-copy-player-id');
+    if (copyPlayerIdBtn) copyPlayerIdBtn.addEventListener('click', () => copyAccountIdentifier('playerId'));
+    const copyFriendCodeBtn = document.getElementById('btn-copy-friend-code');
+    if (copyFriendCodeBtn) copyFriendCodeBtn.addEventListener('click', () => copyAccountIdentifier('friendCode'));
     const accountPlayerIdInput = document.getElementById('account-player-id-input');
     if (accountPlayerIdInput) {
         accountPlayerIdInput.addEventListener('input', () => {
