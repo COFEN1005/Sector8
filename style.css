@@ -1672,6 +1672,43 @@ body.opponent-turn #turn-indicator {
     animation: statusPulse 1.5s ease-in-out infinite;
 }
 
+.match-status.searching {
+    color: var(--neon-cyan);
+}
+
+.match-status.success {
+    color: var(--neon-green);
+}
+
+.match-players {
+    min-height: 1.4rem;
+    padding: 0.35rem 0.6rem;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 6px;
+    background: rgba(255,255,255,0.03);
+    color: var(--text-main);
+    text-align: center;
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+}
+
+.patch-badge {
+    position: fixed;
+    left: 1rem;
+    bottom: 1rem;
+    z-index: 2200;
+    padding: 0.45rem 0.7rem;
+    border: 1px solid rgba(0, 240, 255, 0.32);
+    border-radius: 6px;
+    background: rgba(8, 10, 18, 0.82);
+    color: var(--neon-cyan);
+    font-family: var(--font-mono);
+    font-size: 0.76rem;
+    letter-spacing: 0;
+    box-shadow: 0 0 14px rgba(0, 240, 255, 0.18);
+    pointer-events: none;
+}
+
 @keyframes statusPulse {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.6; }

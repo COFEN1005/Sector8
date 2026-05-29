@@ -95,6 +95,18 @@ function isMoveDestinationBlockedByFriendly(unit, destRow, destCol) {
     );
 }
 
+function isOccupantVisibleToPlayer(occupant, viewerPlayer, mapName) {
+    if (!occupant) return false;
+    if (occupant.player === viewerPlayer) return true;
+    const vision = viewerPlayer === 1 ? p1Vision : p2Vision;
+    return isUnitVisibleToViewer(occupant, viewerPlayer, vision[mapName]);
+}
+
+function shouldIgnoreOccupantForPreview(unit, occupant, mapName, options = {}) {
+    if (!options.hideUnseenEnemies || !occupant || occupant.player === unit.player) return false;
+    return !isOccupantVisibleToPlayer(occupant, unit.player, mapName);
+}
+
 // --- GAME STATE ---
 let boards = { area1: [], area2: [], area3: [] };
 let units = [];
@@ -185,6 +197,7 @@ let onlineAbilityChoices = { 1: null, 2: null };
 let onlineReadyState = { 1: false, 2: false };
 let localUsername = '';
 let onlineUsernames = { 1: null, 2: null };
+let randomMatchAutoStarted = false;
 
 function detectDeviceProfile() {
     const coarsePointer = window.matchMedia('(pointer: coarse)').matches;
@@ -202,6 +215,21 @@ function applyDeviceProfile() {
 
 function sanitizeUsername(name) {
     return (name || '').trim().replace(/\s+/g, ' ').slice(0, 20);
+}
+
+function loadSavedOnlineSession() {
+    try {
+        const raw = window.localStorage.getItem(ONLINE_SESSION_STORAGE_KEY);
+        if (!raw) return;
+        const saved = JSON.parse(raw);
+        if (!saved?.token || !saved?.roomId) return;
+        onlineSession = saved;
+        onlineMode = true;
+        localPlayer = saved.player || null;
+        matchRoomId = saved.roomId;
+        spectatorMode = saved.role === 'spectator';
+        matchmakingRole = saved.randomRoom ? 'random' : 'resume';
+    } catch {}
 }
 
 function getDefaultUsername() {
@@ -232,6 +260,7 @@ function saveUsername(notify = true) {
     } catch {}
     updateUsernameUI();
     updateUI();
+    updateMatchmakingPlayerSummary();
     if (onlineMode && localPlayer) {
         onlineUsernames[localPlayer] = localUsername;
         sendOnlineMessage({ kind: 'profile', username: localUsername });
@@ -282,6 +311,7 @@ class Unit {
         this.warPrincessTeiPromoted = false;
         this.warPrincessHeiPromoted = false;
         this.camouflaged = false;
+        this.veteranMomentumPenalty = false;
 
         this.configureTypeStats(type);
     }
@@ -380,6 +410,7 @@ class Unit {
             if (ability === '暗殺者') { return 5; }
             if (ability === '盲目') { return 5; }
             if (ability === '監視') { return 1; }
+            if (ability === '歴戦王' && this.veteranMomentumPenalty) r -= 1;
         }
         r -= getMonitorPenalty(this);
         if (this.inspirationTurns > 0) r += 1;
@@ -422,6 +453,7 @@ class Unit {
 document.addEventListener('DOMContentLoaded', () => {
     applyDeviceProfile();
     loadSavedUsername();
+    loadSavedOnlineSession();
     syncAbilitySelectOptions();
     setupUIEventListeners();
     setupMapTabs();
@@ -602,7 +634,7 @@ function setupGameModeTabs() {
     const btnCancelMatch = document.getElementById('btn-cancel-match');
     if (btnCancelMatch) btnCancelMatch.addEventListener('click', cancelMatchmaking);
     const btnRandomMatch = document.getElementById('btn-random-match');
-    if (btnRandomMatch) btnRandomMatch.addEventListener('click', startRandomMatch);
+    if (btnRandomMatch) btnRandomMatch.addEventListener('click', prepareRandomMatch);
 }
 
 function switchActiveMap(mapName) {
@@ -654,6 +686,7 @@ function showMatchmakingPanel() {
     document.getElementById('matchmaking-panel').classList.remove('hidden');
     document.getElementById('setup-local-panel').classList.add('hidden');
     updateUsernameUI();
+    updateMatchmakingPlayerSummary();
     // highlight online tab
     document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active'));
     const tabOnline = document.getElementById('tab-mode-online');
@@ -671,7 +704,7 @@ function hostRoom() {
     manualDisconnect = false;
     const roomId = Math.random().toString(36).substr(2, 6).toUpperCase();
     document.getElementById('room-id-display').textContent = roomId;
-    document.getElementById('matchmaking-status').textContent = '対戦相手の接続を待っています...';
+    setMatchmakingStatus('対戦相手の接続を待っています...');
     document.getElementById('room-share-area').classList.remove('hidden');
     matchRoomId = roomId;
     matchmakingRole = 'host';
@@ -679,10 +712,12 @@ function hostRoom() {
     onlineAbilityChoices = { 1: getOnlineAbilityChoice(), 2: null };
     onlineReadyState = { 1: false, 2: false };
     onlineUsernames = { 1: localUsername, 2: null };
+    randomMatchAutoStarted = false;
     onlineMode = true;
     spectatorMode = false;
     setGameMode('online');
     updateReadyButton();
+    updateMatchmakingPlayerSummary();
     connectOnlineSocket({ roomId, player: 1 });
 }
 
@@ -700,27 +735,41 @@ function joinRoom() {
     onlineAbilityChoices = { 1: null, 2: getOnlineAbilityChoice() };
     onlineReadyState = { 1: false, 2: false };
     onlineUsernames = { 1: null, 2: localUsername };
+    randomMatchAutoStarted = false;
     onlineMode = true;
     spectatorMode = false;
     setGameMode('online');
     updateReadyButton();
-    document.getElementById('matchmaking-status').textContent = `ルーム ${roomId} に接続中...`;
+    setMatchmakingStatus(`ルーム ${roomId} に接続中...`);
+    updateMatchmakingPlayerSummary();
     connectOnlineSocket({ roomId, player: 2 });
 }
 
-function startRandomMatch() {
+function prepareRandomMatch() {
     manualDisconnect = false;
     matchmakingRole = 'random';
     localPlayer = null;
     onlineAbilityChoices = { 1: null, 2: null };
     onlineReadyState = { 1: false, 2: false };
     onlineUsernames = { 1: null, 2: null };
+    randomMatchAutoStarted = false;
     onlineMode = true;
     spectatorMode = false;
     setGameMode('online');
-    updateReadyButton();
     document.getElementById('room-share-area').classList.add('hidden');
-    document.getElementById('matchmaking-status').textContent = 'ランダムマッチ相手を探しています...';
+    setMatchmakingStatus('ランダムマッチの準備完了を押すと接続します。');
+    updateMatchmakingPlayerSummary();
+    updateReadyButton();
+}
+
+function startRandomMatch() {
+    if (onlineSocket && onlineSocket.readyState === WebSocket.OPEN) return;
+    onlineAbilityChoices = { 1: null, 2: null };
+    onlineReadyState = { 1: false, 2: false };
+    onlineUsernames = { 1: null, 2: null };
+    randomMatchAutoStarted = false;
+    setMatchmakingStatus('準備完了を登録しました。ランダムマッチング中...', 'searching');
+    updateMatchmakingPlayerSummary();
     connectOnlineSocket({ random: true });
 }
 
@@ -735,10 +784,12 @@ function cancelMatchmaking() {
     onlineAbilityChoices = { 1: null, 2: null };
     onlineReadyState = { 1: false, 2: false };
     onlineUsernames = { 1: null, 2: null };
+    randomMatchAutoStarted = false;
     syncAbilitySelectOptions();
     setDevelopModeEnabled(developModeEnabled);
     showLocalPanel();
-    document.getElementById('matchmaking-status').textContent = '';
+    setMatchmakingStatus('');
+    updateMatchmakingPlayerSummary();
     document.getElementById('room-share-area').classList.add('hidden');
     document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active'));
     document.getElementById('tab-mode-local').classList.add('active');
@@ -753,6 +804,17 @@ function setupOnlineMode() {
     vsAI = false;
     setOpponent(false);
     document.getElementById('current-player-name').textContent = `${localUsername} CONNECTING`;
+    updateMatchmakingPlayerSummary();
+    if (onlineSession?.token) {
+        showMatchmakingPanel();
+        setMatchmakingStatus('前回の対局に再接続しています...');
+        connectOnlineSocket({
+            roomId: onlineSession.roomId,
+            player: onlineSession.player,
+            reconnectToken: onlineSession.token
+        });
+        return;
+    }
     if (localPlayer === 2) {
         document.getElementById('btn-start-game').disabled = true;
         document.getElementById('btn-start-game').textContent = 'WAITING FOR PLAYER 1';
@@ -771,9 +833,9 @@ async function copyRoomCode() {
     if (!roomText || roomText === '------') return;
     try {
         await navigator.clipboard.writeText(roomText);
-        document.getElementById('matchmaking-status').textContent = 'ルームIDをコピーしました。';
+        setMatchmakingStatus('ルームIDをコピーしました。');
     } catch {
-        document.getElementById('matchmaking-status').textContent = `ルームID: ${roomText}`;
+        setMatchmakingStatus(`ルームID: ${roomText}`);
     }
 }
 
@@ -790,6 +852,53 @@ function scheduleReconnect() {
     }, 1800);
 }
 
+function isRandomMatchRoom() {
+    return Boolean(onlineSession?.randomRoom || (matchRoomId && matchRoomId.startsWith('RANDOM-')));
+}
+
+function setMatchmakingStatus(text, tone = '') {
+    const statusEl = document.getElementById('matchmaking-status');
+    if (!statusEl) return;
+    statusEl.textContent = text;
+    statusEl.className = `match-status${tone ? ` ${tone}` : ''}`;
+}
+
+function updateMatchmakingPlayerSummary() {
+    const summaryEl = document.getElementById('matchmaking-players');
+    if (!summaryEl) return;
+    if (!onlineMode) {
+        summaryEl.textContent = '';
+        return;
+    }
+    if (onlineUsernames[1] && onlineUsernames[2]) {
+        summaryEl.textContent = `${getOnlineDisplayName(1)} VS ${getOnlineDisplayName(2)}`;
+        return;
+    }
+    if (isRandomMatchRoom()) {
+        summaryEl.textContent = `${localUsername || 'Commander'} / MATCHING...`;
+        return;
+    }
+    if (matchRoomId) {
+        summaryEl.textContent = `${localUsername || 'Commander'} / ROOM ${matchRoomId}`;
+        return;
+    }
+    summaryEl.textContent = localUsername || 'Commander';
+}
+
+function maybeAutoStartRandomMatch() {
+    if (!onlineMode || !isRandomMatchRoom() || activePhase !== 'setup') return;
+    const ready = Boolean(onlineAbilityChoices[1] && onlineAbilityChoices[2] && onlineReadyState[1] && onlineReadyState[2]);
+    if (!ready) return;
+    updateMatchmakingPlayerSummary();
+    setMatchmakingStatus(`${getOnlineDisplayName(1)} と ${getOnlineDisplayName(2)} のマッチが成立しました。`, 'success');
+    if (localPlayer === 1 && !randomMatchAutoStarted) {
+        randomMatchAutoStarted = true;
+        window.setTimeout(() => {
+            if (onlineMode && isRandomMatchRoom() && activePhase === 'setup') startGame();
+        }, 900);
+    }
+}
+
 function connectOnlineSocket({ roomId = null, player = null, random = false, reconnectToken = null } = {}) {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const roomParam = roomId ? `&room=${encodeURIComponent(roomId)}` : '';
@@ -804,12 +913,16 @@ function connectOnlineSocket({ roomId = null, player = null, random = false, rec
         addConnectionLog(`${localUsername} として接続しました。`);
         if (player) {
             onlineAbilityChoices[player] = getOnlineAbilityChoice();
-            onlineReadyState[player] = false;
+            onlineReadyState[player] = matchmakingRole === 'random';
             onlineUsernames[player] = localUsername;
         }
         updateReadyButton();
+        updateMatchmakingPlayerSummary();
         sendOnlineMessage({ kind: 'profile', username: localUsername });
-        if (player) sendOnlineMessage({ kind: 'ability_choice', ability: onlineAbilityChoices[player] });
+        if (player) {
+            sendOnlineMessage({ kind: 'ability_choice', ability: onlineAbilityChoices[player] });
+            if (onlineReadyState[player]) sendOnlineMessage({ kind: 'ready_state', ready: true });
+        }
     });
 
     onlineSocket.addEventListener('message', (event) => {
@@ -839,7 +952,8 @@ function handleOnlineMessage(message) {
             roomId: message.roomId || matchRoomId,
             token: message.reconnectToken || onlineSession?.token,
             player: message.player || null,
-            role: message.role || 'player'
+            role: message.role || 'player',
+            randomRoom: Boolean(message.randomRoom)
         };
         saveOnlineSession();
         if (message.profiles) {
@@ -849,9 +963,13 @@ function handleOnlineMessage(message) {
         if (localPlayer) onlineUsernames[localPlayer] = localUsername;
         if (localPlayer && onlineSocket?.readyState === WebSocket.OPEN) {
             onlineAbilityChoices[localPlayer] = getOnlineAbilityChoice();
+            if (matchmakingRole === 'random') onlineReadyState[localPlayer] = true;
             sendOnlineMessage({ kind: 'profile', username: localUsername });
             sendOnlineMessage({ kind: 'ability_choice', ability: onlineAbilityChoices[localPlayer] });
+            if (onlineReadyState[localPlayer]) sendOnlineMessage({ kind: 'ready_state', ready: true });
         }
+        updateMatchmakingPlayerSummary();
+        if (isRandomMatchRoom()) setMatchmakingStatus('マッチング中...', 'searching');
         if (message.snapshot?.started && activePhase !== 'battle') {
             startGame(message.snapshot.config, true);
             applyingRemoteAction = true;
@@ -866,18 +984,29 @@ function handleOnlineMessage(message) {
         }
         addConsoleLog(`ONLINE: あなたは ${spectatorMode ? `観戦者 ${localUsername}` : `${localUsername} / Player ${localPlayer}` } です。`, 'system');
         updateUI();
+        maybeAutoStartRandomMatch();
         return;
     }
 
     if (message.kind === 'player_joined') {
         addConsoleLog(`ONLINE: 対戦相手が接続しました！`, 'system');
         addConnectionLog('対戦相手が接続しました。');
-        document.getElementById('matchmaking-status').textContent = '対戦相手が接続しました。準備完了を押してください。';
+        setMatchmakingStatus(
+            isRandomMatchRoom()
+                ? '対戦相手を確保しました。名前を同期しています...'
+                : '対戦相手が接続しました。準備完了を押してください。'
+        );
         if (localPlayer) {
             onlineAbilityChoices[localPlayer] = getOnlineAbilityChoice();
             sendOnlineMessage({ kind: 'ability_choice', ability: onlineAbilityChoices[localPlayer] });
+            if (matchmakingRole === 'random') {
+                onlineReadyState[localPlayer] = true;
+                sendOnlineMessage({ kind: 'ready_state', ready: true });
+            }
         }
+        updateMatchmakingPlayerSummary();
         updateOnlineStartAvailability();
+        maybeAutoStartRandomMatch();
         return;
     }
 
@@ -886,30 +1015,43 @@ function handleOnlineMessage(message) {
     if (message.kind === 'profile') {
         onlineUsernames[message.player] = sanitizeUsername(message.username) || `P${message.player}`;
         addConnectionLog(`${getOnlineDisplayName(message.player)} (P${message.player}) が参加しました。`);
+        updateMatchmakingPlayerSummary();
+        maybeAutoStartRandomMatch();
         updateUI();
         return;
     }
 
     if (message.kind === 'ability_choice') {
         onlineAbilityChoices[message.player] = message.ability;
-        document.getElementById('matchmaking-status').textContent =
-            '相手の甲アビリティ選択を受信しました。内容はゲーム開始まで非表示です。';
+        setMatchmakingStatus(
+            isRandomMatchRoom()
+                ? '相手の準備情報を受信しました。マッチ確定を待っています...'
+                : '相手の甲アビリティ選択を受信しました。内容はゲーム開始まで非表示です。'
+        );
         sendOnlineMessage({ kind: 'ability_ack', ability: getOnlineAbilityChoice() });
         updateOnlineStartAvailability();
+        maybeAutoStartRandomMatch();
         return;
     }
 
     if (message.kind === 'ability_ack') {
         onlineAbilityChoices[message.player] = message.ability;
         updateOnlineStartAvailability();
+        maybeAutoStartRandomMatch();
         return;
     }
 
     if (message.kind === 'ready_state') {
         onlineReadyState[message.player] = Boolean(message.ready);
-        document.getElementById('matchmaking-status').textContent =
-            message.ready ? '相手が準備完了しました。' : '相手が準備を解除しました。';
+        setMatchmakingStatus(
+            isRandomMatchRoom()
+                ? (message.ready ? 'マッチング中...' : '相手がキューを離れました。')
+                : (message.ready ? '相手が準備完了しました。' : '相手が準備を解除しました。'),
+            isRandomMatchRoom() && message.ready ? 'searching' : ''
+        );
         updateOnlineStartAvailability();
+        updateMatchmakingPlayerSummary();
+        maybeAutoStartRandomMatch();
         return;
     }
 
@@ -948,27 +1090,41 @@ function updateOnlineStartAvailability() {
     const btnStart = document.getElementById('btn-start-online-match');
     if (!btnStart) return;
     const ready = Boolean(onlineAbilityChoices[1] && onlineAbilityChoices[2] && onlineReadyState[1] && onlineReadyState[2]);
-    btnStart.disabled = !(localPlayer === 1 && ready);
+    btnStart.disabled = !(localPlayer === 1 && ready) || isRandomMatchRoom();
     if (localPlayer === 1) {
-        btnStart.textContent = ready ? 'ONLINE MATCH START' : 'WAITING FOR READY';
+        btnStart.textContent = isRandomMatchRoom() ? 'AUTO START' : (ready ? 'ONLINE MATCH START' : 'WAITING FOR READY');
     }
 }
 
 function updateReadyButton() {
     const readyBtn = document.getElementById('btn-online-ready');
     if (!readyBtn) return;
+    if (matchmakingRole === 'random' && (!onlineSocket || onlineSocket.readyState !== WebSocket.OPEN) && activePhase === 'setup') {
+        readyBtn.disabled = false;
+        readyBtn.classList.remove('ready');
+        readyBtn.textContent = '準備完了して接続';
+        return;
+    }
     readyBtn.disabled = !onlineMode || !localPlayer || !onlineSocket || onlineSocket.readyState !== WebSocket.OPEN;
     readyBtn.classList.toggle('ready', Boolean(localPlayer && onlineReadyState[localPlayer]));
-    readyBtn.textContent = localPlayer && onlineReadyState[localPlayer] ? '準備完了済み' : '準備完了';
+    readyBtn.textContent =
+        matchmakingRole === 'random' && onlineSocket && onlineSocket.readyState === WebSocket.OPEN
+            ? 'マッチング中'
+            : (localPlayer && onlineReadyState[localPlayer] ? '準備完了済み' : '準備完了');
 }
 
 function markOnlineReady() {
+    if (matchmakingRole === 'random' && (!onlineSocket || onlineSocket.readyState !== WebSocket.OPEN)) {
+        startRandomMatch();
+        return;
+    }
     if (!onlineMode || !localPlayer) return;
     onlineAbilityChoices[localPlayer] = getOnlineAbilityChoice();
     onlineReadyState[localPlayer] = true;
     sendOnlineMessage({ kind: 'ability_choice', ability: onlineAbilityChoices[localPlayer] });
     sendOnlineMessage({ kind: 'ready_state', ready: true });
-    document.getElementById('matchmaking-status').textContent = '準備完了しました。相手を待っています。';
+    setMatchmakingStatus(isRandomMatchRoom() ? 'マッチング中...' : '準備完了しました。相手を待っています。', isRandomMatchRoom() ? 'searching' : '');
+    updateMatchmakingPlayerSummary();
     updateReadyButton();
     updateOnlineStartAvailability();
 }
@@ -1259,6 +1415,16 @@ function initializeBoards() {
     });
 }
 
+function isNearTeleporter(mapName, row, col) {
+    return PORTAL_COLS.some(portalCol => {
+        const portalRows =
+            mapName === 'area1' ? [0] :
+            mapName === 'area2' ? [0, 10] :
+            [10];
+        return portalRows.some(portalRow => Math.max(Math.abs(portalRow - row), Math.abs(portalCol - col)) <= 1);
+    });
+}
+
 // --- UNIT INITIALIZATION ---
 function initializeUnits() {
     units = [];
@@ -1348,10 +1514,34 @@ function getWallCandidates(mapName) {
             if (cell.isWall || cell.isTeleport || cell.isCoreTile || cell.unit) continue;
             if (protectedWallCells.has(cellKey(mapName, r, c))) continue;
             if (isCentralReserveCell(mapName, r, c)) continue;
+            if (isNearTeleporter(mapName, r, c)) continue;
             candidates.push({ row: r, col: c });
         }
     }
     return candidates;
+}
+
+function getWallPlacementWeight(mapName, row, col) {
+    const size = MAP_SIZES[mapName];
+    const centerRow = (size.rows - 1) / 2;
+    const centerCol = (size.cols - 1) / 2;
+    const distance = Math.abs(row - centerRow) + Math.abs(col - centerCol);
+    const maxDistance = centerRow + centerCol;
+    return Math.max(1, 2 + (maxDistance - distance) * 2);
+}
+
+function pickWeightedCandidate(candidates, weightFn, rng) {
+    const weighted = candidates
+        .map(candidate => ({ candidate, weight: Math.max(0, weightFn(candidate)) }))
+        .filter(entry => entry.weight > 0);
+    const total = weighted.reduce((sum, entry) => sum + entry.weight, 0);
+    if (!weighted.length || total <= 0) return null;
+    let roll = rng() * total;
+    for (const entry of weighted) {
+        roll -= entry.weight;
+        if (roll <= 0) return entry.candidate;
+    }
+    return weighted[weighted.length - 1].candidate;
 }
 
 function isMapConnected(mapName) {
@@ -1393,18 +1583,21 @@ function generateRandomWalls(seed) {
 
 function placeSymmetricWalls(mapName, seed, mirrorMaps = []) {
     const rng = createRng(seed);
-    const size = MAP_SIZES[mapName];
     const targetMaps = [mapName, ...mirrorMaps];
     let placed = 0;
     let attempts = 0;
 
     while (placed < WALLS_PER_MAP && attempts < 1200) {
         attempts++;
-        const candidates = shuffleWithRng(getWallCandidates(mapName), rng);
-        const candidate = candidates.find(pos => {
+        const candidates = getWallCandidates(mapName).filter(pos => {
             const pair = getPointSymmetricCell(mapName, pos.row, pos.col);
             return canPlaceWallSet(targetMaps, [pos, pair]);
         });
+        const candidate = pickWeightedCandidate(
+            candidates,
+            pos => getWallPlacementWeight(mapName, pos.row, pos.col),
+            rng
+        );
         if (!candidate) break;
 
         const pair = getPointSymmetricCell(mapName, candidate.row, candidate.col);
@@ -1435,7 +1628,8 @@ function canPlaceWallSet(mapNames, cells) {
             !cell.isCoreTile &&
             !cell.unit &&
             !protectedWallCells.has(cellKey(mapName, pos.row, pos.col)) &&
-            !isCentralReserveCell(mapName, pos.row, pos.col);
+            !isCentralReserveCell(mapName, pos.row, pos.col) &&
+            !isNearTeleporter(mapName, pos.row, pos.col);
     }));
 }
 
@@ -1515,22 +1709,59 @@ function applyWarPrincessKills(unit, killCount) {
 
 function isCellWithinUnitVision(unit, mapName, row, col) {
     if (!unit || unit.map !== mapName) return false;
-    const vRange = unit.getVisionRange();
-    const dr = row - unit.row;
-    const dc = col - unit.col;
-    const distance = Math.abs(dr) + Math.abs(dc);
+    return getUnitVisionCells(unit).has(`${row},${col}`);
+}
+
+function getUnitVisionCells(unit) {
+    const visible = new Set();
+    if (!unit || !unit.map) return visible;
+
+    const mapName = unit.map;
+    const size = MAP_SIZES[mapName];
     const shape = unit.getVisionShape();
+    const range = unit.getVisionRange();
+    const originKey = `${unit.row},${unit.col}`;
+    visible.add(originKey);
 
     if (shape === 'beam') {
-        return (
-            (row === unit.row && Math.abs(dc) <= vRange) ||
-            (col === unit.col && Math.abs(dr) <= vRange)
-        );
+        const dirs = [{ r: -1, c: 0 }, { r: 1, c: 0 }, { r: 0, c: -1 }, { r: 0, c: 1 }];
+        dirs.forEach(dir => {
+            for (let step = 1; step <= range; step++) {
+                const nextRow = unit.row + dir.r * step;
+                const nextCol = unit.col + dir.c * step;
+                if (nextRow < 0 || nextRow >= size.rows || nextCol < 0 || nextCol >= size.cols) break;
+                visible.add(`${nextRow},${nextCol}`);
+                if (boards[mapName][nextRow][nextCol].isWall) break;
+            }
+        });
+        return visible;
     }
-    if (shape === 'square') {
-        return Math.max(Math.abs(dr), Math.abs(dc)) <= vRange;
+
+    const dirs = shape === 'square'
+        ? [
+            { r: -1, c: 0 }, { r: 1, c: 0 }, { r: 0, c: -1 }, { r: 0, c: 1 },
+            { r: -1, c: -1 }, { r: -1, c: 1 }, { r: 1, c: -1 }, { r: 1, c: 1 }
+        ]
+        : [{ r: -1, c: 0 }, { r: 1, c: 0 }, { r: 0, c: -1 }, { r: 0, c: 1 }];
+
+    const queue = [{ row: unit.row, col: unit.col, steps: 0 }];
+    const visited = new Set([originKey]);
+    while (queue.length > 0) {
+        const current = queue.shift();
+        if (current.steps >= range) continue;
+        dirs.forEach(dir => {
+            const nextRow = current.row + dir.r;
+            const nextCol = current.col + dir.c;
+            const key = `${nextRow},${nextCol}`;
+            if (nextRow < 0 || nextRow >= size.rows || nextCol < 0 || nextCol >= size.cols || visited.has(key)) return;
+            visited.add(key);
+            visible.add(key);
+            if (!boards[mapName][nextRow][nextCol].isWall) {
+                queue.push({ row: nextRow, col: nextCol, steps: current.steps + 1 });
+            }
+        });
     }
-    return distance <= vRange;
+    return visible;
 }
 
 function getKohUnit(player) {
@@ -1602,21 +1833,8 @@ function calculateVisibility() {
     }
 
     units.forEach(unit => {
-        const vRange = unit.getVisionRange();
-        const mapSize = MAP_SIZES[unit.map];
-        const startR = Math.max(0, unit.row - vRange);
-        const endR = Math.min(mapSize.rows - 1, unit.row + vRange);
-        const startC = Math.max(0, unit.col - vRange);
-        const endC = Math.min(mapSize.cols - 1, unit.col + vRange);
         const visionSet = unit.player === 1 ? p1Vision[unit.map] : p2Vision[unit.map];
-
-        for (let r = startR; r <= endR; r++) {
-            for (let c = startC; c <= endC; c++) {
-                if (isCellWithinUnitVision(unit, unit.map, r, c)) {
-                    visionSet.add(`${r},${c}`);
-                }
-            }
-        }
+        getUnitVisionCells(unit).forEach(coord => visionSet.add(coord));
     });
 
     if (p1ClairvoyanceDir) applyClairvoyanceSight(p1ClairvoyanceDir, p1Vision[p1ClairvoyanceDir.map]);
@@ -1650,6 +1868,7 @@ function applyClairvoyanceSight(clairObj, targetVisionSet) {
     let currR = row + dr, currC = col + dc;
     while (currR >= 0 && currR < size.rows && currC >= 0 && currC < size.cols) {
         targetVisionSet.add(`${currR},${currC}`);
+        if (boards[map][currR][currC].isWall) break;
         currR += dr; currC += dc;
     }
 }
@@ -1821,7 +2040,7 @@ function getVisionShapeLabel(shape) {
 }
 
 // --- MOVEMENT & PATHFINDING ---
-function getValidMoves(unit) {
+function getValidMoves(unit, options = {}) {
     const valid = [];
     const moveRange = unit.getMovementRange();
     const effectiveMoveType = unit.getEffectiveMoveType();
@@ -1845,18 +2064,25 @@ function getValidMoves(unit) {
                     pathCells.push({ r: unit.row + dir.r * s, c: unit.col + dir.c * s });
                 }
 
-                if (isValidPath(unit, pathCells)) {
+                if (isValidPath(unit, pathCells, options)) {
                     if (isMoveDestinationBlockedByFriendly(unit, targetR, targetC)) break;
 
                     const resolved = resolveMoveDestination(unit, targetR, targetC);
                     const hasEnemyTarget =
-                        (resolved.localOccupant && resolved.localOccupant.player !== unit.player) ||
-                        (resolved.portalDest && resolved.destOccupant && resolved.destOccupant.player !== unit.player);
+                        (resolved.localOccupant &&
+                            resolved.localOccupant.player !== unit.player &&
+                            !shouldIgnoreOccupantForPreview(unit, resolved.localOccupant, unit.map, options)) ||
+                        (resolved.portalDest &&
+                            resolved.destOccupant &&
+                            resolved.destOccupant.player !== unit.player &&
+                            !shouldIgnoreOccupantForPreview(unit, resolved.destOccupant, resolved.targetMap, options));
                     const visibleEnemyTarget = isVisibleEnemyMoveTarget(unit, resolved, targetR, targetC);
 
                     valid.push({ row: targetR, col: targetC, type: hasEnemyTarget && visibleEnemyTarget ? 'attack' : 'move' });
 
-                    if (resolved.localOccupant || resolved.portalDest) break;
+                    const localBlocked = resolved.localOccupant && !shouldIgnoreOccupantForPreview(unit, resolved.localOccupant, unit.map, options);
+                    const portalBlocked = resolved.portalDest && resolved.destOccupant && !shouldIgnoreOccupantForPreview(unit, resolved.destOccupant, resolved.targetMap, options);
+                    if (localBlocked || portalBlocked || resolved.portalDest) break;
                 } else {
                     break;
                 }
@@ -1889,14 +2115,21 @@ function getValidMoves(unit) {
 
                     const resolved = resolveMoveDestination(unit, nextR, nextC);
                     const hasEnemyTarget =
-                        (resolved.localOccupant && resolved.localOccupant.player !== unit.player) ||
-                        (resolved.portalDest && resolved.destOccupant && resolved.destOccupant.player !== unit.player);
+                        (resolved.localOccupant &&
+                            resolved.localOccupant.player !== unit.player &&
+                            !shouldIgnoreOccupantForPreview(unit, resolved.localOccupant, unit.map, options)) ||
+                        (resolved.portalDest &&
+                            resolved.destOccupant &&
+                            resolved.destOccupant.player !== unit.player &&
+                            !shouldIgnoreOccupantForPreview(unit, resolved.destOccupant, resolved.targetMap, options));
                     const visibleEnemyTarget = isVisibleEnemyMoveTarget(unit, resolved, nextR, nextC);
 
                     if (!visited.has(key)) {
                         visited.add(key);
                         valid.push({ row: nextR, col: nextC, type: hasEnemyTarget && visibleEnemyTarget ? 'attack' : 'move' });
-                        if (!resolved.localOccupant && !resolved.portalDest) {
+                        const localBlocked = resolved.localOccupant && !shouldIgnoreOccupantForPreview(unit, resolved.localOccupant, unit.map, options);
+                        const portalBlocked = resolved.portalDest && resolved.destOccupant && !shouldIgnoreOccupantForPreview(unit, resolved.destOccupant, resolved.targetMap, options);
+                        if (!localBlocked && !portalBlocked && !resolved.portalDest) {
                             queue.push({ row: nextR, col: nextC, steps: curr.steps + 1 });
                         }
                     }
@@ -1907,7 +2140,7 @@ function getValidMoves(unit) {
     return valid;
 }
 
-function isValidPath(unit, pathCells) {
+function isValidPath(unit, pathCells, options = {}) {
     const map = unit.map;
     for (let i = 0; i < pathCells.length; i++) {
         const { r, c } = pathCells[i];
@@ -1916,6 +2149,7 @@ function isValidPath(unit, pathCells) {
         if (unit.type === 'scout' && map !== 'area2') return false;
         const occupant = boards[map][r][c].unit;
         if (occupant) {
+            if (shouldIgnoreOccupantForPreview(unit, occupant, map, options)) continue;
             if (i < pathCells.length - 1) return false;
             if (occupant.player === unit.player) return false;
         }
@@ -2079,7 +2313,7 @@ function selectActionType(type) {
     if (cellEl) cellEl.classList.add('selected');
 
     if (type === 'move') {
-        const moves = getValidMoves(selectedUnit);
+        const moves = getValidMoves(selectedUnit, { hideUnseenEnemies: true });
         moves.forEach(m => {
             const el = document.querySelector(`.cell[data-row="${m.row}"][data-col="${m.col}"]`);
             if (el) {
@@ -2176,7 +2410,8 @@ function executeMove(unit, destRow, destCol) {
         const ability = unit.player === 1 ? p1Ability : p2Ability;
         if (ability === '歴戦王') {
             unit.refreshActedAfterAction = true;
-            addConsoleLog(`ABILITY: 歴戦王 - 撃破により行動済み状態を解除。`, 'ability');
+            unit.veteranMomentumPenalty = true;
+            addConsoleLog(`ABILITY: 歴戦王 - 撃破により行動済み状態を解除。次の移動範囲は-1。`, 'ability');
         }
         if (ability === '暗殺者') {
             // Calculate move direction (from start to dest on same map; ignore portal for direction)
@@ -2403,6 +2638,7 @@ function completeUnitAction(unit) {
     unit.refreshActedAfterAction = false;
     if (!refreshActed) actedUnitIds.add(unit.id);
     else actedUnitIds.delete(unit.id);
+    if (!refreshActed) unit.veteranMomentumPenalty = false;
     actionsThisTurn++;
     cancelSelection();
     calculateVisibility();
@@ -2444,6 +2680,7 @@ function endTurn() {
     currentPlayer = currentPlayer === 1 ? 2 : 1;
     actionsThisTurn = 0;
     actedUnitIds = new Set();
+    units.forEach(u => { u.veteranMomentumPenalty = false; });
     if (currentPlayer === 1) {
         gameTurn++;
         reinforceScouts();

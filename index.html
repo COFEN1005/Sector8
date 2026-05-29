@@ -141,7 +141,7 @@
                     <div class="config-group username-group">
                         <label for="username-input">USER NAME</label>
                         <div class="username-row">
-                            <input id="username-input" class="neon-input username-input" type="text" maxlength="20" placeholder="Commander" />
+                            <input id="username-input" class="neon-input username-input" type="text" maxlength="20" placeholder="Commander" autocapitalize="none" autocomplete="nickname" spellcheck="false" />
                             <button id="btn-save-username" class="small-tool-btn" type="button">SAVE</button>
                         </div>
                         <div id="username-saved" class="username-saved">現在: Commander</div>
@@ -236,6 +236,7 @@
                         </div>
 
                         <div id="matchmaking-status" class="match-status"></div>
+                        <div id="matchmaking-players" class="match-players"></div>
 
                         <button id="btn-cancel-match" class="neon-btn danger" style="margin-top:0.8rem;">キャンセル</button>
                     </div>
@@ -314,6 +315,7 @@
         </div>
     </div>
 
+    <div class="patch-badge">PATCH ver.0.1</div>
     <script>
     // Mode tab switching helper (called from inline onclick)
     function setModeTab(mode) {
