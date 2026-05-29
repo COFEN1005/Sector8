@@ -149,9 +149,8 @@
 
                     <!-- Mode tabs -->
                     <div class="mode-tabs">
-                        <button id="tab-mode-debug" class="mode-tab active" onclick="setModeTab('debug')">DEBUG</button>
-                        <button id="tab-mode-ai" class="mode-tab" onclick="setModeTab('ai')">AI戦</button>
-                        <button id="tab-mode-local" class="mode-tab" onclick="setModeTab('local')">👥 ローカル</button>
+                        <button id="tab-mode-debug" class="mode-tab hidden" onclick="setModeTab('debug')">DEBUG</button>
+                        <button id="tab-mode-local" class="mode-tab active" onclick="setModeTab('local')">👥 オフライン</button>
                         <button id="tab-mode-online" class="mode-tab" onclick="setModeTab('online')">🌐 オンライン</button>
                     </div>
 
@@ -161,7 +160,7 @@
                             <label>OPPONENT TYPE</label>
                             <div class="toggle-group">
                                 <button id="btn-opt-ai" class="toggle-btn active">対戦AI</button>
-                                <button id="btn-opt-human" class="toggle-btn">ローカル対戦</button>
+                                <button id="btn-opt-human" class="toggle-btn">オフライン対戦</button>
                             </div>
                         </div>
 
@@ -210,6 +209,11 @@
                             <button id="btn-online-ready" class="neon-btn ready-btn" type="button" disabled>準備完了</button>
                         </div>
                         <div class="matchmaking-section">
+                            <h4 class="match-subhead">🎲 ランダムマッチ</h4>
+                            <button id="btn-random-match" class="neon-btn" style="margin-bottom:0.8rem;">ランダムに接続</button>
+                        </div>
+                        <div class="matchmaking-divider">── または ──</div>
+                        <div class="matchmaking-section">
                             <h4 class="match-subhead">🏠 ホストとして部屋を作る</h4>
                             <button id="btn-host-room" class="neon-btn" style="margin-bottom:0.8rem;">部屋を作る (P1)</button>
                             <div id="room-share-area" class="hidden">
@@ -222,8 +226,6 @@
                                 <button id="btn-start-online-match" class="neon-btn pulse" disabled onclick="startGame()">ONLINE MATCH START</button>
                             </div>
                         </div>
-
-                        <div class="matchmaking-divider">── または ──</div>
 
                         <div class="matchmaking-section">
                             <h4 class="match-subhead">🔗 ゲストとして参加する</h4>
@@ -315,6 +317,7 @@
     <script>
     // Mode tab switching helper (called from inline onclick)
     function setModeTab(mode) {
+        if (window.playUiSfx) window.playUiSfx();
         document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active'));
         document.getElementById('tab-mode-' + mode).classList.add('active');
         window.gameMode = mode;
@@ -324,7 +327,7 @@
         } else {
             document.getElementById('matchmaking-panel').classList.add('hidden');
             document.getElementById('setup-local-panel').classList.remove('hidden');
-            if (mode === 'ai' || mode === 'debug') {
+            if (mode === 'debug') {
                 document.getElementById('btn-opt-ai').click();
             } else {
                 document.getElementById('btn-opt-human').click();

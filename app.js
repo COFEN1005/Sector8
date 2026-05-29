@@ -30,6 +30,7 @@ const KEEPALIVE_WARNING_MS = 10 * 60 * 1000;
 const DEVELOP_MODE_SEQUENCE = '12312321213';
 const ALL_ABILITY_OPTIONS = ['千里眼', '鼓舞', '足跡', '歴戦王', '戦姫', '爆破', '暗殺者', '盲目', '衛生兵', '監視', '迷彩'];
 const USERNAME_STORAGE_KEY = 'sector8_username';
+const ONLINE_SESSION_STORAGE_KEY = 'sector8_online_session';
 
 function getPortalDestination(mapName, r, c) {
     if (!PORTAL_COLS.includes(c)) return null;
@@ -117,6 +118,8 @@ let moveSfxEnabled = true;
 let bgmEnabled = true;
 let moveSfx = null;
 let bgmTrack = null;
+let lobbyBgmTrack = null;
+let uiSfx = null;
 let moveSfxVolume = 0.55;
 let bgmVolume = 0.35;
 
@@ -169,6 +172,11 @@ let onlineMode = urlParams.get('online') === '1';
 let localPlayer = onlineMode ? Number(urlParams.get('player') || 0) : null;
 let onlineSocket = null;
 let applyingRemoteAction = false;
+let spectatorMode = false;
+let spectatorViewPlayer = 1;
+let reconnectTimer = null;
+let manualDisconnect = false;
+let onlineSession = null;
 // Matchmaking state
 let matchmakingMode = false;
 let matchmakingRole = null; // 'host' or 'guest'
@@ -235,11 +243,27 @@ function getOnlineDisplayName(player) {
     return onlineUsernames[player] || `P${player}`;
 }
 
+function saveOnlineSession() {
+    try {
+        if (onlineSession) window.localStorage.setItem(ONLINE_SESSION_STORAGE_KEY, JSON.stringify(onlineSession));
+        else window.localStorage.removeItem(ONLINE_SESSION_STORAGE_KEY);
+    } catch {}
+}
+
+function clearOnlineSession() {
+    onlineSession = null;
+    window.clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+    try { window.localStorage.removeItem(ONLINE_SESSION_STORAGE_KEY); } catch {}
+}
+
 function getViewerPlayer() {
+    if (spectatorMode) return spectatorViewPlayer;
     return onlineMode && localPlayer ? localPlayer : currentPlayer;
 }
 
 function canControlCurrentTurn() {
+    if (spectatorMode) return false;
     return !onlineMode || localPlayer === currentPlayer;
 }
 
@@ -469,6 +493,8 @@ function setDevelopModeEnabled(enabled) {
     syncAbilitySelectOptions();
     const badge = document.getElementById('develop-mode-badge');
     if (badge) badge.classList.toggle('hidden', !enabled);
+    const debugTab = document.getElementById('tab-mode-debug');
+    if (debugTab) debugTab.classList.toggle('hidden', !enabled);
 }
 
 function registerMapTabSequence(mapName) {
@@ -575,9 +601,12 @@ function setupGameModeTabs() {
 
     const btnCancelMatch = document.getElementById('btn-cancel-match');
     if (btnCancelMatch) btnCancelMatch.addEventListener('click', cancelMatchmaking);
+    const btnRandomMatch = document.getElementById('btn-random-match');
+    if (btnRandomMatch) btnRandomMatch.addEventListener('click', startRandomMatch);
 }
 
 function switchActiveMap(mapName) {
+    if (activeMap !== mapName) playUiSfx();
     activeMap = mapName;
     registerMapTabSequence(mapName);
     document.querySelectorAll('.map-tab').forEach(tab => {
@@ -599,10 +628,10 @@ function setOpponent(isAi) {
 }
 
 function setGameMode(mode) {
-    gameMode = mode;
+    gameMode = mode === 'ai' ? 'local' : mode;
     if (mode === 'online') {
         vsAI = false;
-    } else if (mode === 'ai' || mode === 'debug') {
+    } else if (mode === 'debug') {
         vsAI = true;
     } else {
         vsAI = false;
@@ -614,12 +643,13 @@ window.setGameMode = setGameMode;
 
 function updateModeVisibility() {
     const feedPanel = document.getElementById('combat-feed-panel');
-    if (feedPanel) feedPanel.classList.toggle('hidden', gameMode !== 'debug');
+    if (feedPanel) feedPanel.classList.toggle('hidden', !(gameMode === 'debug' && developModeEnabled));
     const onlinePanel = document.getElementById('online-tools-panel');
     if (onlinePanel) onlinePanel.classList.toggle('hidden', gameMode !== 'online');
 }
 
 function showMatchmakingPanel() {
+    playUiSfx();
     setGameMode('online');
     document.getElementById('matchmaking-panel').classList.remove('hidden');
     document.getElementById('setup-local-panel').classList.add('hidden');
@@ -631,12 +661,14 @@ function showMatchmakingPanel() {
 }
 
 function showLocalPanel() {
+    playUiSfx();
     document.getElementById('matchmaking-panel').classList.add('hidden');
     document.getElementById('setup-local-panel').classList.remove('hidden');
 }
 
 // Simple room-based matchmaking via WebSocket
 function hostRoom() {
+    manualDisconnect = false;
     const roomId = Math.random().toString(36).substr(2, 6).toUpperCase();
     document.getElementById('room-id-display').textContent = roomId;
     document.getElementById('matchmaking-status').textContent = '対戦相手の接続を待っています...';
@@ -648,12 +680,14 @@ function hostRoom() {
     onlineReadyState = { 1: false, 2: false };
     onlineUsernames = { 1: localUsername, 2: null };
     onlineMode = true;
+    spectatorMode = false;
     setGameMode('online');
     updateReadyButton();
-    connectOnlineSocket(roomId, 1);
+    connectOnlineSocket({ roomId, player: 1 });
 }
 
 function joinRoom() {
+    manualDisconnect = false;
     const input = document.getElementById('room-id-input');
     const roomId = input ? input.value.trim().toUpperCase() : '';
     if (!roomId) {
@@ -667,16 +701,35 @@ function joinRoom() {
     onlineReadyState = { 1: false, 2: false };
     onlineUsernames = { 1: null, 2: localUsername };
     onlineMode = true;
+    spectatorMode = false;
     setGameMode('online');
     updateReadyButton();
     document.getElementById('matchmaking-status').textContent = `ルーム ${roomId} に接続中...`;
-    connectOnlineSocket(roomId, 2);
+    connectOnlineSocket({ roomId, player: 2 });
+}
+
+function startRandomMatch() {
+    manualDisconnect = false;
+    matchmakingRole = 'random';
+    localPlayer = null;
+    onlineAbilityChoices = { 1: null, 2: null };
+    onlineReadyState = { 1: false, 2: false };
+    onlineUsernames = { 1: null, 2: null };
+    onlineMode = true;
+    spectatorMode = false;
+    setGameMode('online');
+    updateReadyButton();
+    document.getElementById('room-share-area').classList.add('hidden');
+    document.getElementById('matchmaking-status').textContent = 'ランダムマッチ相手を探しています...';
+    connectOnlineSocket({ random: true });
 }
 
 function cancelMatchmaking() {
+    manualDisconnect = true;
     if (onlineSocket) onlineSocket.close();
     onlineMode = false;
     localPlayer = null;
+    spectatorMode = false;
     matchmakingMode = false;
     matchRoomId = null;
     onlineAbilityChoices = { 1: null, 2: null };
@@ -688,12 +741,14 @@ function cancelMatchmaking() {
     document.getElementById('matchmaking-status').textContent = '';
     document.getElementById('room-share-area').classList.add('hidden');
     document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active'));
-    document.getElementById('tab-mode-debug').classList.add('active');
-    setGameMode('debug');
+    document.getElementById('tab-mode-local').classList.add('active');
+    setGameMode('local');
+    clearOnlineSession();
 }
 
 function setupOnlineMode() {
     if (!onlineMode) return;
+    manualDisconnect = false;
     setGameMode('online');
     vsAI = false;
     setOpponent(false);
@@ -704,7 +759,7 @@ function setupOnlineMode() {
     } else {
         document.getElementById('btn-start-game').textContent = 'START ONLINE MATCH';
     }
-    connectOnlineSocket(null, localPlayer);
+    connectOnlineSocket({ roomId: matchRoomId, player: localPlayer });
 }
 
 function getOnlineAbilityChoice() {
@@ -722,20 +777,39 @@ async function copyRoomCode() {
     }
 }
 
-function connectOnlineSocket(roomId, player) {
+function scheduleReconnect() {
+    if (reconnectTimer || !onlineSession?.token) return;
+    showStatusAlert('接続が切れました。再接続を試みています...', 'warning', 0);
+    reconnectTimer = window.setTimeout(() => {
+        reconnectTimer = null;
+        connectOnlineSocket({
+            roomId: onlineSession.roomId,
+            player: onlineSession.player,
+            reconnectToken: onlineSession.token
+        });
+    }, 1800);
+}
+
+function connectOnlineSocket({ roomId = null, player = null, random = false, reconnectToken = null } = {}) {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const roomParam = roomId ? `&room=${encodeURIComponent(roomId)}` : '';
-    onlineSocket = new WebSocket(`${protocol}//${window.location.host}/ws?player=${player}${roomParam}`);
+    const playerParam = player ? `player=${player}` : '';
+    const randomParam = random ? `${playerParam ? '&' : ''}random=1` : '';
+    const tokenParam = reconnectToken ? `${playerParam || randomParam || roomParam ? '&' : ''}token=${encodeURIComponent(reconnectToken)}` : '';
+    const query = [playerParam, roomParam.replace(/^&/, ''), randomParam.replace(/^&/, ''), tokenParam.replace(/^&/, '')].filter(Boolean).join('&');
+    onlineSocket = new WebSocket(`${protocol}//${window.location.host}/ws?${query}`);
 
     onlineSocket.addEventListener('open', () => {
         addConsoleLog(`ONLINE: ${localUsername} として接続しました。`, 'system');
-        addConnectionLog(`${localUsername} (P${player}) として接続しました。`);
-        onlineAbilityChoices[player] = getOnlineAbilityChoice();
-        onlineReadyState[player] = false;
-        onlineUsernames[player] = localUsername;
+        addConnectionLog(`${localUsername} として接続しました。`);
+        if (player) {
+            onlineAbilityChoices[player] = getOnlineAbilityChoice();
+            onlineReadyState[player] = false;
+            onlineUsernames[player] = localUsername;
+        }
         updateReadyButton();
         sendOnlineMessage({ kind: 'profile', username: localUsername });
-        sendOnlineMessage({ kind: 'ability_choice', ability: onlineAbilityChoices[player] });
+        if (player) sendOnlineMessage({ kind: 'ability_choice', ability: onlineAbilityChoices[player] });
     });
 
     onlineSocket.addEventListener('message', (event) => {
@@ -746,6 +820,7 @@ function connectOnlineSocket(roomId, player) {
     onlineSocket.addEventListener('close', () => {
         addConsoleLog('ONLINE: サーバー接続が切断されました。', 'system');
         addConnectionLog('サーバー接続が切断されました。');
+        if (!manualDisconnect && onlineMode && onlineSession?.token) scheduleReconnect();
     });
 
     onlineSocket.addEventListener('error', () => {
@@ -756,9 +831,40 @@ function connectOnlineSocket(roomId, player) {
 
 function handleOnlineMessage(message) {
     if (message.kind === 'hello') {
-        localPlayer = message.player;
-        onlineUsernames[localPlayer] = localUsername;
-        addConsoleLog(`ONLINE: あなたは ${localUsername} / Player ${localPlayer} です。`, 'system');
+        localPlayer = message.player || null;
+        spectatorMode = message.role === 'spectator';
+        spectatorViewPlayer = spectatorMode ? 1 : (localPlayer || 1);
+        matchRoomId = message.roomId || matchRoomId;
+        onlineSession = {
+            roomId: message.roomId || matchRoomId,
+            token: message.reconnectToken || onlineSession?.token,
+            player: message.player || null,
+            role: message.role || 'player'
+        };
+        saveOnlineSession();
+        if (message.profiles) {
+            onlineUsernames[1] = message.profiles[1] || onlineUsernames[1];
+            onlineUsernames[2] = message.profiles[2] || onlineUsernames[2];
+        }
+        if (localPlayer) onlineUsernames[localPlayer] = localUsername;
+        if (localPlayer && onlineSocket?.readyState === WebSocket.OPEN) {
+            onlineAbilityChoices[localPlayer] = getOnlineAbilityChoice();
+            sendOnlineMessage({ kind: 'profile', username: localUsername });
+            sendOnlineMessage({ kind: 'ability_choice', ability: onlineAbilityChoices[localPlayer] });
+        }
+        if (message.snapshot?.started && activePhase !== 'battle') {
+            startGame(message.snapshot.config, true);
+            applyingRemoteAction = true;
+            try {
+                (message.snapshot.history || []).forEach(entry => {
+                    if (entry.kind === 'action') applyRemoteAction(entry.action);
+                    else if (entry.kind === 'forfeit' || entry.kind === 'win') triggerWin(entry.winner, true);
+                });
+            } finally {
+                applyingRemoteAction = false;
+            }
+        }
+        addConsoleLog(`ONLINE: あなたは ${spectatorMode ? `観戦者 ${localUsername}` : `${localUsername} / Player ${localPlayer}` } です。`, 'system');
         updateUI();
         return;
     }
@@ -767,8 +873,10 @@ function handleOnlineMessage(message) {
         addConsoleLog(`ONLINE: 対戦相手が接続しました！`, 'system');
         addConnectionLog('対戦相手が接続しました。');
         document.getElementById('matchmaking-status').textContent = '対戦相手が接続しました。準備完了を押してください。';
-        onlineAbilityChoices[localPlayer] = getOnlineAbilityChoice();
-        sendOnlineMessage({ kind: 'ability_choice', ability: onlineAbilityChoices[localPlayer] });
+        if (localPlayer) {
+            onlineAbilityChoices[localPlayer] = getOnlineAbilityChoice();
+            sendOnlineMessage({ kind: 'ability_choice', ability: onlineAbilityChoices[localPlayer] });
+        }
         updateOnlineStartAvailability();
         return;
     }
@@ -958,10 +1066,17 @@ function initializeAudio() {
     bgmTrack.loop = true;
     bgmTrack.volume = bgmVolume;
 
+    lobbyBgmTrack = new Audio('audio/bgm_lobby.mp3');
+    lobbyBgmTrack.preload = 'auto';
+    lobbyBgmTrack.loop = true;
+    lobbyBgmTrack.volume = bgmVolume;
+
+    uiSfx = new Audio('audio/sfx_ui.wav');
+    uiSfx.preload = 'auto';
+    uiSfx.volume = moveSfxVolume;
+
     updateAudioButtons();
-    if (bgmEnabled && activePhase === 'battle') {
-        void bgmTrack.play().catch(() => {});
-    }
+    syncBgmPlayback();
 }
 
 function updateAudioButtons() {
@@ -983,6 +1098,16 @@ function playMoveSfx() {
     } catch {}
 }
 
+function playUiSfx() {
+    if (!moveSfxEnabled || !uiSfx) return;
+    try {
+        uiSfx.currentTime = 0;
+        void uiSfx.play().catch(() => {});
+    } catch {}
+}
+
+window.playUiSfx = playUiSfx;
+
 function toggleMoveSfx() {
     initializeAudio();
     moveSfxEnabled = !moveSfxEnabled;
@@ -992,21 +1117,35 @@ function toggleMoveSfx() {
 function toggleBgm() {
     initializeAudio();
     bgmEnabled = !bgmEnabled;
-    if (bgmTrack) {
-        if (bgmEnabled && activePhase === 'battle') void bgmTrack.play().catch(() => {});
-        else bgmTrack.pause();
-    }
+    syncBgmPlayback();
     updateAudioButtons();
 }
 
 function handleSfxVolumeChange(event) {
     moveSfxVolume = Number(event.target.value) / 100;
     if (moveSfx) moveSfx.volume = moveSfxVolume;
+    if (uiSfx) uiSfx.volume = moveSfxVolume;
 }
 
 function handleBgmVolumeChange(event) {
     bgmVolume = Number(event.target.value) / 100;
     if (bgmTrack) bgmTrack.volume = bgmVolume;
+    if (lobbyBgmTrack) lobbyBgmTrack.volume = bgmVolume;
+}
+
+function syncBgmPlayback() {
+    if (!bgmEnabled) {
+        if (bgmTrack) bgmTrack.pause();
+        if (lobbyBgmTrack) lobbyBgmTrack.pause();
+        return;
+    }
+    if (activePhase === 'battle') {
+        if (lobbyBgmTrack) lobbyBgmTrack.pause();
+        if (bgmTrack) void bgmTrack.play().catch(() => {});
+    } else {
+        if (bgmTrack) bgmTrack.pause();
+        if (lobbyBgmTrack) void lobbyBgmTrack.play().catch(() => {});
+    }
 }
 
 function applyRemoteAction(action) {
@@ -1082,7 +1221,7 @@ function startGame(config = null, fromOnline = false) {
     showTurnBanner();
     startKeepAliveWarningTimer();
     clearStatusAlert();
-    if (bgmEnabled && bgmTrack) void bgmTrack.play().catch(() => {});
+    syncBgmPlayback();
     updateAudioButtons();
 
     if (onlineMode && !fromOnline) {
@@ -2002,6 +2141,7 @@ function executeMove(unit, destRow, destCol) {
     const targetCol = resolved.targetCol;
     const captured = [];
     let logType = unit.player === 1 ? 'p1' : 'p2';
+    const shouldFocusMove = !(vsAI && !onlineMode && unit.player === 2);
 
     if (resolved.localOccupant && resolved.localOccupant.player !== unit.player) {
         captured.push({ unit: resolved.localOccupant, map: startMap, row: destRow, col: destCol });
@@ -2065,7 +2205,7 @@ function executeMove(unit, destRow, destCol) {
 
             const captureNames = captured.map(v => v.unit.name).join(', ');
             addConsoleLog(`ABILITY: 暗殺者 - ${unit.name}が${captureNames}を撃破し、1マス後退。`, 'ability');
-            if (resolved.portalDest && unit.player === currentPlayer) activeMap = finalMap;
+            if (resolved.portalDest && unit.player === currentPlayer && shouldFocusMove) activeMap = finalMap;
             if (resolved.portalDest) unit.refreshActedAfterAction = true;
             maybeClearCamouflageAfterMove(unit);
             sendOnlineMessage({ kind: 'action', action: { type: 'move', unitId: unit.id, row: destRow, col: destCol } });
@@ -2096,7 +2236,7 @@ function executeMove(unit, destRow, destCol) {
     }
 
     addConsoleLog(logMsg, logType);
-    if (resolved.portalDest && unit.player === currentPlayer) activeMap = targetMap;
+    if (resolved.portalDest && unit.player === currentPlayer && shouldFocusMove) activeMap = targetMap;
     if (resolved.portalDest) {
         unit.refreshActedAfterAction = true;
         addConsoleLog(`SYSTEM: テレポート使用により行動済み状態を解除。`, 'system');
@@ -2430,7 +2570,7 @@ function resetToSetup(fromOnline = false) {
     units = [];
     previewUnit = null;
     developModeSequence = '';
-    if (bgmTrack) bgmTrack.pause();
+    syncBgmPlayback();
     clearHighlights();
     document.getElementById('board').innerHTML = '';
     clearStatusAlert();
@@ -2447,7 +2587,12 @@ function updateUI() {
     const playerDotEl = document.querySelector('.indicator-dot');
     const currentTurnName = onlineMode ? getOnlineDisplayName(currentPlayer) : `PLAYER ${currentPlayer}`;
 
-    if (currentPlayer === 1) {
+    if (spectatorMode) {
+        playerNameEl.textContent = `SPECTATING / ${currentTurnName}`;
+        playerNameEl.className = currentPlayer === 1 ? 'text-cyan' : 'text-magenta';
+        playerDotEl.style.backgroundColor = currentPlayer === 1 ? 'var(--neon-cyan)' : 'var(--neon-magenta)';
+        playerDotEl.style.boxShadow = currentPlayer === 1 ? '0 0 10px var(--neon-cyan)' : '0 0 10px var(--neon-magenta)';
+    } else if (currentPlayer === 1) {
         playerNameEl.textContent = onlineMode
             ? `${currentTurnName} (P1)${localPlayer === 1 ? ` - YOUR TURN ${actionsThisTurn}/${ACTIONS_PER_TURN}` : ' - OPPONENT TURN'}`
             : 'PLAYER 1 (BLUE)';
@@ -2622,7 +2767,6 @@ function executeAITurn() {
     });
 
     if (bestAction) {
-        if (bestAction.unit.map !== activeMap) switchActiveMap(bestAction.unit.map);
         setTimeout(() => {
             if (bestAction.type === 'move') {
                 executeMove(bestAction.unit, bestAction.row, bestAction.col);

@@ -463,6 +463,12 @@ details li {
     transform: rotate(180deg);
 }
 
+#board.viewer-player-2 .unit::before,
+#board.viewer-player-2 .kill-counter {
+    display: inline-flex;
+    transform: rotate(180deg);
+}
+
 /* CELLS AND ZONES */
 .cell {
     background: var(--grid-bg);
