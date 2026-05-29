@@ -437,7 +437,7 @@ class Unit {
             if (ability === '暗殺者') { return 5; }
             if (ability === '盲目') { return 5; }
             if (ability === '監視') { return 1; }
-            if (ability === '歴戦王' && this.veteranMomentumPenalty) r -= 1;
+            if (ability === '歴戦王' && this.veteranMomentumPenalty) return 2;
         }
         r -= getMonitorPenalty(this);
         if (this.inspirationTurns > 0) r += 1;
@@ -462,6 +462,7 @@ class Unit {
             const ability = getPlayerAbility(this.player);
             if (ability === '暗殺者') return 'straight';
             if (ability === '監視') return 'square';
+            if (ability === '歴戦王' && this.veteranMomentumPenalty) return 'straight';
         }
         return this.moveType;
     }
