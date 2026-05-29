@@ -195,9 +195,17 @@ header {
     background: rgba(255, 255, 255, 0.02);
 }
 
+.account-hint {
+    margin-top: 0.35rem;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    line-height: 1.4;
+    color: var(--text-muted);
+}
+
 .account-credential-grid {
     display: grid;
-    grid-template-columns: 1.4fr 0.8fr;
+    grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
     gap: 0.5rem;
     margin-top: 0.45rem;
 }
@@ -243,6 +251,10 @@ header {
 
 .account-status.logged-in {
     color: var(--neon-gold);
+}
+
+.account-status.error {
+    color: var(--neon-magenta);
 }
 
 .news-list {
@@ -1915,7 +1927,8 @@ body.opponent-turn #turn-indicator {
     letter-spacing: 3px;
     text-transform: uppercase;
     transition: border-color 0.2s;
-    width: 0;
+    width: 100%;
+    min-width: 0;
 }
 
 .neon-input:focus { border-color: var(--neon-cyan); }

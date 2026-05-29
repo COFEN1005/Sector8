@@ -29,6 +29,14 @@
                     <summary class="small-tool-btn">NEWS</summary>
                     <div class="news-menu-panel">
                         <details class="news-item" open>
+                            <summary>PATCH 0.7.3</summary>
+                            <ul class="news-list">
+                                <li>PLAYER ACCOUNT の入力案内を追加</li>
+                                <li>アカウント入力欄を広くして見やすく調整</li>
+                                <li>REGISTER / LOGIN / LOGOUT の結果が画面に出るよう改善</li>
+                            </ul>
+                        </details>
+                        <details class="news-item" open>
                             <summary>PATCH 0.7.2</summary>
                             <ul class="news-list">
                                 <li>オンライン対戦成立後に盤面を見てから甲アビリティを選ぶよう変更</li>
@@ -255,14 +263,15 @@
 
                     <div class="config-group account-group">
                         <label>PLAYER ACCOUNT</label>
+                        <div class="account-hint">新規作成は上の USER NAME を使い、PLAYER ID はログイン用のID、PIN は4桁の数字です。</div>
                         <div class="account-credential-grid">
-                            <input id="account-player-id-input" class="neon-input" type="text" maxlength="16" placeholder="PLAYER ID" autocapitalize="characters" autocomplete="off" spellcheck="false" />
-                            <input id="account-pin-input" class="neon-input" type="password" maxlength="4" placeholder="4-DIGIT PIN" inputmode="numeric" autocomplete="new-password" />
+                            <input id="account-player-id-input" class="neon-input" type="text" maxlength="16" placeholder="LOGIN ID" autocapitalize="characters" autocomplete="off" spellcheck="false" title="ログインに使う PLAYER ID を入力します" />
+                            <input id="account-pin-input" class="neon-input" type="password" maxlength="4" placeholder="4-DIGIT PIN" inputmode="numeric" autocomplete="new-password" title="4桁の数字PINを入力します" />
                         </div>
                         <div class="account-actions">
-                            <button id="btn-account-register" class="small-tool-btn" type="button">REGISTER</button>
-                            <button id="btn-account-login" class="small-tool-btn" type="button">LOGIN</button>
-                            <button id="btn-account-logout" class="small-tool-btn" type="button">LOGOUT</button>
+                            <button id="btn-account-register" class="small-tool-btn" type="button" title="新しいアカウントを作成します">REGISTER</button>
+                            <button id="btn-account-login" class="small-tool-btn" type="button" title="PLAYER ID と PIN でログインします">LOGIN</button>
+                            <button id="btn-account-logout" class="small-tool-btn" type="button" title="ログアウトします">LOGOUT</button>
                         </div>
                         <div class="account-summary">
                             <div class="account-summary-row"><span>PLAYER ID</span><strong id="account-player-id">--------</strong></div>
@@ -271,7 +280,7 @@
                             <div class="account-summary-row"><span>EXP</span><strong id="account-exp">0/100</strong></div>
                             <div class="account-summary-row"><span>RATING</span><strong id="account-rating">-</strong></div>
                         </div>
-                        <div id="account-status" class="account-status">未ログイン</div>
+                        <div id="account-status" class="account-status">REGISTER: USER NAME + 4桁PIN / LOGIN: PLAYER ID + 4桁PIN</div>
                     </div>
 
                     <!-- Mode tabs -->
@@ -461,7 +470,7 @@
         </div>
     </div>
 
-    <div class="patch-badge">PATCH ver.0.7.2</div>
+    <div class="patch-badge">PATCH ver.0.7.3</div>
     <script>
     // Mode tab switching helper (called from inline onclick)
     function setModeTab(mode) {

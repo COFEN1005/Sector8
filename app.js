@@ -375,8 +375,11 @@ function updateAccountUI() {
     const loggedIn = Boolean(authSession?.token && authProfile);
 
     if (statusEl) {
-        statusEl.textContent = loggedIn ? `LOGIN OK / ${authProfile.name}` : '未ログイン';
+        statusEl.textContent = loggedIn
+            ? `LOGIN OK / ${authProfile.name}`
+            : 'REGISTER: USER NAME + 4桁PIN / LOGIN: PLAYER ID + 4桁PIN';
         statusEl.classList.toggle('logged-in', loggedIn);
+        statusEl.classList.toggle('error', false);
     }
     if (playerIdEl) playerIdEl.textContent = loggedIn ? authProfile.playerId : '--------';
     if (friendCodeEl) friendCodeEl.textContent = loggedIn ? formatFriendCodeDisplay(authProfile.friendCode) : '--- --- ---';
@@ -384,8 +387,32 @@ function updateAccountUI() {
     if (ratingEl) ratingEl.textContent = loggedIn ? String(authProfile.rating) : '-';
     if (expEl) expEl.textContent = loggedIn ? `${authProfile.exp}/100` : '0/100';
     if (loginBtn) loginBtn.disabled = !document.getElementById('account-player-id-input')?.value || !document.getElementById('account-pin-input')?.value;
-    if (registerBtn) registerBtn.disabled = !document.getElementById('account-pin-input')?.value || !document.getElementById('username-input')?.value;
+    if (registerBtn) registerBtn.disabled = !document.getElementById('account-pin-input')?.value;
     if (logoutBtn) logoutBtn.disabled = !loggedIn;
+}
+
+function setAccountStatus(message, tone = 'system') {
+    const statusEl = document.getElementById('account-status');
+    if (!statusEl) return;
+    statusEl.textContent = message;
+    statusEl.classList.toggle('logged-in', tone === 'success');
+    statusEl.classList.toggle('error', tone === 'error' || tone === 'warning');
+}
+
+function getAccountErrorMessage(error, fallback) {
+    const code = error?.data?.error || error?.message || '';
+    switch (code) {
+        case 'name_invalid':
+            return 'USER NAME は1〜24文字で入力してください。';
+        case 'pin_invalid':
+            return 'PIN は4桁の数字で入力してください。';
+        case 'credentials_invalid':
+            return 'PLAYER ID または PIN が違います。';
+        case 'invalid':
+            return '保存されたログイン情報が見つかりません。';
+        default:
+            return fallback || '処理に失敗しました。';
+    }
 }
 
 function applyAuthProfile(profile, token) {
@@ -424,6 +451,7 @@ async function registerAccount() {
     const result = await apiRequest('/api/auth/register', { method: 'POST', body: { name, pin }, auth: false });
     applyAuthProfile(result.profile, result.token);
     showStatusAlert(`REGISTERED: ${result.profile.playerId}`, 'success', 3500);
+    setAccountStatus(`REGISTERED / ${result.profile.playerId}`, 'success');
     return result.profile;
 }
 
@@ -437,6 +465,7 @@ async function loginAccount() {
     });
     applyAuthProfile(result.profile, result.token);
     showStatusAlert(`LOGIN OK: ${result.profile.name}`, 'success', 2500);
+    setAccountStatus(`LOGIN OK / ${result.profile.name}`, 'success');
     return result.profile;
 }
 
@@ -451,6 +480,7 @@ async function logoutAccount() {
     saveAuthSession();
     updateAccountUI();
     showStatusAlert('LOGGED OUT', 'system', 2500);
+    setAccountStatus('LOGGED OUT', 'system');
 }
 
 async function updateAccountName(nextName) {
@@ -868,11 +898,35 @@ function setupUIEventListeners() {
         usernameInput.addEventListener('blur', () => saveUsername(false));
     }
     const accountRegisterBtn = document.getElementById('btn-account-register');
-    if (accountRegisterBtn) accountRegisterBtn.addEventListener('click', () => registerAccount().catch(() => {}));
+    if (accountRegisterBtn) accountRegisterBtn.addEventListener('click', async () => {
+        try {
+            await registerAccount();
+        } catch (error) {
+            const message = getAccountErrorMessage(error, 'REGISTER に失敗しました。');
+            setAccountStatus(message, 'error');
+            showStatusAlert(message, 'warning', 4000);
+        }
+    });
     const accountLoginBtn = document.getElementById('btn-account-login');
-    if (accountLoginBtn) accountLoginBtn.addEventListener('click', () => loginAccount().catch(() => {}));
+    if (accountLoginBtn) accountLoginBtn.addEventListener('click', async () => {
+        try {
+            await loginAccount();
+        } catch (error) {
+            const message = getAccountErrorMessage(error, 'LOGIN に失敗しました。');
+            setAccountStatus(message, 'error');
+            showStatusAlert(message, 'warning', 4000);
+        }
+    });
     const accountLogoutBtn = document.getElementById('btn-account-logout');
-    if (accountLogoutBtn) accountLogoutBtn.addEventListener('click', () => logoutAccount().catch(() => {}));
+    if (accountLogoutBtn) accountLogoutBtn.addEventListener('click', async () => {
+        try {
+            await logoutAccount();
+        } catch (error) {
+            const message = getAccountErrorMessage(error, 'LOGOUT に失敗しました。');
+            setAccountStatus(message, 'error');
+            showStatusAlert(message, 'warning', 4000);
+        }
+    });
     const accountPlayerIdInput = document.getElementById('account-player-id-input');
     if (accountPlayerIdInput) {
         accountPlayerIdInput.addEventListener('input', () => {
