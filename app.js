@@ -168,6 +168,7 @@ let matchmakingRole = null; // 'host' or 'guest'
 let matchRoomId = null;
 let onlineAbilityChoices = { 1: null, 2: null };
 let onlineReadyState = { 1: false, 2: false };
+let onlineDevelopState = { 1: false, 2: false };
 
 function detectDeviceProfile() {
     const coarsePointer = window.matchMedia('(pointer: coarse)').matches;
@@ -384,9 +385,13 @@ function getPlayerAbility(player) {
 }
 
 function getAllAbilityOptions() {
-    return developModeEnabled
+    return shouldShowDevelopAbilityOptions()
         ? [...BASE_ABILITY_OPTIONS, ...DEVELOP_ONLY_ABILITIES]
         : [...BASE_ABILITY_OPTIONS];
+}
+
+function shouldShowDevelopAbilityOptions() {
+    return developModeEnabled || onlineDevelopState[1] || onlineDevelopState[2];
 }
 
 function syncAbilitySelectOptions() {
@@ -416,7 +421,7 @@ function setDevelopModeEnabled(enabled) {
     developModeEnabled = enabled;
     syncAbilitySelectOptions();
     const badge = document.getElementById('develop-mode-badge');
-    if (badge) badge.classList.toggle('hidden', !enabled);
+    if (badge) badge.classList.toggle('hidden', !shouldShowDevelopAbilityOptions());
 }
 
 function registerMapTabSequence(mapName) {
@@ -427,6 +432,7 @@ function registerMapTabSequence(mapName) {
         setDevelopModeEnabled(true);
         addConsoleLog('DEVELOP MODE: 追加アビリティを解放しました。', 'system');
         showStatusAlert('DEVELOP MODE 起動: 衛生兵 / 監視 / 迷彩 を解放', 'system', 5000);
+        if (onlineMode && localPlayer) sendOnlineMessage({ kind: 'develop_state', enabled: true });
     }
 }
 
@@ -575,6 +581,7 @@ function hostRoom() {
     localPlayer = 1;
     onlineAbilityChoices = { 1: getOnlineAbilityChoice(), 2: null };
     onlineReadyState = { 1: false, 2: false };
+    onlineDevelopState = { 1: developModeEnabled, 2: false };
     onlineMode = true;
     setGameMode('online');
     updateReadyButton();
@@ -593,6 +600,7 @@ function joinRoom() {
     localPlayer = 2;
     onlineAbilityChoices = { 1: null, 2: getOnlineAbilityChoice() };
     onlineReadyState = { 1: false, 2: false };
+    onlineDevelopState = { 1: false, 2: developModeEnabled };
     onlineMode = true;
     setGameMode('online');
     updateReadyButton();
@@ -608,6 +616,9 @@ function cancelMatchmaking() {
     matchRoomId = null;
     onlineAbilityChoices = { 1: null, 2: null };
     onlineReadyState = { 1: false, 2: false };
+    onlineDevelopState = { 1: false, 2: false };
+    syncAbilitySelectOptions();
+    setDevelopModeEnabled(developModeEnabled);
     showLocalPanel();
     document.getElementById('matchmaking-status').textContent = '';
     document.getElementById('room-share-area').classList.add('hidden');
@@ -656,7 +667,9 @@ function connectOnlineSocket(roomId, player) {
         addConnectionLog(`Player ${player} として接続しました。`);
         onlineAbilityChoices[player] = getOnlineAbilityChoice();
         onlineReadyState[player] = false;
+        onlineDevelopState[player] = developModeEnabled;
         updateReadyButton();
+        sendOnlineMessage({ kind: 'develop_state', enabled: developModeEnabled });
         sendOnlineMessage({ kind: 'ability_choice', ability: onlineAbilityChoices[player] });
     });
 
@@ -689,12 +702,21 @@ function handleOnlineMessage(message) {
         addConnectionLog('対戦相手が接続しました。');
         document.getElementById('matchmaking-status').textContent = '対戦相手が接続しました。準備完了を押してください。';
         onlineAbilityChoices[localPlayer] = getOnlineAbilityChoice();
+        sendOnlineMessage({ kind: 'develop_state', enabled: developModeEnabled });
         sendOnlineMessage({ kind: 'ability_choice', ability: onlineAbilityChoices[localPlayer] });
         updateOnlineStartAvailability();
         return;
     }
 
     if (message.player === localPlayer) return;
+
+    if (message.kind === 'develop_state') {
+        onlineDevelopState[message.player] = Boolean(message.enabled);
+        syncAbilitySelectOptions();
+        const badge = document.getElementById('develop-mode-badge');
+        if (badge) badge.classList.toggle('hidden', !shouldShowDevelopAbilityOptions());
+        return;
+    }
 
     if (message.kind === 'ability_choice') {
         onlineAbilityChoices[message.player] = message.ability;
