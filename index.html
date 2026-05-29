@@ -29,6 +29,15 @@
                     <summary class="small-tool-btn">NEWS</summary>
                     <div class="news-menu-panel">
                         <details class="news-item" open>
+                            <summary>PATCH 0.7.4</summary>
+                            <ul class="news-list">
+                                <li>甲アビリティ選択後の準備完了前はコマを動かせないよう変更</li>
+                                <li>画面比率が厳しい場合でも準備完了ボタンに届きやすく調整</li>
+                                <li>相手ターン中に自分のコマの移動プレビューを見られるように変更</li>
+                                <li>PLAYER ACCOUNT を折りたためるように変更</li>
+                            </ul>
+                        </details>
+                        <details class="news-item" open>
                             <summary>PATCH 0.7.3</summary>
                             <ul class="news-list">
                                 <li>PLAYER ACCOUNT の入力案内を追加</li>
@@ -262,39 +271,41 @@
                         <div id="username-saved" class="username-saved">現在: Commander</div>
                     </div>
 
-                    <div class="config-group account-group">
-                        <label>PLAYER ACCOUNT</label>
-                        <div class="account-hint">新規作成は上の USER NAME を使い、PLAYER ID はログイン用のID、PIN は4桁の数字です。</div>
-                        <div class="account-credential-grid">
-                            <input id="account-player-id-input" class="neon-input" type="text" maxlength="16" placeholder="LOGIN ID" autocapitalize="characters" autocomplete="off" spellcheck="false" title="ログインに使う PLAYER ID を入力します" />
-                            <input id="account-pin-input" class="neon-input" type="password" maxlength="4" placeholder="4-DIGIT PIN" inputmode="numeric" autocomplete="new-password" title="4桁の数字PINを入力します" />
-                        </div>
-                        <div class="account-actions">
-                            <button id="btn-account-register" class="small-tool-btn" type="button" title="新しいアカウントを作成します">REGISTER</button>
-                            <button id="btn-account-login" class="small-tool-btn" type="button" title="PLAYER ID と PIN でログインします">LOGIN</button>
-                            <button id="btn-account-logout" class="small-tool-btn" type="button" title="ログアウトします">LOGOUT</button>
-                        </div>
-                        <div class="account-summary">
-                            <div class="account-summary-row account-summary-copy-row">
-                                <span>PLAYER ID</span>
-                                <div class="account-summary-value">
-                                    <strong id="account-player-id">--------</strong>
-                                    <button id="btn-copy-player-id" class="mini-tool-btn" type="button" title="PLAYER ID をコピー">COPY</button>
-                                </div>
+                    <details class="config-group account-group" open>
+                        <summary>PLAYER ACCOUNT</summary>
+                        <div class="account-group-body">
+                            <div class="account-hint">新規作成は上の USER NAME を使い、PLAYER ID はログイン用のID、PIN は4桁の数字です。</div>
+                            <div class="account-credential-grid">
+                                <input id="account-player-id-input" class="neon-input" type="text" maxlength="16" placeholder="LOGIN ID" autocapitalize="characters" autocomplete="off" spellcheck="false" title="ログインに使う PLAYER ID を入力します" />
+                                <input id="account-pin-input" class="neon-input" type="password" maxlength="4" placeholder="4-DIGIT PIN" inputmode="numeric" autocomplete="new-password" title="4桁の数字PINを入力します" />
                             </div>
-                            <div class="account-summary-row account-summary-copy-row">
-                                <span>FRIEND CODE</span>
-                                <div class="account-summary-value">
-                                    <strong id="account-friend-code">--- --- ---</strong>
-                                    <button id="btn-copy-friend-code" class="mini-tool-btn" type="button" title="FRIEND CODE をコピー">COPY</button>
-                                </div>
+                            <div class="account-actions">
+                                <button id="btn-account-register" class="small-tool-btn" type="button" title="新しいアカウントを作成します">REGISTER</button>
+                                <button id="btn-account-login" class="small-tool-btn" type="button" title="PLAYER ID と PIN でログインします">LOGIN</button>
+                                <button id="btn-account-logout" class="small-tool-btn" type="button" title="ログアウトします">LOGOUT</button>
                             </div>
-                            <div class="account-summary-row"><span>LEVEL</span><strong id="account-level">LV -</strong></div>
-                            <div class="account-summary-row"><span>EXP</span><strong id="account-exp">0/100</strong></div>
-                            <div class="account-summary-row"><span>RATING</span><strong id="account-rating">-</strong></div>
+                            <div class="account-summary">
+                                <div class="account-summary-row account-summary-copy-row">
+                                    <span>PLAYER ID</span>
+                                    <div class="account-summary-value">
+                                        <strong id="account-player-id">--------</strong>
+                                        <button id="btn-copy-player-id" class="mini-tool-btn" type="button" title="PLAYER ID をコピー">COPY</button>
+                                    </div>
+                                </div>
+                                <div class="account-summary-row account-summary-copy-row">
+                                    <span>FRIEND CODE</span>
+                                    <div class="account-summary-value">
+                                        <strong id="account-friend-code">--- --- ---</strong>
+                                        <button id="btn-copy-friend-code" class="mini-tool-btn" type="button" title="FRIEND CODE をコピー">COPY</button>
+                                    </div>
+                                </div>
+                                <div class="account-summary-row"><span>LEVEL</span><strong id="account-level">LV -</strong></div>
+                                <div class="account-summary-row"><span>EXP</span><strong id="account-exp">0/100</strong></div>
+                                <div class="account-summary-row"><span>RATING</span><strong id="account-rating">-</strong></div>
+                            </div>
+                            <div id="account-status" class="account-status">REGISTER: USER NAME + 4桁PIN / LOGIN: PLAYER ID + 4桁PIN</div>
                         </div>
-                        <div id="account-status" class="account-status">REGISTER: USER NAME + 4桁PIN / LOGIN: PLAYER ID + 4桁PIN</div>
-                    </div>
+                    </details>
 
                     <!-- Mode tabs -->
                     <div class="mode-tabs">
@@ -483,7 +494,7 @@
         </div>
     </div>
 
-    <div class="patch-badge">PATCH ver.0.7.3</div>
+    <div class="patch-badge">PATCH ver.0.7.4</div>
     <script>
     // Mode tab switching helper (called from inline onclick)
     function setModeTab(mode) {

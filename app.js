@@ -3016,9 +3016,22 @@ function handleCellClick(row, col) {
     const viewerPlayer = getViewerPlayer();
     const activeVision = viewerPlayer === 1 ? p1Vision[activeMap] : p2Vision[activeMap];
     const clickedVisibleEnemy = cell.unit && cell.unit.player !== viewerPlayer && isUnitVisibleToViewer(cell.unit, viewerPlayer, activeVision);
+    const clickedOwnUnit = cell.unit && cell.unit.player === viewerPlayer;
+
+    if (onlineMode && onlineMatchPreviewActive && activePhase === 'setup') {
+        if (clickedOwnUnit) {
+            showUnitPreview(cell.unit, 'ALLY PREVIEW');
+        } else if (clickedVisibleEnemy) {
+            showUnitPreview(cell.unit, 'ENEMY PREVIEW');
+        } else {
+            cancelSelection();
+        }
+        return;
+    }
 
     if (!canControlCurrentTurn() || (currentPlayer === 2 && vsAI)) {
-        if (clickedVisibleEnemy) showEnemyPreview(cell.unit);
+        if (clickedOwnUnit) showUnitPreview(cell.unit, 'ALLY PREVIEW');
+        else if (clickedVisibleEnemy) showUnitPreview(cell.unit, 'ENEMY PREVIEW');
         else cancelSelection();
         return;
     }
@@ -3031,16 +3044,16 @@ function handleCellClick(row, col) {
         if (moveTarget || attackTarget) { executeMove(selectedUnit, row, col); return; }
         if (abilityTarget) { executeAbility(selectedUnit, row, col); return; }
         if (cell.unit && cell.unit.player === currentPlayer) selectUnit(cell.unit);
-        else if (clickedVisibleEnemy) showEnemyPreview(cell.unit);
+        else if (clickedVisibleEnemy) showUnitPreview(cell.unit, 'ENEMY PREVIEW');
         else cancelSelection();
     } else {
         if (cell.unit && cell.unit.player === currentPlayer) selectUnit(cell.unit);
-        else if (clickedVisibleEnemy) showEnemyPreview(cell.unit);
+        else if (clickedVisibleEnemy) showUnitPreview(cell.unit, 'ENEMY PREVIEW');
         else cancelSelection();
     }
 }
 
-function showEnemyPreview(unit) {
+function showUnitPreview(unit, previewLabel = 'ENEMY PREVIEW') {
     if (!unit) return;
     previewUnit = unit;
     selectedUnit = null;
@@ -3053,8 +3066,8 @@ function showEnemyPreview(unit) {
     actionCtrl.querySelector('.unit-badge').textContent = unit.symbol;
     const abilityName = unit.type === 'koh' ? getPlayerAbility(unit.player) : null;
     actionCtrl.querySelector('.unit-name').textContent = abilityName
-        ? `ENEMY PREVIEW / ${unit.name} / ${abilityName}`
-        : `ENEMY PREVIEW / ${unit.name}`;
+        ? `${previewLabel} / ${unit.name} / ${abilityName}`
+        : `${previewLabel} / ${unit.name}`;
     actionCtrl.querySelector('.unit-coords').textContent = `[${unit.col}, ${unit.row}]`;
 
     const selectedCell = document.querySelector(`.cell[data-row="${unit.row}"][data-col="${unit.col}"]`);

@@ -195,6 +195,39 @@ header {
     background: rgba(255, 255, 255, 0.02);
 }
 
+.account-group > summary {
+    list-style: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    letter-spacing: 1px;
+    user-select: none;
+}
+
+.account-group > summary::-webkit-details-marker {
+    display: none;
+}
+
+.account-group > summary::after {
+    content: "+";
+    color: var(--neon-cyan);
+    font-size: 0.95rem;
+    line-height: 1;
+}
+
+.account-group[open] > summary::after {
+    content: "−";
+}
+
+.account-group-body {
+    margin-top: 0.75rem;
+}
+
 .account-hint {
     margin-top: 0.35rem;
     font-family: var(--font-mono);
@@ -286,6 +319,12 @@ header {
 
 .account-status.error {
     color: var(--neon-magenta);
+}
+
+#online-prebattle-panel {
+    min-height: 0;
+    overflow-y: auto;
+    padding-right: 0.25rem;
 }
 
 .news-list {
@@ -1306,6 +1345,10 @@ details li {
     border-color: var(--neon-gold);
     color: var(--neon-gold);
     text-shadow: 0 0 5px var(--neon-gold);
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    background: rgba(10, 15, 25, 0.95);
 }
 
 .neon-btn.ready-btn.ready {
@@ -1862,6 +1905,9 @@ body.opponent-turn #turn-indicator {
 }
 
 .matchmaking-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
     background: rgba(255,255,255,0.02);
     border: 1px solid rgba(255,255,255,0.05);
     border-radius: 8px;
