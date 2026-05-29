@@ -135,8 +135,14 @@ let moveSfx = null;
 let bgmTrack = null;
 let lobbyBgmTrack = null;
 let uiSfx = null;
+let turnMySfx = null;
+let turnOppSfx = null;
 let moveSfxVolume = 0.55;
 let bgmVolume = 0.35;
+let visionSaturation = 1;
+let afkTurnTimer = null;
+let afkTurnPopupShown = false;
+let lastTurnOwner = null;
 
 let selectedUnit = null;
 let previewUnit = null;
@@ -636,6 +642,8 @@ function setupUIEventListeners() {
     if (sfxVolumeSlider) sfxVolumeSlider.addEventListener('input', handleSfxVolumeChange);
     const bgmVolumeSlider = document.getElementById('bgm-volume');
     if (bgmVolumeSlider) bgmVolumeSlider.addEventListener('input', handleBgmVolumeChange);
+    const visionSlider = document.getElementById('vision-saturation');
+    if (visionSlider) visionSlider.addEventListener('input', handleVisionSaturationChange);
 }
 
 function setupMapTabs() {
@@ -1320,6 +1328,14 @@ function initializeAudio() {
     uiSfx.preload = 'auto';
     uiSfx.volume = moveSfxVolume;
 
+    turnMySfx = new Audio('audio/sfx_turn_my.wav');
+    turnMySfx.preload = 'auto';
+    turnMySfx.volume = moveSfxVolume;
+
+    turnOppSfx = new Audio('audio/sfx_turn_opponent.wav');
+    turnOppSfx.preload = 'auto';
+    turnOppSfx.volume = moveSfxVolume;
+
     updateAudioButtons();
     syncBgmPlayback();
 }
@@ -1355,6 +1371,8 @@ window.playUiSfx = playUiSfx;
 
 function toggleMoveSfx() {
     initializeAudio();
+    if (bgmTrack) { bgmTrack.currentTime = 0; }
+    if (lobbyBgmTrack) { lobbyBgmTrack.currentTime = 0; }
     moveSfxEnabled = !moveSfxEnabled;
     updateAudioButtons();
 }
@@ -1370,12 +1388,44 @@ function handleSfxVolumeChange(event) {
     moveSfxVolume = Number(event.target.value) / 100;
     if (moveSfx) moveSfx.volume = moveSfxVolume;
     if (uiSfx) uiSfx.volume = moveSfxVolume;
+    if (turnMySfx) turnMySfx.volume = moveSfxVolume;
+    if (turnOppSfx) turnOppSfx.volume = moveSfxVolume;
 }
 
 function handleBgmVolumeChange(event) {
     bgmVolume = Number(event.target.value) / 100;
     if (bgmTrack) bgmTrack.volume = bgmVolume;
     if (lobbyBgmTrack) lobbyBgmTrack.volume = bgmVolume;
+}
+
+function handleVisionSaturationChange(event) {
+    visionSaturation = Number(event.target.value) / 100;
+    document.documentElement.style.setProperty('--vision-saturation', String(visionSaturation));
+}
+
+function playTurnSfx(isMyTurn) {
+    if (!moveSfxEnabled) return;
+    const audio = isMyTurn ? turnMySfx : turnOppSfx;
+    if (!audio) return;
+    try { audio.currentTime = 0; void audio.play().catch(() => {}); } catch {}
+}
+
+function startAfkTurnReminder() {
+    window.clearTimeout(afkTurnTimer);
+    afkTurnPopupShown = false;
+    if (!canControlCurrentTurn() || isGameOver || activePhase !== 'battle') return;
+    afkTurnTimer = window.setTimeout(() => {
+        if (canControlCurrentTurn() && !isGameOver && activePhase === 'battle') {
+            afkTurnPopupShown = true;
+            showStatusAlert('???????', 'warning', 0);
+        }
+    }, 20000);
+}
+
+function clearAfkTurnReminderOnAction() {
+    if (!afkTurnPopupShown) return;
+    afkTurnPopupShown = false;
+    clearStatusAlert();
 }
 
 function syncBgmPlayback() {
@@ -1466,6 +1516,10 @@ function startGame(config = null, fromOnline = false) {
 
     addConsoleLog("GAME INITIATED. PLAYER 1 (BLUE) TURN.", 'system');
     showTurnBanner();
+    const myTurnNow = !onlineMode || localPlayer === currentPlayer;
+    if (lastTurnOwner !== currentPlayer) playTurnSfx(myTurnNow);
+    lastTurnOwner = currentPlayer;
+    startAfkTurnReminder();
     startKeepAliveWarningTimer();
     clearStatusAlert();
     syncBgmPlayback();
@@ -2409,6 +2463,7 @@ function getScoutWarpTargets(scout) {
 // --- CELL CLICK HANDLER ---
 function handleCellClick(row, col) {
     if (isGameOver) return;
+    clearAfkTurnReminderOnAction();
     const cell = boards[activeMap][row][col];
     const viewerPlayer = getViewerPlayer();
     const activeVision = viewerPlayer === 1 ? p1Vision[activeMap] : p2Vision[activeMap];
@@ -2585,6 +2640,7 @@ function executeMove(unit, destRow, destCol) {
     const captured = [];
     let logType = unit.player === 1 ? 'p1' : 'p2';
     const shouldFocusMove = !(vsAI && !onlineMode && unit.player === 2);
+    const suppressVisualForAi = vsAI && !onlineMode && unit.player === 2;
 
     if (resolved.localOccupant && resolved.localOccupant.player !== unit.player) {
         captured.push({ unit: resolved.localOccupant, map: startMap, row: destRow, col: destCol });
@@ -2799,13 +2855,18 @@ function executeClairvoyance(direction, unitOverride = selectedUnit) {
     const unit = unitOverride;
     if (!unit) return;
 
-    const scanObj = { map: unit.map, row: unit.row, col: unit.col, dir: direction };
+    let actualDirection = direction;
+    if (unit.player === 2) {
+        const reverse = { up: 'down', down: 'up', left: 'right', right: 'left' };
+        actualDirection = reverse[direction] || direction;
+    }
+    const scanObj = { map: unit.map, row: unit.row, col: unit.col, dir: actualDirection };
     if (currentPlayer === 1) { p1ClairvoyanceDir = scanObj; p1ClairvoyanceAge = 0; }
     else { p2ClairvoyanceDir = scanObj; p2ClairvoyanceAge = 0; }
 
     const dirKanji = { up: '▲上', down: '▼下', left: '◀左', right: '右▶' }[direction];
     addConsoleLog(`ABILITY: 甲の「千里眼」起動。${unit.map} 内の ${dirKanji} 方向を可視化。`, 'ability');
-    sendOnlineMessage({ kind: 'action', action: { type: 'clairvoyance', unitId: unit.id, dir: direction } });
+    sendOnlineMessage({ kind: 'action', action: { type: 'clairvoyance', unitId: unit.id, dir: actualDirection } });
     completeUnitAction(unit);
 }
 
@@ -2841,8 +2902,8 @@ function completeUnitAction(unit) {
     actionsThisTurn++;
     cancelSelection();
     calculateVisibility();
-    renderBoard();
-    updateUI();
+    if (!suppressVisualForAi) renderBoard();
+    if (!suppressVisualForAi) updateUI();
 
     if (actionsThisTurn >= ACTIONS_PER_TURN || !hasAvailableActionUnit(currentPlayer)) {
         endTurn();
@@ -2964,7 +3025,7 @@ function getScoutReinforceInterval(player) {
 }
 
 // --- WIN / LOSE ---
-function triggerWin(winnerId, fromOnline = false) {
+function triggerWin(winnerId, fromOnline = false, reason = 'core') {
     isGameOver = true;
     const titleEl = document.getElementById('game-over-title');
     const subtitleEl = document.getElementById('game-over-subtitle');
@@ -2974,14 +3035,18 @@ function triggerWin(winnerId, fromOnline = false) {
     if (viewerWon) {
         titleEl.textContent = 'VICTORY';
         titleEl.className = `glitch-text ${winnerId === 1 ? 'text-cyan' : 'text-magenta'}`;
-        subtitleEl.textContent = `PLAYER ${winnerId} が敵のコア領域を完全破壊し、勝利を収めました。`;
+        subtitleEl.textContent = reason === 'forfeit'
+            ? '???????????????'
+            : `PLAYER ${winnerId} ???????????????????????`;
         addConsoleLog(`SYSTEM OVERRIDE: PLAYER ${winnerId} VICTORY. ENEMY CORE PURGED.`, 'system');
     } else {
         titleEl.textContent = 'DEFEAT';
         titleEl.className = `glitch-text ${winnerId === 1 ? 'text-cyan' : 'text-magenta'}`;
-        subtitleEl.textContent = vsAI ?
-            '対戦AI (RED) によって自軍コアが消滅しました。再接続を推奨します。' :
-            `PLAYER ${winnerId} が敵のコア領域を完全破壊し、勝利を収めました。`;
+        subtitleEl.textContent = reason === 'forfeit'
+            ? '?????????????'
+            : (vsAI
+                ? '??AI (RED) ????????????????'
+                : `PLAYER ${winnerId} ???????????????????????`);
         addConsoleLog(`SYSTEM OVERRIDE: PLAYER ${winnerId} VICTORY. HOME CORE PURGED.`, 'system');
     }
 
@@ -2993,7 +3058,7 @@ function forfeitGame() {
     if (confirm("本当に降伏（Reboot）しますか？現在の作戦データは破棄されます。")) {
         const winner = localPlayer ? (localPlayer === 1 ? 2 : 1) : (currentPlayer === 1 ? 2 : 1);
         if (onlineMode) sendOnlineMessage({ kind: 'forfeit', winner });
-        triggerWin(winner, true);
+        triggerWin(winner, true, 'forfeit');
     }
 }
 

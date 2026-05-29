@@ -17,6 +17,7 @@
     --shadow-magenta: 0 0 10px rgba(255, 0, 127, 0.35), 0 0 20px rgba(255, 0, 127, 0.15);
     --shadow-gold: 0 0 12px rgba(255, 183, 0, 0.4);
     --shadow-purple: 0 0 10px rgba(157, 78, 221, 0.35);
+    --vision-saturation: 1;
     
     --font-outfit: 'Outfit', sans-serif;
     --font-mono: 'Share Tech Mono', monospace;
@@ -112,7 +113,24 @@ header {
     list-style: none;
     font-family: var(--font-mono);
     font-size: 0.8rem;
-    color: var(--neon-gold);
+    color: var(--text-primary);
+}
+
+.settings-menu {
+    position: relative;
+}
+
+.settings-menu-panel {
+    position: absolute;
+    top: calc(100% + 0.4rem);
+    right: 0;
+    width: 220px;
+    padding: 0.65rem;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px;
+    background: rgba(8, 10, 18, 0.96);
+    box-shadow: 0 10px 28px rgba(0,0,0,0.35);
+    z-index: 2500;
 }
 
 .news-item summary::-webkit-details-marker {
@@ -617,6 +635,7 @@ details li {
 .cell.fog-grey {
     background: rgba(5, 7, 12, 0.9) !important;
     border-color: rgba(255, 255, 255, 0.01) !important;
+    filter: saturate(var(--vision-saturation));
 }
 
 .cell.fog-grey * {

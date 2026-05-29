@@ -31,15 +31,21 @@
                         <details class="news-item" open>
                             <summary>PATCH 0.6.1</summary>
                             <ul class="news-list">
-                                <li>軍旗システムを実装（甲撃破時に軍旗ドロップ）</li>
-                                <li>軍旗回収コマが7ターン生存で甲へ昇格する仕様を追加</li>
-                                <li>軍旗は爆破でのみ消滅、敵は回収不可のルールを追加</li>
-                                <li>軍旗と生存カウントの盤面表示を追加</li>
-                                <li>歴戦王の再行動時は移動が「直線2」になるよう調整</li>
-                                <li>歴戦王の視界をマンハッタン2に変更</li>
+                                <li>?????????????2???</li>
+                                <li>???????????????2????????</li>
+                                <li>????????</li>
                             </ul>
                         </details>
                         <details>
+                            <summary>PATCH 0.6.0</summary>
+                            <ul class="news-list">
+                                <li>??????????????????????</li>
+                                <li>???????7?????????????????</li>
+                                <li>????????????????????????</li>
+                                <li>?????????????????</li>
+                            </ul>
+                        </details>
+                        <details class="news-item">
                             <summary>PATCH 0.5.3</summary>
                             <ul class="news-list">
                                 <li>オンライン内にプライベート / ランダムの切替タブを追加</li>
@@ -76,16 +82,25 @@
                         </details>
                     </div>
                 </details>
-                <div class="audio-group">
-                    <button id="btn-toggle-sfx" class="small-tool-btn" type="button">SE ON</button>
-                    <label class="audio-slider-label" for="sfx-volume">SE</label>
-                    <input id="sfx-volume" class="audio-slider" type="range" min="0" max="100" value="55" />
-                </div>
-                <div class="audio-group">
-                    <button id="btn-toggle-bgm" class="small-tool-btn" type="button">BGM ON</button>
-                    <label class="audio-slider-label" for="bgm-volume">BGM</label>
-                    <input id="bgm-volume" class="audio-slider" type="range" min="0" max="100" value="35" />
-                </div>
+                <details class="settings-menu">
+                    <summary class="small-tool-btn">SETTING</summary>
+                    <div class="settings-menu-panel">
+                        <div class="audio-group">
+                            <button id="btn-toggle-sfx" class="small-tool-btn" type="button">SE ON</button>
+                            <label class="audio-slider-label" for="sfx-volume">SE</label>
+                            <input id="sfx-volume" class="audio-slider" type="range" min="0" max="100" value="55" />
+                        </div>
+                        <div class="audio-group">
+                            <button id="btn-toggle-bgm" class="small-tool-btn" type="button">BGM ON</button>
+                            <label class="audio-slider-label" for="bgm-volume">BGM</label>
+                            <input id="bgm-volume" class="audio-slider" type="range" min="0" max="100" value="35" />
+                        </div>
+                        <div class="audio-group">
+                            <label class="audio-slider-label" for="vision-saturation">????</label>
+                            <input id="vision-saturation" class="audio-slider" type="range" min="20" max="160" value="100" />
+                        </div>
+                    </div>
+                </details>
             </div>
         </header>
         <div id="status-alert" class="status-alert hidden"></div>
@@ -375,7 +390,7 @@
         </div>
     </div>
 
-    <div class="patch-badge">PATCH ver.0.6.1</div>
+    <div class="patch-badge">PATCH ver.0.6.2</div>
     <script>
     // Mode tab switching helper (called from inline onclick)
     function setModeTab(mode) {
