@@ -527,7 +527,6 @@ details li {
 #board.viewer-player-2 .unit::before,
 #board.viewer-player-2 .kill-counter {
     display: inline-flex;
-    transform: rotate(180deg);
 }
 
 /* CELLS AND ZONES */
