@@ -656,6 +656,11 @@ function setupGameModeTabs() {
     if (btnCancelMatch) btnCancelMatch.addEventListener('click', cancelMatchmaking);
     const btnRandomMatch = document.getElementById('btn-random-match');
     if (btnRandomMatch) btnRandomMatch.addEventListener('click', prepareRandomMatch);
+
+    const tabPrivate = document.getElementById('tab-online-private');
+    if (tabPrivate) tabPrivate.addEventListener('click', () => setOnlineMatchTab('private'));
+    const tabRandom = document.getElementById('tab-online-random');
+    if (tabRandom) tabRandom.addEventListener('click', () => setOnlineMatchTab('random'));
 }
 
 function switchActiveMap(mapName) {
@@ -721,6 +726,7 @@ function showMatchmakingPanel() {
     document.getElementById('setup-local-panel').classList.add('hidden');
     updateUsernameUI();
     updateMatchmakingPlayerSummary();
+    setOnlineMatchTab(matchmakingRole === 'random' || isRandomMatchRoom() || randomQueuePending ? 'random' : 'private');
     // highlight online tab
     document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active'));
     const tabOnline = document.getElementById('tab-mode-online');
@@ -731,6 +737,14 @@ function showLocalPanel() {
     playUiSfx();
     document.getElementById('matchmaking-panel').classList.add('hidden');
     document.getElementById('setup-local-panel').classList.remove('hidden');
+}
+
+function setOnlineMatchTab(tab) {
+    const isRandom = tab === 'random';
+    document.getElementById('online-private-panel')?.classList.toggle('hidden', isRandom);
+    document.getElementById('online-random-panel')?.classList.toggle('hidden', !isRandom);
+    document.getElementById('tab-online-private')?.classList.toggle('active', !isRandom);
+    document.getElementById('tab-online-random')?.classList.toggle('active', isRandom);
 }
 
 // Simple room-based matchmaking via WebSocket

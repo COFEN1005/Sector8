@@ -1615,6 +1615,35 @@ body.opponent-turn #turn-indicator {
     overflow-y: auto;
 }
 
+.online-match-tabs {
+    display: flex;
+    gap: 4px;
+    background: rgba(0,0,0,0.18);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px;
+    padding: 3px;
+}
+
+.online-match-tab {
+    flex: 1;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    padding: 0.5rem 0.4rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.online-match-tab.active {
+    background: rgba(255,255,255,0.08);
+    color: var(--neon-gold);
+    border: 1px solid rgba(255,183,0,0.3);
+    text-shadow: 0 0 6px rgba(255,183,0,0.45);
+}
+
 .matchmaking-section {
     background: rgba(255,255,255,0.02);
     border: 1px solid rgba(255,255,255,0.05);

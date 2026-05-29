@@ -238,30 +238,37 @@
                             </select>
                             <button id="btn-online-ready" class="neon-btn ready-btn" type="button" disabled>準備完了</button>
                         </div>
-                        <div class="matchmaking-section">
-                            <h4 class="match-subhead">🎲 ランダムマッチ</h4>
-                            <button id="btn-random-match" class="neon-btn" style="margin-bottom:0.8rem;">ランダムに接続</button>
+                        <div class="online-match-tabs">
+                            <button id="tab-online-private" class="online-match-tab active" type="button">プライベート</button>
+                            <button id="tab-online-random" class="online-match-tab" type="button">ランダム</button>
                         </div>
-                        <div class="matchmaking-divider">── または ──</div>
-                        <div class="matchmaking-section">
-                            <h4 class="match-subhead">🏠 ホストとして部屋を作る</h4>
-                            <button id="btn-host-room" class="neon-btn" style="margin-bottom:0.8rem;">部屋を作る (P1)</button>
-                            <div id="room-share-area" class="hidden">
-                                <div class="room-id-box">
-                                    <span class="room-id-label">ROOM ID:</span>
-                                    <span id="room-id-display" class="room-id-value">------</span>
-                                    <button id="btn-copy-room" class="copy-room-btn" type="button">COPY</button>
+                        <div id="online-private-panel">
+                            <div class="matchmaking-section">
+                                <h4 class="match-subhead">🏠 ホストとして部屋を作る</h4>
+                                <button id="btn-host-room" class="neon-btn" style="margin-bottom:0.8rem;">部屋を作る (P1)</button>
+                                <div id="room-share-area" class="hidden">
+                                    <div class="room-id-box">
+                                        <span class="room-id-label">ROOM ID:</span>
+                                        <span id="room-id-display" class="room-id-value">------</span>
+                                        <button id="btn-copy-room" class="copy-room-btn" type="button">COPY</button>
+                                    </div>
+                                    <p class="room-hint">このIDを対戦相手に伝えてください。<br>対戦相手が接続したらゲームを開始できます。</p>
+                                    <button id="btn-start-online-match" class="neon-btn pulse" disabled onclick="startGame()">ONLINE MATCH START</button>
                                 </div>
-                                <p class="room-hint">このIDを対戦相手に伝えてください。<br>対戦相手が接続したらゲームを開始できます。</p>
-                                <button id="btn-start-online-match" class="neon-btn pulse" disabled onclick="startGame()">ONLINE MATCH START</button>
+                            </div>
+
+                            <div class="matchmaking-section">
+                                <h4 class="match-subhead">🔗 ゲストとして参加する</h4>
+                                <div class="room-join-row">
+                                    <input id="room-id-input" class="neon-input" type="text" maxlength="6" placeholder="ROOM ID..." />
+                                    <button id="btn-join-room" class="neon-btn join-btn">参加 (P2)</button>
+                                </div>
                             </div>
                         </div>
-
-                        <div class="matchmaking-section">
-                            <h4 class="match-subhead">🔗 ゲストとして参加する</h4>
-                            <div class="room-join-row">
-                                <input id="room-id-input" class="neon-input" type="text" maxlength="6" placeholder="ROOM ID..." />
-                                <button id="btn-join-room" class="neon-btn join-btn">参加 (P2)</button>
+                        <div id="online-random-panel" class="hidden">
+                            <div class="matchmaking-section">
+                                <h4 class="match-subhead">🎲 ランダムマッチ</h4>
+                                <button id="btn-random-match" class="neon-btn" style="margin-bottom:0.8rem;">ランダムに接続</button>
                             </div>
                         </div>
 
