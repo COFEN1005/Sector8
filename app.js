@@ -1784,7 +1784,7 @@ function initializeBoards() {
                 if (mapName === 'area1' && r === 10 && (c >= 4 && c <= 6)) isCoreTile = true;
                 if (mapName === 'area3' && r === 0 && (c >= 4 && c <= 6)) isCoreTile = true;
 
-                rowCells.push({ row: r, col: c, isWall: false, isTeleport, isCoreTile, unit: null, flag: null });
+                rowCells.push({ row: r, col: c, isWall: false, isTeleport, isCoreTile, unit: null, flag: null, flags: [] });
             }
             mapBoard.push(rowCells);
         }
@@ -2030,18 +2030,22 @@ function removeUnitEverywhere(unit) {
 }
 
 function addMilitaryFlagToBoard(flag) {
-    const current = boards[flag.map][flag.row][flag.col].flag;
-    if (current && current.id !== flag.id) {
-        removeMilitaryFlag(current);
-    }
+    const cell = boards[flag.map][flag.row][flag.col];
+    if (!cell.flags) cell.flags = [];
+    cell.flags.push(flag);
+    cell.flag = cell.flags[cell.flags.length - 1] || null;
     militaryFlags.push(flag);
-    boards[flag.map][flag.row][flag.col].flag = flag;
 }
 
 function removeMilitaryFlag(flag) {
     if (!flag) return;
     const cell = boards[flag.map]?.[flag.row]?.[flag.col];
-    if (cell?.flag?.id === flag.id) cell.flag = null;
+    if (cell?.flags?.length) {
+        cell.flags = cell.flags.filter(entry => entry.id !== flag.id);
+        cell.flag = cell.flags[cell.flags.length - 1] || null;
+    } else if (cell?.flag?.id === flag.id) {
+        cell.flag = null;
+    }
     militaryFlags = militaryFlags.filter(entry => entry.id !== flag.id);
 }
 
@@ -2085,16 +2089,18 @@ function dropFlagForUnit(unit, map, row, col, silent = false) {
 }
 
 function destroyMilitaryFlagAt(map, row, col, reason = '爆破') {
-    const flag = boards[map]?.[row]?.[col]?.flag;
-    if (!flag) return false;
-    removeMilitaryFlag(flag);
-    addConsoleLog(`SYSTEM: ${reason}により Player ${flag.player} の軍旗が消滅。`, 'destroy');
+    const cell = boards[map]?.[row]?.[col];
+    const flags = cell?.flags || (cell?.flag ? [cell.flag] : []);
+    if (!flags.length) return false;
+    flags.slice().forEach(flag => removeMilitaryFlag(flag));
+    addConsoleLog(`SYSTEM: ${reason}により Player ${flags[0].player} の軍旗を含む ${flags.length} 体が消滅。`, 'destroy');
     return true;
 }
 
 function tryPickupMilitaryFlag(unit) {
     if (!unit || unit.type === 'core' || unit.type === 'koh' || unit.type === 'scout' || unit.carryingFlagPlayer) return false;
-    const flag = boards[unit.map]?.[unit.row]?.[unit.col]?.flag;
+    const cell = boards[unit.map]?.[unit.row]?.[unit.col];
+    const flag = cell?.flags?.slice().reverse().find(entry => entry.player === unit.player) || cell?.flag;
     if (!flag || flag.player !== unit.player) return false;
     unit.carryingFlagPlayer = flag.player;
     unit.carryingFlagAbility = flag.ability;
@@ -2133,6 +2139,11 @@ function isFlagVisibleToViewer(flag, viewerPlayer, activeVision) {
     if (!flag) return false;
     if (flag.player === viewerPlayer) return true;
     return activeVision?.has(`${flag.row},${flag.col}`) || false;
+}
+
+function getVisibleFlagsOnCell(cell, viewerPlayer, activeVision) {
+    const flags = cell?.flags?.length ? cell.flags : (cell?.flag ? [cell.flag] : []);
+    return flags.filter(flag => isFlagVisibleToViewer(flag, viewerPlayer, activeVision));
 }
 
 function captureUnit(victim, attackerPlayer) {
@@ -2409,17 +2420,19 @@ function renderBoard() {
             if (cellData.isTeleport) cellEl.classList.add('teleport');
             if (cellData.isWall) cellEl.classList.add('wall');
             if (cellData.isCoreTile) cellEl.classList.add('core-tile');
-            const flagVisible = isFlagVisibleToViewer(cellData.flag, viewerPlayer, activeVision);
-            if (flagVisible) cellEl.classList.add('has-flag');
+            const visibleFlags = getVisibleFlagsOnCell(cellData, viewerPlayer, activeVision);
+            if (visibleFlags.length) cellEl.classList.add('has-flag');
 
             if (!activeVision.has(coordStr)) cellEl.classList.add('fog-grey');
 
-            if (flagVisible) {
+            visibleFlags.forEach((flag, index) => {
                 const flagEl = document.createElement('div');
-                flagEl.className = `military-flag player-${cellData.flag.player}`;
-                flagEl.title = `Player ${cellData.flag.player} の軍旗`;
+                flagEl.className = `military-flag player-${flag.player}`;
+                if (index > 0) flagEl.classList.add(`stacked-${index}`);
+                flagEl.title = `Player ${flag.player} の軍旗`;
+                flagEl.style.transform = index > 0 ? `translate(${index * 0.12}rem, ${index * -0.12}rem)` : '';
                 cellEl.appendChild(flagEl);
-            }
+            });
 
             if (cellData.unit) {
                 const u = cellData.unit;
@@ -2512,8 +2525,9 @@ function renderMinimaps() {
                 if (boardCell.isWall) cell.classList.add('wall');
                 if (boardCell.isTeleport) cell.classList.add('teleport');
                 if (boardCell.isCoreTile) cell.classList.add('core-tile');
-                if (isFlagVisibleToViewer(boardCell.flag, viewerPlayer, vision[mapName])) {
-                    cell.classList.add(`flag-p${boardCell.flag.player}`);
+                const visibleFlags = getVisibleFlagsOnCell(boardCell, viewerPlayer, vision[mapName]);
+                if (visibleFlags.length) {
+                    cell.classList.add(`flag-p${visibleFlags[visibleFlags.length - 1].player}`);
                 }
                 const unit = boardCell.unit;
                 const visible = gameMode === 'debug' || !unit || isUnitVisibleToViewer(unit, viewerPlayer, vision[mapName]);
@@ -3072,7 +3086,7 @@ function executeAbility(unit, destRow, destCol) {
                                 captureUnit(victim, unit.player);
                                 destroyMilitaryFlagAt(map, r, c);
                             }
-                        } else if (targetCell.flag) {
+                        } else if ((targetCell.flags?.length || targetCell.flag)) {
                             destroyMilitaryFlagAt(map, r, c);
                             destroyedCoords.push(`軍旗[${c},${r}]`);
                         }
