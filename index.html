@@ -29,14 +29,21 @@
                     <summary class="small-tool-btn">NEWS</summary>
                     <div class="news-menu-panel">
                         <details class="news-item" open>
+                            <summary>PATCH 0.6.3</summary>
+                            <ul class="news-list">
+                                <li>移動/ターン消費の致命的バグを修正</li>
+                                <li>ターンスキップボタンを追加</li>
+                                <li>勝敗表示・視界設定文言の文字化けを修正</li>
+                            </ul>
+                        </details>
+                        <details class="news-item">
                             <summary>PATCH 0.6.2</summary>
                             <ul class="news-list">
                                 <li>サレンダー時の勝敗テキストを専用文言に変更</li>
                                 <li>SETTINGボタンを追加し、オーディオ設定を移動</li>
-                                <li>視界彩度スライダーを追加</li>
-                                <li>手番切替SEを追加（自分ターン/相手ターン）</li>
+                                <li>視界明るさスライダーを追加</li>
+                                <li>手番切替SEを追加</li>
                                 <li>20秒非操作時の「あなたの番です」通知を追加</li>
-                                <li>視界設定ラベルの文字化けを修正</li>
                             </ul>
                         </details>
                         <details class="news-item">
@@ -60,35 +67,29 @@
                             <summary>PATCH 0.5.3</summary>
                             <ul class="news-list">
                                 <li>オンライン内にプライベート / ランダムの切替タブを追加</li>
-                                <li>ランダム接続をデフォルト表示に変更</li>
-                                <li>ランダム側にマッチング開始ボタンを配置し、押した瞬間に待機開始</li>
-                                <li>NEWSボタンからパッチ履歴を確認できるように変更</li>
-                                <li>ヘッダーのSFX表記をSEへ変更し、NEWS配置を調整</li>
+                                <li>ランダム接続の導線を調整</li>
+                                <li>NEWSとSE表記・配置を調整</li>
                             </ul>
                         </details>
                         <details class="news-item">
                             <summary>PATCH 0.5.2</summary>
                             <ul class="news-list">
-                                <li>NEWSボタンからパッチ履歴を確認できるように変更</li>
-                                <li>ヘッダーのSFX表記をSEへ変更</li>
-                                <li>NEWS配置をSEコントロールの左側へ移動</li>
+                                <li>NEWS履歴の展開UIを追加</li>
+                                <li>SFX表記をSEへ変更</li>
                             </ul>
                         </details>
                         <details class="news-item">
                             <summary>PATCH 0.5.1</summary>
                             <ul class="news-list">
-                                <li>ランダムマッチの準備導線と自動開始を調整</li>
-                                <li>再接続まわりの案内と復帰処理を改善</li>
-                                <li>歴戦王の再行動後は移動範囲が1減少</li>
-                                <li>視界と壁の挙動を調整し、壁越し視界の不具合を修正</li>
+                                <li>ランダムマッチ導線と再接続処理を調整</li>
+                                <li>視界/壁の不具合を修正</li>
                             </ul>
                         </details>
                         <details class="news-item">
                             <summary>PATCH 0.5.0</summary>
                             <ul class="news-list">
-                                <li>Patch News 表示と左下パッチ表示を追加</li>
-                                <li>待機人数、接続状況、オンラインUIを拡張</li>
-                                <li>能力・壁生成・視界システムの調整を反映</li>
+                                <li>Patch News表示と左下パッチ表示を追加</li>
+                                <li>オンラインUIと能力調整を反映</li>
                             </ul>
                         </details>
                     </div>
@@ -401,7 +402,7 @@
         </div>
     </div>
 
-    <div class="patch-badge">PATCH ver.0.6.2</div>
+    <div class="patch-badge">PATCH ver.0.6.3</div>
     <script>
     // Mode tab switching helper (called from inline onclick)
     function setModeTab(mode) {

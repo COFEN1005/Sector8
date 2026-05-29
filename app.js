@@ -582,6 +582,7 @@ function setupUIEventListeners() {
     document.getElementById('btn-move').addEventListener('click', () => selectActionType('move'));
     document.getElementById('btn-ability').addEventListener('click', () => selectActionType('ability'));
     document.getElementById('btn-cancel').addEventListener('click', cancelSelection);
+    document.getElementById('btn-skip-turn')?.addEventListener('click', skipTurn);
     document.getElementById('btn-forfeit').addEventListener('click', forfeitGame);
     document.getElementById('btn-restart').addEventListener('click', resetToSetup);
     document.getElementById('btn-cancel-dir').addEventListener('click', () => {
@@ -1410,7 +1411,7 @@ function startAfkTurnReminder() {
     afkTurnTimer = window.setTimeout(() => {
         if (canControlCurrentTurn() && !isGameOver && activePhase === 'battle') {
             afkTurnPopupShown = true;
-            showStatusAlert('???????', 'warning', 0);
+            showStatusAlert('あなたの番です', 'warning', 0);
         }
     }, 20000);
 }
@@ -2856,7 +2857,7 @@ function executeClairvoyance(direction, unitOverride = selectedUnit) {
     if (currentPlayer === 1) { p1ClairvoyanceDir = scanObj; p1ClairvoyanceAge = 0; }
     else { p2ClairvoyanceDir = scanObj; p2ClairvoyanceAge = 0; }
 
-    const dirKanji = { up: '▲上', down: '▼下', left: '◀左', right: '右▶' }[direction];
+    const dirKanji = { up: 'UP', down: 'DOWN', left: 'LEFT', right: 'RIGHT' }[actualDirection];
     addConsoleLog(`ABILITY: 甲の「千里眼」起動。${unit.map} 内の ${dirKanji} 方向を可視化。`, 'ability');
     sendOnlineMessage({ kind: 'action', action: { type: 'clairvoyance', unitId: unit.id, dir: actualDirection } });
     completeUnitAction(unit);
@@ -2894,8 +2895,8 @@ function completeUnitAction(unit) {
     actionsThisTurn++;
     cancelSelection();
     calculateVisibility();
-    if (!suppressVisualForAi) renderBoard();
-    if (!suppressVisualForAi) updateUI();
+    renderBoard();
+    updateUI();
 
     if (actionsThisTurn >= ACTIONS_PER_TURN || !hasAvailableActionUnit(currentPlayer)) {
         endTurn();
@@ -3028,17 +3029,17 @@ function triggerWin(winnerId, fromOnline = false, reason = 'core') {
         titleEl.textContent = 'VICTORY';
         titleEl.className = `glitch-text ${winnerId === 1 ? 'text-cyan' : 'text-magenta'}`;
         subtitleEl.textContent = reason === 'forfeit'
-            ? '???????????????'
-            : `PLAYER ${winnerId} ???????????????????????`;
+            ? '対戦相手のコアが自壊しました。'
+            : `PLAYER ${winnerId} が敵のコア領域を完全破壊し、勝利を収めました。`;
         addConsoleLog(`SYSTEM OVERRIDE: PLAYER ${winnerId} VICTORY. ENEMY CORE PURGED.`, 'system');
     } else {
         titleEl.textContent = 'DEFEAT';
         titleEl.className = `glitch-text ${winnerId === 1 ? 'text-cyan' : 'text-magenta'}`;
         subtitleEl.textContent = reason === 'forfeit'
-            ? '?????????????'
+            ? '自身のコアを自壊しました。'
             : (vsAI
-                ? '??AI (RED) ????????????????'
-                : `PLAYER ${winnerId} ???????????????????????`);
+                ? '対戦AI (RED) によって自軍コアが崩壊しました。'
+                : `PLAYER ${winnerId} が敵のコア領域を完全破壊し、勝利を収めました。`);
         addConsoleLog(`SYSTEM OVERRIDE: PLAYER ${winnerId} VICTORY. HOME CORE PURGED.`, 'system');
     }
 
@@ -3052,6 +3053,12 @@ function forfeitGame() {
         if (onlineMode) sendOnlineMessage({ kind: 'forfeit', winner });
         triggerWin(winner, true, 'forfeit');
     }
+}
+
+function skipTurn() {
+    if (isGameOver || !canControlCurrentTurn() || activePhase !== 'battle') return;
+    addConsoleLog(`TURN SKIP: Player ${currentPlayer} が手動でターンを終了。`, 'system');
+    endTurn();
 }
 
 function resetToSetup(fromOnline = false) {
