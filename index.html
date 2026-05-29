@@ -32,6 +32,8 @@
                             <summary>PATCH 0.5.3</summary>
                             <ul class="news-list">
                                 <li>オンライン内にプライベート / ランダムの切替タブを追加</li>
+                                <li>ランダム接続をデフォルト表示に変更</li>
+                                <li>ランダム側にマッチング開始ボタンを配置し、押した瞬間に待機開始</li>
                                 <li>NEWSボタンからパッチ履歴を確認できるように変更</li>
                                 <li>ヘッダーのSFX表記をSEへ変更し、NEWS配置を調整</li>
                             </ul>
@@ -247,10 +249,10 @@
                             <button id="btn-online-ready" class="neon-btn ready-btn" type="button" disabled>準備完了</button>
                         </div>
                         <div class="online-match-tabs">
-                            <button id="tab-online-random" class="online-match-tab" type="button">ランダム接続</button>
-                            <button id="tab-online-private" class="online-match-tab active" type="button">プライベートマッチ</button>
+                            <button id="tab-online-random" class="online-match-tab active" type="button">ランダム接続</button>
+                            <button id="tab-online-private" class="online-match-tab" type="button">プライベートマッチ</button>
                         </div>
-                        <div id="online-private-panel">
+                        <div id="online-private-panel" class="hidden">
                             <div class="matchmaking-section">
                                 <h4 class="match-subhead">🏠 ホストとして部屋を作る</h4>
                                 <button id="btn-host-room" class="neon-btn" style="margin-bottom:0.8rem;">部屋を作る (P1)</button>
@@ -273,7 +275,7 @@
                                 </div>
                             </div>
                         </div>
-                        <div id="online-random-panel" class="hidden">
+                        <div id="online-random-panel">
                             <div class="matchmaking-section">
                                 <h4 class="match-subhead">🎲 ランダムマッチ</h4>
                                 <p class="room-hint">マッチング開始を押すと、そのままランダムマッチングを開始します。</p>

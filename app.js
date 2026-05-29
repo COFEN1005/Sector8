@@ -725,7 +725,7 @@ function showMatchmakingPanel() {
     document.getElementById('setup-local-panel').classList.add('hidden');
     updateUsernameUI();
     updateMatchmakingPlayerSummary();
-    setOnlineMatchTab(matchmakingRole === 'random' || isRandomMatchRoom() || randomQueuePending ? 'random' : 'private');
+    setOnlineMatchTab(matchmakingRole === 'host' || matchmakingRole === 'guest' ? 'private' : 'random');
     // highlight online tab
     document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active'));
     const tabOnline = document.getElementById('tab-mode-online');
