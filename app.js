@@ -135,8 +135,7 @@ let moveSfx = null;
 let bgmTrack = null;
 let lobbyBgmTrack = null;
 let uiSfx = null;
-let turnMySfx = null;
-let turnOppSfx = null;
+let turnSfx = null;
 let moveSfxVolume = 0.55;
 let bgmVolume = 0.35;
 let visionSaturation = 1;
@@ -1328,13 +1327,9 @@ function initializeAudio() {
     uiSfx.preload = 'auto';
     uiSfx.volume = moveSfxVolume;
 
-    turnMySfx = new Audio('audio/sfx_turn_my.wav');
-    turnMySfx.preload = 'auto';
-    turnMySfx.volume = moveSfxVolume;
-
-    turnOppSfx = new Audio('audio/sfx_turn_opponent.wav');
-    turnOppSfx.preload = 'auto';
-    turnOppSfx.volume = moveSfxVolume;
+    turnSfx = new Audio('audio/sfx_turn.wav');
+    turnSfx.preload = 'auto';
+    turnSfx.volume = moveSfxVolume;
 
     updateAudioButtons();
     syncBgmPlayback();
@@ -1388,8 +1383,7 @@ function handleSfxVolumeChange(event) {
     moveSfxVolume = Number(event.target.value) / 100;
     if (moveSfx) moveSfx.volume = moveSfxVolume;
     if (uiSfx) uiSfx.volume = moveSfxVolume;
-    if (turnMySfx) turnMySfx.volume = moveSfxVolume;
-    if (turnOppSfx) turnOppSfx.volume = moveSfxVolume;
+    if (turnSfx) turnSfx.volume = moveSfxVolume;
 }
 
 function handleBgmVolumeChange(event) {
@@ -1403,11 +1397,10 @@ function handleVisionSaturationChange(event) {
     document.documentElement.style.setProperty('--vision-saturation', String(visionSaturation));
 }
 
-function playTurnSfx(isMyTurn) {
+function playTurnSfx() {
     if (!moveSfxEnabled) return;
-    const audio = isMyTurn ? turnMySfx : turnOppSfx;
-    if (!audio) return;
-    try { audio.currentTime = 0; void audio.play().catch(() => {}); } catch {}
+    if (!turnSfx) return;
+    try { turnSfx.currentTime = 0; void turnSfx.play().catch(() => {}); } catch {}
 }
 
 function startAfkTurnReminder() {
@@ -1516,8 +1509,7 @@ function startGame(config = null, fromOnline = false) {
 
     addConsoleLog("GAME INITIATED. PLAYER 1 (BLUE) TURN.", 'system');
     showTurnBanner();
-    const myTurnNow = !onlineMode || localPlayer === currentPlayer;
-    if (lastTurnOwner !== currentPlayer) playTurnSfx(myTurnNow);
+    if (lastTurnOwner !== currentPlayer) playTurnSfx();
     lastTurnOwner = currentPlayer;
     startAfkTurnReminder();
     startKeepAliveWarningTimer();
