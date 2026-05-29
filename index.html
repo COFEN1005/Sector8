@@ -84,7 +84,7 @@
                         <summary>🌁 ポータルと視界ルール</summary>
                         <p>・<strong>戦場の霧</strong>: 視界外の敵は完全に見えなくなります。</p>
                         <p>・<strong>テレポートマス (t)</strong>: ユニットがこのマスへ移動すると、隣接マップの対応するマスへ即座に転送されます。転送先に敵がいる場合は撃破し、味方がいる場合はテレポート不可。エリア2初期配置の前線コマは自拠点側へテレポート不可。偵察兵はエリア2固定で通常テレポート不可。</p>
-                        <p>・<strong>固定壁 (w)</strong>: 移動を遮断。視界は通ります。甲の「爆破」でのみ破壊可能。</p>
+                        <p>・<strong>固定壁 (w)</strong>: 移動と視界を遮断。甲の「爆破」でのみ破壊可能。</p>
                     </details>
                 </div>
             </section>
@@ -146,6 +146,20 @@
                         </div>
                         <div id="username-saved" class="username-saved">現在: Commander</div>
                     </div>
+
+                    <details class="news-panel" open>
+                        <summary>PATCH NEWS</summary>
+                        <div class="news-body">
+                            <div class="news-version">ver.0.1</div>
+                            <ul class="news-list">
+                                <li>ランダムマッチの準備導線と自動開始を調整</li>
+                                <li>再接続まわりの案内と復帰処理を改善</li>
+                                <li>歴戦王の再行動後は移動範囲が1減少</li>
+                                <li>偵察兵の補充、迷彩、監視などの仕様更新を反映</li>
+                                <li>視界と壁の挙動を調整中。壁越し視界の不具合を修正</li>
+                            </ul>
+                        </div>
+                    </details>
 
                     <!-- Mode tabs -->
                     <div class="mode-tabs">
@@ -237,6 +251,7 @@
 
                         <div id="matchmaking-status" class="match-status"></div>
                         <div id="matchmaking-players" class="match-players"></div>
+                        <div id="matchmaking-queue" class="match-queue">待機人数: 0</div>
 
                         <button id="btn-cancel-match" class="neon-btn danger" style="margin-top:0.8rem;">キャンセル</button>
                     </div>

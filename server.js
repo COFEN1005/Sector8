@@ -63,6 +63,20 @@ function getRoomSnapshot(room) {
     };
 }
 
+function countRandomWaitingPlayers() {
+    const room = pendingRandomRoomId ? rooms.get(pendingRandomRoomId) : null;
+    if (!room || room.started) return 0;
+    return room.seats[1].socket && !room.seats[2].socket ? 1 : 0;
+}
+
+function sendRandomQueueStatus() {
+    const payload = { kind: 'queue_status', waiting: countRandomWaitingPlayers() };
+    rooms.forEach(room => {
+        if (!room.random) return;
+        roomSockets(room).forEach(socket => sendFrame(socket, payload));
+    });
+}
+
 function sendFrame(socket, payload) {
     if (!socket || socket.destroyed) return;
     const data = Buffer.from(JSON.stringify(payload));
@@ -162,6 +176,7 @@ function cleanupRoomIfEmpty(room) {
     if (!room.started) {
         if (pendingRandomRoomId === room.id) pendingRandomRoomId = null;
         rooms.delete(room.id);
+        sendRandomQueueStatus();
     }
 }
 
@@ -245,11 +260,13 @@ function joinRandomRoom(socket, token) {
         room = createRoom(`RANDOM-${String(randomRoomSerial++).padStart(4, '0')}`, true);
         pendingRandomRoomId = room.id;
         room.seats[1].socket = socket;
+        sendRandomQueueStatus();
         return { room, role: 'player', player: 1, token: room.seats[1].token };
     }
 
     room.seats[2].socket = socket;
     pendingRandomRoomId = null;
+    sendRandomQueueStatus();
     return { room, role: 'player', player: 2, token: room.seats[2].token };
 }
 
@@ -355,6 +372,7 @@ server.on('upgrade', (req, socket) => {
         role,
         roomId: room.id,
         randomRoom: room.random,
+        randomWaitingCount: countRandomWaitingPlayers(),
         reconnectToken,
         snapshot: getRoomSnapshot(room),
         profiles: room.profiles

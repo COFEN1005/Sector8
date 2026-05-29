@@ -199,6 +199,7 @@ let localUsername = '';
 let onlineUsernames = { 1: null, 2: null };
 let randomMatchAutoStarted = false;
 let randomQueuePending = false;
+let randomWaitingCount = 0;
 
 function detectDeviceProfile() {
     const coarsePointer = window.matchMedia('(pointer: coarse)').matches;
@@ -894,6 +895,13 @@ function updateMatchmakingPlayerSummary() {
     summaryEl.textContent = localUsername || 'Commander';
 }
 
+function updateRandomQueueCount(waiting = randomWaitingCount) {
+    randomWaitingCount = Number.isFinite(waiting) ? waiting : 0;
+    const queueEl = document.getElementById('matchmaking-queue');
+    if (!queueEl) return;
+    queueEl.textContent = `待機人数: ${randomWaitingCount}`;
+}
+
 function maybeAutoStartRandomMatch() {
     if (!onlineMode || !isRandomMatchRoom() || activePhase !== 'setup') return;
     const ready = Boolean(onlineAbilityChoices[1] && onlineAbilityChoices[2] && onlineReadyState[1] && onlineReadyState[2]);
@@ -969,6 +977,7 @@ function handleOnlineMessage(message) {
             randomRoom: Boolean(message.randomRoom)
         };
         saveOnlineSession();
+        updateRandomQueueCount(message.randomWaitingCount ?? randomWaitingCount);
         if (message.profiles) {
             onlineUsernames[1] = message.profiles[1] || onlineUsernames[1];
             onlineUsernames[2] = message.profiles[2] || onlineUsernames[2];
@@ -1020,6 +1029,11 @@ function handleOnlineMessage(message) {
         updateMatchmakingPlayerSummary();
         updateOnlineStartAvailability();
         maybeAutoStartRandomMatch();
+        return;
+    }
+
+    if (message.kind === 'queue_status') {
+        updateRandomQueueCount(message.waiting);
         return;
     }
 
@@ -1725,6 +1739,32 @@ function isCellWithinUnitVision(unit, mapName, row, col) {
     return getUnitVisionCells(unit).has(`${row},${col}`);
 }
 
+function isCellInsideVisionShape(unit, row, col, shape, range) {
+    const dr = row - unit.row;
+    const dc = col - unit.col;
+    if (shape === 'beam') {
+        return (row === unit.row && Math.abs(dc) <= range) || (col === unit.col && Math.abs(dr) <= range);
+    }
+    if (shape === 'square') {
+        return Math.max(Math.abs(dr), Math.abs(dc)) <= range;
+    }
+    return Math.abs(dr) + Math.abs(dc) <= range;
+}
+
+function hasOpaqueLineOfSight(mapName, fromRow, fromCol, toRow, toCol) {
+    const steps = Math.max(Math.abs(toRow - fromRow), Math.abs(toCol - fromCol));
+    if (steps <= 1) return true;
+    for (let step = 1; step < steps; step++) {
+        const t = step / steps;
+        const row = Math.round(fromRow + (toRow - fromRow) * t);
+        const col = Math.round(fromCol + (toCol - fromCol) * t);
+        if (row === fromRow && col === fromCol) continue;
+        if (row === toRow && col === toCol) continue;
+        if (boards[mapName][row]?.[col]?.isWall) return false;
+    }
+    return true;
+}
+
 function getUnitVisionCells(unit) {
     const visible = new Set();
     if (!unit || !unit.map) return visible;
@@ -1736,43 +1776,19 @@ function getUnitVisionCells(unit) {
     const originKey = `${unit.row},${unit.col}`;
     visible.add(originKey);
 
-    if (shape === 'beam') {
-        const dirs = [{ r: -1, c: 0 }, { r: 1, c: 0 }, { r: 0, c: -1 }, { r: 0, c: 1 }];
-        dirs.forEach(dir => {
-            for (let step = 1; step <= range; step++) {
-                const nextRow = unit.row + dir.r * step;
-                const nextCol = unit.col + dir.c * step;
-                if (nextRow < 0 || nextRow >= size.rows || nextCol < 0 || nextCol >= size.cols) break;
-                visible.add(`${nextRow},${nextCol}`);
-                if (boards[mapName][nextRow][nextCol].isWall) break;
-            }
-        });
-        return visible;
-    }
+    const startRow = Math.max(0, unit.row - range);
+    const endRow = Math.min(size.rows - 1, unit.row + range);
+    const startCol = Math.max(0, unit.col - range);
+    const endCol = Math.min(size.cols - 1, unit.col + range);
 
-    const dirs = shape === 'square'
-        ? [
-            { r: -1, c: 0 }, { r: 1, c: 0 }, { r: 0, c: -1 }, { r: 0, c: 1 },
-            { r: -1, c: -1 }, { r: -1, c: 1 }, { r: 1, c: -1 }, { r: 1, c: 1 }
-        ]
-        : [{ r: -1, c: 0 }, { r: 1, c: 0 }, { r: 0, c: -1 }, { r: 0, c: 1 }];
-
-    const queue = [{ row: unit.row, col: unit.col, steps: 0 }];
-    const visited = new Set([originKey]);
-    while (queue.length > 0) {
-        const current = queue.shift();
-        if (current.steps >= range) continue;
-        dirs.forEach(dir => {
-            const nextRow = current.row + dir.r;
-            const nextCol = current.col + dir.c;
-            const key = `${nextRow},${nextCol}`;
-            if (nextRow < 0 || nextRow >= size.rows || nextCol < 0 || nextCol >= size.cols || visited.has(key)) return;
-            visited.add(key);
-            visible.add(key);
-            if (!boards[mapName][nextRow][nextCol].isWall) {
-                queue.push({ row: nextRow, col: nextCol, steps: current.steps + 1 });
+    for (let row = startRow; row <= endRow; row++) {
+        for (let col = startCol; col <= endCol; col++) {
+            if (row === unit.row && col === unit.col) continue;
+            if (!isCellInsideVisionShape(unit, row, col, shape, range)) continue;
+            if (hasOpaqueLineOfSight(mapName, unit.row, unit.col, row, col)) {
+                visible.add(`${row},${col}`);
             }
-        });
+        }
     }
     return visible;
 }
