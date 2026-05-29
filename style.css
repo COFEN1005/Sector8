@@ -228,6 +228,43 @@ header {
     margin-top: 0.75rem;
 }
 
+.dev-query-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.dev-query-row .neon-input {
+    flex: 1;
+}
+
+.dev-delta-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+    margin-top: 0.55rem;
+}
+
+.dev-delta-field {
+    display: grid;
+    gap: 0.3rem;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    letter-spacing: 1px;
+}
+
+.dev-delta-field span {
+    padding-left: 0.1rem;
+}
+
+.dev-delta-field .neon-input {
+    width: 100%;
+    min-width: 0;
+    letter-spacing: 0;
+    text-transform: none;
+}
+
 .account-hint {
     margin-top: 0.35rem;
     font-family: var(--font-mono);
@@ -1491,6 +1528,12 @@ details li {
     font-family: var(--font-mono);
     font-weight: 800;
     cursor: pointer;
+}
+
+.small-tool-btn.danger {
+    border-color: rgba(255, 0, 127, 0.4);
+    background: rgba(255, 0, 127, 0.08);
+    color: var(--neon-magenta);
 }
 
 .connection-log,

@@ -72,6 +72,20 @@ function applyExperience(level, exp, gained) {
   return { level: nextLevel, exp: nextExp };
 }
 
+function adjustExperience(level, exp, delta) {
+  if (!delta) return { level, exp };
+  if (delta > 0) return applyExperience(level, exp, delta);
+
+  let nextLevel = level;
+  let nextExp = exp + delta;
+  while (nextExp < 0 && nextLevel > 1) {
+    nextLevel -= 1;
+    nextExp += LEVEL_EXP_PER_LEVEL;
+  }
+  if (nextExp < 0) nextExp = 0;
+  return { level: nextLevel, exp: nextExp };
+}
+
 function calculateRatingDelta(playerRating, opponentRating, didWin) {
   const base = 10;
   const diff = Math.round((opponentRating - playerRating) / 100);
@@ -320,6 +334,13 @@ function createStore() {
     return rowToProfile(row);
   }
 
+  function getPlayerByName(name) {
+    const cleanName = sanitizeDisplayName(name);
+    if (!cleanName) return null;
+    const row = db.prepare('SELECT * FROM players WHERE name_norm = ?').get(cleanName.toUpperCase());
+    return rowToProfile(row);
+  }
+
   function updatePlayerName(playerId, name) {
     const cleanName = sanitizeDisplayName(name);
     if (!cleanName) return { ok: false, error: 'name_invalid' };
@@ -330,6 +351,29 @@ function createStore() {
       WHERE id = ?
     `).run(cleanName, cleanName.toUpperCase(), ts, playerId);
     return { ok: true, profile: rowToProfile(db.prepare('SELECT * FROM players WHERE id = ?').get(playerId)) };
+  }
+
+  function adjustPlayerProgress(playerId, ratingDelta = 0, expDelta = 0) {
+    const row = db.prepare('SELECT * FROM players WHERE id = ?').get(playerId);
+    if (!row) return { ok: false, error: 'not_found' };
+    const levelState = adjustExperience(row.level, row.exp, Number(expDelta || 0));
+    const ts = now();
+    db.prepare(`
+      UPDATE players
+      SET level = ?, exp = ?, rating = rating + ?, updated_at = ?
+      WHERE id = ?
+    `).run(levelState.level, levelState.exp, Number(ratingDelta || 0), ts, playerId);
+    return { ok: true, profile: rowToProfile(db.prepare('SELECT * FROM players WHERE id = ?').get(playerId)) };
+  }
+
+  function deletePlayerById(playerId) {
+    const row = db.prepare('SELECT * FROM players WHERE id = ?').get(playerId);
+    if (!row) return { ok: false, error: 'not_found' };
+    withTransaction(() => {
+      db.prepare('DELETE FROM players WHERE id = ?').run(playerId);
+      db.prepare('DELETE FROM match_history WHERE player1_id = ? OR player2_id = ?').run(playerId, playerId);
+    });
+    return { ok: true, profile: rowToProfile(row) };
   }
 
   function getFriendRowPair(aId, bId) {
@@ -556,7 +600,10 @@ function createStore() {
     getPlayerById,
     getPlayerByPlayerId,
     getPlayerByFriendCode,
+    getPlayerByName,
     updatePlayerName,
+    adjustPlayerProgress,
+    deletePlayerById,
     listFriends,
     listFriendRequests,
     sendFriendRequest,
@@ -569,7 +616,8 @@ function createStore() {
     normalizeFriendCode,
     formatFriendCode,
     sanitizeDisplayName,
-    applyExperience
+    applyExperience,
+    adjustExperience
   };
 }
 

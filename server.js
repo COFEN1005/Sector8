@@ -80,6 +80,17 @@ function countRandomWaitingPlayers(matchTier = 'rank') {
     return room.seats[1].socket && !room.seats[2].socket ? 1 : 0;
 }
 
+function resolveDevPlayer(query) {
+    const normalizedId = normalizePlayerId(query || '');
+    if (normalizedId) {
+        const byId = accountStore.getPlayerByPlayerId(normalizedId);
+        if (byId) return byId;
+    }
+    const byName = accountStore.getPlayerByName(query || '');
+    if (byName) return byName;
+    return null;
+}
+
 function sendRandomQueueStatus(matchTier = 'rank') {
     const payload = { kind: 'queue_status', waiting: countRandomWaitingPlayers(matchTier), matchTier };
     rooms.forEach(room => {
@@ -402,6 +413,39 @@ const server = http.createServer(async (req, res) => {
                 const result = accountStore.updatePlayerName(session.profile.id, body.name);
                 if (!result.ok) return sendJson(res, 400, { ok: false, error: result.error });
                 return sendJson(res, 200, { ok: true, profile: result.profile });
+            }
+
+            if (url.pathname.startsWith('/api/dev/')) {
+                if (req.headers['x-sector8-dev'] !== '1') {
+                    return sendJson(res, 403, { ok: false, error: 'forbidden' });
+                }
+
+                if (method === 'GET' && url.pathname === '/api/dev/player') {
+                    const query = body.query || url.searchParams.get('query') || '';
+                    const player = resolveDevPlayer(query);
+                    if (!player) return sendJson(res, 404, { ok: false, error: 'not_found' });
+                    return sendJson(res, 200, { ok: true, player });
+                }
+
+                if (method === 'POST' && url.pathname === '/api/dev/player-adjust') {
+                    const target = resolveDevPlayer(body.query || body.playerId || '');
+                    if (!target) return sendJson(res, 404, { ok: false, error: 'not_found' });
+                    const ratingDelta = Number(body.ratingDelta || 0);
+                    const expDelta = Number(body.expDelta || 0);
+                    const result = accountStore.adjustPlayerProgress(target.id, ratingDelta, expDelta);
+                    if (!result.ok) return sendJson(res, 400, { ok: false, error: result.error });
+                    return sendJson(res, 200, { ok: true, player: result.profile });
+                }
+
+                if (method === 'DELETE' && url.pathname === '/api/dev/player') {
+                    const target = resolveDevPlayer(body.query || body.playerId || '');
+                    if (!target) return sendJson(res, 404, { ok: false, error: 'not_found' });
+                    const result = accountStore.deletePlayerById(target.id);
+                    if (!result.ok) return sendJson(res, 400, { ok: false, error: result.error });
+                    return sendJson(res, 200, { ok: true, player: result.profile });
+                }
+
+                return sendJson(res, 404, { ok: false, error: 'not_found' });
             }
 
             if (method === 'GET' && url.pathname === '/api/players/lookup') {

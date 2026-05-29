@@ -33,6 +33,7 @@ const ALL_ABILITY_OPTIONS = ['千里眼', '鼓舞', '足跡', '歴戦王', '戦�
 const USERNAME_STORAGE_KEY = 'sector8_username';
 const ONLINE_SESSION_STORAGE_KEY = 'sector8_online_session';
 const AUTH_SESSION_STORAGE_KEY = 'sector8_auth_session';
+const LAST_PLAYER_ID_STORAGE_KEY = 'sector8_last_player_id';
 
 function getPortalDestination(mapName, r, c) {
     if (!PORTAL_COLS.includes(c)) return null;
@@ -202,6 +203,7 @@ let manualDisconnect = false;
 let onlineSession = null;
 let authSession = null;
 let authProfile = null;
+let devTargetPlayer = null;
 // Matchmaking state
 let matchmakingMode = false;
 let matchmakingRole = null; // 'host' or 'guest'
@@ -319,8 +321,8 @@ function saveAuthSession() {
     } catch {}
 }
 
-async function apiRequest(path, { method = 'GET', body = null, auth = true } = {}) {
-    const headers = { 'Content-Type': 'application/json' };
+async function apiRequest(path, { method = 'GET', body = null, auth = true, headers: extraHeaders = {} } = {}) {
+    const headers = { 'Content-Type': 'application/json', ...extraHeaders };
     if (auth && authSession?.token) headers.Authorization = `Bearer ${authSession.token}`;
     const response = await fetch(path, {
         method,
@@ -390,7 +392,14 @@ function updateAccountUI() {
     if (expEl) expEl.textContent = loggedIn ? `${authProfile.exp}/100` : '0/100';
     if (copyPlayerIdBtn) copyPlayerIdBtn.disabled = !loggedIn;
     if (copyFriendCodeBtn) copyFriendCodeBtn.disabled = !loggedIn;
-    if (loginBtn) loginBtn.disabled = !document.getElementById('account-player-id-input')?.value || !document.getElementById('account-pin-input')?.value;
+    const playerIdInput = document.getElementById('account-player-id-input');
+    if (!loggedIn && playerIdInput && !playerIdInput.value) {
+        try {
+            const lastPlayerId = window.localStorage.getItem(LAST_PLAYER_ID_STORAGE_KEY) || '';
+            if (lastPlayerId) playerIdInput.value = lastPlayerId;
+        } catch {}
+    }
+    if (loginBtn) loginBtn.disabled = !playerIdInput?.value || !document.getElementById('account-pin-input')?.value;
     if (registerBtn) registerBtn.disabled = !document.getElementById('account-pin-input')?.value;
     if (logoutBtn) logoutBtn.disabled = !loggedIn;
 }
@@ -453,10 +462,108 @@ async function copyAccountIdentifier(kind) {
     }
 }
 
+function devApiHeaders() {
+    return { 'X-Sector8-Dev': developModeEnabled ? '1' : '0' };
+}
+
+function getDevQueryInput() {
+    return document.getElementById('dev-player-query-input')?.value || '';
+}
+
+function setDevTargetPlayer(player) {
+    devTargetPlayer = player || null;
+    const infoEl = document.getElementById('dev-target-info');
+    const lookupBtn = document.getElementById('btn-dev-lookup');
+    const applyPlusBtn = document.getElementById('btn-dev-apply-plus');
+    const applyMinusBtn = document.getElementById('btn-dev-apply-minus');
+    const deleteBtn = document.getElementById('btn-dev-delete');
+    if (infoEl) {
+        infoEl.textContent = player
+            ? `${player.name} / ${player.playerId} / LV ${player.level} / EXP ${player.exp} / RATING ${player.rating}`
+            : '対象未選択';
+        infoEl.classList.toggle('logged-in', Boolean(player));
+        infoEl.classList.toggle('error', false);
+    }
+    if (applyPlusBtn) applyPlusBtn.disabled = !player;
+    if (applyMinusBtn) applyMinusBtn.disabled = !player;
+    if (deleteBtn) deleteBtn.disabled = !player;
+    if (lookupBtn) lookupBtn.disabled = !getDevQueryInput().trim();
+}
+
+function syncDevToolsVisibility() {
+    document.getElementById('dev-tools-panel')?.classList.toggle('hidden', !developModeEnabled);
+}
+
+async function lookupDevTarget() {
+    const query = getDevQueryInput().trim();
+    if (!query) {
+        setDevTargetPlayer(null);
+        showStatusAlert('対象の PLAYER ID か名前を入力してください。', 'warning', 2500);
+        return null;
+    }
+    const result = await apiRequest(`/api/dev/player?query=${encodeURIComponent(query)}`, {
+        method: 'GET',
+        auth: false,
+        headers: devApiHeaders()
+    });
+    setDevTargetPlayer(result.player);
+    showStatusAlert(`対象を選択しました: ${result.player.name}`, 'success', 2500);
+    return result.player;
+}
+
+async function applyDevAdjustment(sign = 1) {
+    const target = devTargetPlayer || await lookupDevTarget();
+    if (!target) return null;
+    const ratingDeltaRaw = Number(document.getElementById('dev-rating-delta-input')?.value || 0);
+    const expDeltaRaw = Number(document.getElementById('dev-exp-delta-input')?.value || 0);
+    const result = await apiRequest('/api/dev/player-adjust', {
+        method: 'POST',
+        body: {
+            query: target.playerId,
+            ratingDelta: sign * ratingDeltaRaw,
+            expDelta: sign * expDeltaRaw
+        },
+        auth: false,
+        headers: devApiHeaders()
+    });
+    setDevTargetPlayer(result.player);
+    showStatusAlert(`補正しました: ${result.player.name}`, 'success', 2500);
+    if (authProfile && result.player.id === authProfile.id) {
+        authProfile = result.player;
+        saveAuthSession();
+        updateAccountUI();
+    }
+    return result.player;
+}
+
+async function deleteDevTargetPlayer() {
+    const target = devTargetPlayer || await lookupDevTarget();
+    if (!target) return null;
+    if (!confirm(`本当に ${target.name} を削除しますか？`)) return null;
+    const result = await apiRequest('/api/dev/player', {
+        method: 'DELETE',
+        body: { query: target.playerId },
+        auth: false,
+        headers: devApiHeaders()
+    });
+    showStatusAlert(`アカウントを削除しました: ${result.player.name}`, 'warning', 3000);
+    setDevTargetPlayer(null);
+    if (authProfile && result.player.id === authProfile.id) {
+        authSession = null;
+        authProfile = null;
+        saveAuthSession();
+        updateAccountUI();
+    }
+    return result.player;
+}
+
 function applyAuthProfile(profile, token) {
     authProfile = profile || null;
     authSession = token ? { token } : null;
     saveAuthSession();
+    if (authProfile?.playerId) {
+        try { window.localStorage.setItem(LAST_PLAYER_ID_STORAGE_KEY, authProfile.playerId); } catch {}
+    }
     if (authProfile?.name) {
         localUsername = sanitizeUsername(authProfile.name) || getDefaultUsername();
         const usernameInput = document.getElementById('username-input');
@@ -488,6 +595,7 @@ async function registerAccount() {
     const pin = String(document.getElementById('account-pin-input')?.value || '').trim();
     const result = await apiRequest('/api/auth/register', { method: 'POST', body: { name, pin }, auth: false });
     applyAuthProfile(result.profile, result.token);
+    try { window.localStorage.setItem(LAST_PLAYER_ID_STORAGE_KEY, result.profile.playerId); } catch {}
     showStatusAlert(`REGISTERED: ${result.profile.playerId}`, 'success', 3500);
     setAccountStatus(`REGISTERED / ${result.profile.playerId}`, 'success');
     return result.profile;
@@ -502,6 +610,7 @@ async function loginAccount() {
         auth: false
     });
     applyAuthProfile(result.profile, result.token);
+    try { window.localStorage.setItem(LAST_PLAYER_ID_STORAGE_KEY, result.profile.playerId); } catch {}
     showStatusAlert(`LOGIN OK: ${result.profile.name}`, 'success', 2500);
     setAccountStatus(`LOGIN OK / ${result.profile.name}`, 'success');
     return result.profile;
@@ -859,6 +968,8 @@ function setDevelopModeEnabled(enabled) {
     if (badge) badge.classList.toggle('hidden', !enabled);
     const debugTab = document.getElementById('tab-mode-debug');
     if (debugTab) debugTab.classList.toggle('hidden', !enabled);
+    syncDevToolsVisibility();
+    if (!enabled) setDevTargetPlayer(null);
 }
 
 function registerMapTabSequence(mapName) {
@@ -970,6 +1081,33 @@ function setupUIEventListeners() {
     if (copyPlayerIdBtn) copyPlayerIdBtn.addEventListener('click', () => copyAccountIdentifier('playerId'));
     const copyFriendCodeBtn = document.getElementById('btn-copy-friend-code');
     if (copyFriendCodeBtn) copyFriendCodeBtn.addEventListener('click', () => copyAccountIdentifier('friendCode'));
+    const devLookupBtn = document.getElementById('btn-dev-lookup');
+    if (devLookupBtn) devLookupBtn.addEventListener('click', () => lookupDevTarget().catch(() => {
+        showStatusAlert('対象の取得に失敗しました。', 'warning', 3000);
+    }));
+    const devApplyPlusBtn = document.getElementById('btn-dev-apply-plus');
+    if (devApplyPlusBtn) devApplyPlusBtn.addEventListener('click', () => applyDevAdjustment(1).catch(() => {
+        showStatusAlert('補正に失敗しました。', 'warning', 3000);
+    }));
+    const devApplyMinusBtn = document.getElementById('btn-dev-apply-minus');
+    if (devApplyMinusBtn) devApplyMinusBtn.addEventListener('click', () => applyDevAdjustment(-1).catch(() => {
+        showStatusAlert('補正に失敗しました。', 'warning', 3000);
+    }));
+    const devDeleteBtn = document.getElementById('btn-dev-delete');
+    if (devDeleteBtn) devDeleteBtn.addEventListener('click', () => deleteDevTargetPlayer().catch(() => {
+        showStatusAlert('削除に失敗しました。', 'warning', 3000);
+    }));
+    const devQueryInput = document.getElementById('dev-player-query-input');
+    if (devQueryInput) {
+        devQueryInput.addEventListener('input', () => {
+            if (document.getElementById('btn-dev-lookup')) {
+                document.getElementById('btn-dev-lookup').disabled = !devQueryInput.value.trim();
+            }
+        });
+        devQueryInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') lookupDevTarget().catch(() => {});
+        });
+    }
     const accountPlayerIdInput = document.getElementById('account-player-id-input');
     if (accountPlayerIdInput) {
         accountPlayerIdInput.addEventListener('input', () => {

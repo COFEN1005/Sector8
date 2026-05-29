@@ -29,10 +29,17 @@
                     <summary class="small-tool-btn">NEWS</summary>
                     <div class="news-menu-panel">
                         <details class="news-item" open>
+                            <summary>PATCH 0.7.7</summary>
+                            <ul class="news-list">
+                                <li>DEVELOPER TOOLS を追加</li>
+                                <li>PLAYER ID / 名前でアカウントの補正・削除ができるように変更</li>
+                                <li>最後に使った PLAYER ID を再入力しやすく調整</li>
+                            </ul>
+                        </details>
+                        <details class="news-item" open>
                             <summary>PATCH 0.7.6</summary>
                             <ul class="news-list">
                                 <li>対戦後の経験値付与を全試合に反映するよう修正</li>
-                                <li>レーティング計算の勝敗向き修正を反映</li>
                             </ul>
                         </details>
                         <details class="news-item" open>
@@ -321,6 +328,33 @@
                         </div>
                     </details>
 
+                    <details id="dev-tools-panel" class="config-group account-group hidden">
+                        <summary>DEVELOPER TOOLS</summary>
+                        <div class="account-group-body">
+                            <div class="account-hint">PLAYER ID または名前で対象を選び、ポイント補正やアカウント削除を行えます。</div>
+                            <div class="dev-query-row">
+                                <input id="dev-player-query-input" class="neon-input" type="text" maxlength="24" placeholder="PLAYER ID / NAME" autocapitalize="off" autocomplete="off" spellcheck="false" title="対象の PLAYER ID または表示名を入力します" />
+                                <button id="btn-dev-lookup" class="small-tool-btn" type="button">LOOKUP</button>
+                            </div>
+                            <div id="dev-target-info" class="account-status">対象未選択</div>
+                            <div class="dev-delta-grid">
+                                <label class="dev-delta-field">
+                                    <span>RATING Δ</span>
+                                    <input id="dev-rating-delta-input" class="neon-input" type="number" value="10" step="1" />
+                                </label>
+                                <label class="dev-delta-field">
+                                    <span>EXP Δ</span>
+                                    <input id="dev-exp-delta-input" class="neon-input" type="number" value="50" step="1" />
+                                </label>
+                            </div>
+                            <div class="account-actions">
+                                <button id="btn-dev-apply-plus" class="small-tool-btn" type="button">APPLY +</button>
+                                <button id="btn-dev-apply-minus" class="small-tool-btn" type="button">APPLY -</button>
+                                <button id="btn-dev-delete" class="small-tool-btn danger" type="button">DELETE</button>
+                            </div>
+                        </div>
+                    </details>
+
                     <!-- Mode tabs -->
                     <div class="mode-tabs">
                         <button id="tab-mode-debug" class="mode-tab hidden" onclick="setModeTab('debug')">DEBUG</button>
@@ -508,7 +542,7 @@
         </div>
     </div>
 
-    <div class="patch-badge">PATCH ver.0.7.6</div>
+    <div class="patch-badge">PATCH ver.0.7.7</div>
     <script>
     // Mode tab switching helper (called from inline onclick)
     function setModeTab(mode) {
