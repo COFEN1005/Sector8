@@ -1213,6 +1213,21 @@ details li {
     text-shadow: none;
 }
 
+.neon-btn.skip-turn-btn {
+    margin-top: 0.8rem;
+    margin-bottom: 0.6rem;
+    border-color: var(--neon-gold);
+    color: var(--neon-gold);
+    text-shadow: 0 0 5px var(--neon-gold);
+    box-shadow: inset 0 0 10px rgba(255, 209, 102, 0.12);
+}
+
+.neon-btn.skip-turn-btn:hover {
+    background: var(--neon-gold);
+    color: #000;
+    box-shadow: var(--shadow-gold);
+}
+
 /* GAME INFO & LOG FEED */
 .deck-info {
     display: flex;
