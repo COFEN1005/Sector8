@@ -1267,7 +1267,7 @@ function updateAudioButtons() {
     const bgmBtn = document.getElementById('btn-toggle-bgm');
     const sfxVolumeSlider = document.getElementById('sfx-volume');
     const bgmVolumeSlider = document.getElementById('bgm-volume');
-    if (sfxBtn) sfxBtn.textContent = moveSfxEnabled ? 'SFX ON' : 'SFX OFF';
+    if (sfxBtn) sfxBtn.textContent = moveSfxEnabled ? 'SE ON' : 'SE OFF';
     if (bgmBtn) bgmBtn.textContent = bgmEnabled ? 'BGM ON' : 'BGM OFF';
     if (sfxVolumeSlider) sfxVolumeSlider.value = String(Math.round(moveSfxVolume * 100));
     if (bgmVolumeSlider) bgmVolumeSlider.value = String(Math.round(bgmVolume * 100));

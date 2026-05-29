@@ -25,9 +25,39 @@
                 </div>
             </div>
             <div class="audio-controls">
+                <details class="news-menu">
+                    <summary class="small-tool-btn">NEWS</summary>
+                    <div class="news-menu-panel">
+                        <details class="news-item" open>
+                            <summary>PATCH 0.5.2</summary>
+                            <ul class="news-list">
+                                <li>NEWSボタンからパッチ履歴を確認できるように変更</li>
+                                <li>ヘッダーのSFX表記をSEへ変更</li>
+                                <li>NEWS配置をSEコントロールの左側へ移動</li>
+                            </ul>
+                        </details>
+                        <details class="news-item">
+                            <summary>PATCH 0.5.1</summary>
+                            <ul class="news-list">
+                                <li>ランダムマッチの準備導線と自動開始を調整</li>
+                                <li>再接続まわりの案内と復帰処理を改善</li>
+                                <li>歴戦王の再行動後は移動範囲が1減少</li>
+                                <li>視界と壁の挙動を調整し、壁越し視界の不具合を修正</li>
+                            </ul>
+                        </details>
+                        <details class="news-item">
+                            <summary>PATCH 0.5.0</summary>
+                            <ul class="news-list">
+                                <li>Patch News 表示と左下パッチ表示を追加</li>
+                                <li>待機人数、接続状況、オンラインUIを拡張</li>
+                                <li>能力・壁生成・視界システムの調整を反映</li>
+                            </ul>
+                        </details>
+                    </div>
+                </details>
                 <div class="audio-group">
-                    <button id="btn-toggle-sfx" class="small-tool-btn" type="button">SFX ON</button>
-                    <label class="audio-slider-label" for="sfx-volume">SFX</label>
+                    <button id="btn-toggle-sfx" class="small-tool-btn" type="button">SE ON</button>
+                    <label class="audio-slider-label" for="sfx-volume">SE</label>
                     <input id="sfx-volume" class="audio-slider" type="range" min="0" max="100" value="55" />
                 </div>
                 <div class="audio-group">
@@ -146,20 +176,6 @@
                         </div>
                         <div id="username-saved" class="username-saved">現在: Commander</div>
                     </div>
-
-                    <details class="news-panel" open>
-                        <summary>PATCH NEWS</summary>
-                        <div class="news-body">
-                            <div class="news-version">ver.0.5.1</div>
-                            <ul class="news-list">
-                                <li>ランダムマッチの準備導線と自動開始を調整</li>
-                                <li>再接続まわりの案内と復帰処理を改善</li>
-                                <li>歴戦王の再行動後は移動範囲が1減少</li>
-                                <li>偵察兵の補充、迷彩、監視などの仕様更新を反映</li>
-                                <li>視界と壁の挙動を調整中。壁越し視界の不具合を修正</li>
-                            </ul>
-                        </div>
-                    </details>
 
                     <!-- Mode tabs -->
                     <div class="mode-tabs">
@@ -330,7 +346,7 @@
         </div>
     </div>
 
-    <div class="patch-badge">PATCH ver.0.5.1</div>
+    <div class="patch-badge">PATCH ver.0.5.2</div>
     <script>
     // Mode tab switching helper (called from inline onclick)
     function setModeTab(mode) {
