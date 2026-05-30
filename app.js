@@ -426,7 +426,7 @@ function updateLobbyPlayerCard() {
     const ratingEl = document.getElementById('lobby-player-rating');
     if (!card) return;
 
-    const shouldShow = Boolean(onlineMode && activePhase !== 'battle');
+    const shouldShow = activePhase !== 'battle';
     card.classList.toggle('hidden', !shouldShow);
     if (!shouldShow) return;
 

@@ -190,58 +190,6 @@
                         </div>
                     </div>
                 </details>
-            </div>
-        </header>
-        <div id="status-alert" class="status-alert hidden"></div>
-
-        <!-- MAIN LAYOUT -->
-        <main>
-            <!-- LEFT COLUMN: RULES & INFO -->
-            <section id="sidebar-left" class="glass-panel">
-                <div class="panel-header">
-                    <h2>SYSTEM RULES</h2>
-                </div>
-                <div class="rules-content">
-                    <details open>
-                        <summary>🎛️ 独立マルチマップ制</summary>
-                        <p>本作は、独立した3つのマップで戦いが行われます：</p>
-                        <p><strong>エリア1 (自陣 - 11×11)</strong>: 自軍コア(核)が存在するエリア。行0の <code>t</code> マスからエリア2へワープ。</p>
-                        <p><strong>エリア2 (中央 - 11×11)</strong>: 主戦場。行10の <code>t</code> はエリア1へ、行0の <code>t</code> はエリア3へ接続。ここに自軍が0体になると<strong>「情報崩壊」</strong>となり、自陣（エリア1）の全域視界バフを喪失します。</p>
-                        <p><strong>エリア3 (敵陣 - 11×11)</strong>: 敵のコアが存在するエリア。行10の <code>t</code> からエリア2へワープ。</p>
-                    </details>
-                    <details>
-                        <summary>🛡️ ユニット情報 (HPは全員1)</summary>
-                        <ul>
-                            <li><strong>甲 (Koh)</strong>: 視界3・マンハッタン移動3。試合前に選択した強力なアビリティを所持。</li>
-                            <li><strong>乙 (Otsu)</strong>: 視界3・直線移動3。敵本拠地で撃破時、周囲1マスを巻き込むアビリティ所持。</li>
-                            <li><strong>丙 (Hei)</strong>: 視界2・マンハッタン移動2。機動力のある歩兵。</li>
-                            <li><strong>丁 (Tei)</strong>: 視界2・直線移動2。標準的な歩兵。</li>
-                            <li><strong>偵察兵 (Scout)</strong>: 視界2・直線移動1・攻撃可。エリア2固定。視界内へワープ可能。</li>
-                        </ul>
-                    </details>
-                    <details>
-                        <summary>⚔️ 甲アビリティ一覧</summary>
-                        <ul>
-                            <li><strong>千里眼</strong>: 発動型。1方向の直線全マスを可視化</li>
-                            <li><strong>鼓舞</strong>: 発動型。次ターン周囲1マスの味方移動・視界+1</li>
-                            <li><strong>足跡</strong>: パッシブ：直近2ターン分の視界情報を維持</li>
-                            <li><strong>歴戦王</strong>: パッシブ：敵撃破時に行動済み解除</li>
-                            <li><strong>戦姫</strong>: パッシブ：撃破数に応じて自軍を昇格</li>
-                            <li><strong>爆破</strong>: 発動型。周囲2マスの全マス破壊して自滅</li>
-                            <li><strong>暗殺者</strong>: パッシブ：直線移動5・直線視界5。敵撃破時、進行方向から1マス後退。</li>
-                            <li><strong>盲目</strong>: パッシブ：マンハッタン移動5・視界周囲1。</li>
-                            <li><strong>衛生兵</strong>: パッシブ：生存中、偵察兵補充が6ターン周期。</li>
-                            <li><strong>監視</strong>: パッシブ：周囲移動1・視界周囲2。視界内の敵移動-1。</li>
-                            <li><strong>迷彩</strong>: 発動型：次の移動まで偵察兵以外から不可視、視界は周囲1。</li>
-                        </ul>
-                    </details>
-                    <details>
-                        <summary>🌁 ポータルと視界ルール</summary>
-                        <p>・<strong>戦場の霧</strong>: 視界外の敵は完全に見えなくなります。</p>
-                        <p>・<strong>テレポートマス (t)</strong>: ユニットがこのマスへ移動すると、隣接マップの対応するマスへ即座に転送されます。転送先に敵がいる場合は撃破し、味方がいる場合はテレポート不可。エリア2初期配置の前線コマは自拠点側へテレポート不可。偵察兵はエリア2固定で通常テレポート不可。</p>
-                        <p>・<strong>固定壁 (w)</strong>: 移動と視界を遮断。甲の「爆破」でのみ破壊可能。</p>
-                    </details>
-                </div>
                 <div id="menu-panel" class="menu-panel hidden">
                     <details class="config-group account-group" open>
                         <summary>PLAYER ACCOUNT</summary>
@@ -340,6 +288,58 @@
                                 </div>
                             </div>
                         </div>
+                    </details>
+                </div>
+            </div>
+        </header>
+        <div id="status-alert" class="status-alert hidden"></div>
+
+        <!-- MAIN LAYOUT -->
+        <main>
+            <!-- LEFT COLUMN: RULES & INFO -->
+            <section id="sidebar-left" class="glass-panel">
+                <div class="panel-header">
+                    <h2>SYSTEM RULES</h2>
+                </div>
+                <div class="rules-content">
+                    <details open>
+                        <summary>🎛️ 独立マルチマップ制</summary>
+                        <p>本作は、独立した3つのマップで戦いが行われます：</p>
+                        <p><strong>エリア1 (自陣 - 11×11)</strong>: 自軍コア(核)が存在するエリア。行0の <code>t</code> マスからエリア2へワープ。</p>
+                        <p><strong>エリア2 (中央 - 11×11)</strong>: 主戦場。行10の <code>t</code> はエリア1へ、行0の <code>t</code> はエリア3へ接続。ここに自軍が0体になると<strong>「情報崩壊」</strong>となり、自陣（エリア1）の全域視界バフを喪失します。</p>
+                        <p><strong>エリア3 (敵陣 - 11×11)</strong>: 敵のコアが存在するエリア。行10の <code>t</code> からエリア2へワープ。</p>
+                    </details>
+                    <details>
+                        <summary>🛡️ ユニット情報 (HPは全員1)</summary>
+                        <ul>
+                            <li><strong>甲 (Koh)</strong>: 視界3・マンハッタン移動3。試合前に選択した強力なアビリティを所持。</li>
+                            <li><strong>乙 (Otsu)</strong>: 視界3・直線移動3。敵本拠地で撃破時、周囲1マスを巻き込むアビリティ所持。</li>
+                            <li><strong>丙 (Hei)</strong>: 視界2・マンハッタン移動2。機動力のある歩兵。</li>
+                            <li><strong>丁 (Tei)</strong>: 視界2・直線移動2。標準的な歩兵。</li>
+                            <li><strong>偵察兵 (Scout)</strong>: 視界2・直線移動1・攻撃可。エリア2固定。視界内へワープ可能。</li>
+                        </ul>
+                    </details>
+                    <details>
+                        <summary>⚔️ 甲アビリティ一覧</summary>
+                        <ul>
+                            <li><strong>千里眼</strong>: 発動型。1方向の直線全マスを可視化</li>
+                            <li><strong>鼓舞</strong>: 発動型。次ターン周囲1マスの味方移動・視界+1</li>
+                            <li><strong>足跡</strong>: パッシブ：直近2ターン分の視界情報を維持</li>
+                            <li><strong>歴戦王</strong>: パッシブ：敵撃破時に行動済み解除</li>
+                            <li><strong>戦姫</strong>: パッシブ：撃破数に応じて自軍を昇格</li>
+                            <li><strong>爆破</strong>: 発動型。周囲2マスの全マス破壊して自滅</li>
+                            <li><strong>暗殺者</strong>: パッシブ：直線移動5・直線視界5。敵撃破時、進行方向から1マス後退。</li>
+                            <li><strong>盲目</strong>: パッシブ：マンハッタン移動5・視界周囲1。</li>
+                            <li><strong>衛生兵</strong>: パッシブ：生存中、偵察兵補充が6ターン周期。</li>
+                            <li><strong>監視</strong>: パッシブ：周囲移動1・視界周囲2。視界内の敵移動-1。</li>
+                            <li><strong>迷彩</strong>: 発動型：次の移動まで偵察兵以外から不可視、視界は周囲1。</li>
+                        </ul>
+                    </details>
+                    <details>
+                        <summary>🌁 ポータルと視界ルール</summary>
+                        <p>・<strong>戦場の霧</strong>: 視界外の敵は完全に見えなくなります。</p>
+                        <p>・<strong>テレポートマス (t)</strong>: ユニットがこのマスへ移動すると、隣接マップの対応するマスへ即座に転送されます。転送先に敵がいる場合は撃破し、味方がいる場合はテレポート不可。エリア2初期配置の前線コマは自拠点側へテレポート不可。偵察兵はエリア2固定で通常テレポート不可。</p>
+                        <p>・<strong>固定壁 (w)</strong>: 移動と視界を遮断。甲の「爆破」でのみ破壊可能。</p>
                     </details>
                 </div>
             </section>
