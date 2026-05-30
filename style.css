@@ -436,29 +436,40 @@ header {
     left: clamp(17rem, 18vw, 23rem);
     top: 0.05rem;
     margin-top: 0;
-    padding: 0.8rem 1rem 0.75rem;
+    padding: 0.85rem 1rem 0.8rem;
     width: clamp(18rem, 24vw, 24rem);
-    border: none;
-    border-radius: 0;
-    background: rgba(74, 79, 88, 0.95);
-    box-shadow: none;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 14px;
+    background: rgba(8, 10, 18, 0.96);
+    box-shadow: 0 10px 28px rgba(0,0,0,0.35);
+    backdrop-filter: blur(16px) saturate(120%);
+    overflow: hidden;
+}
+
+.lobby-player-card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(135deg, rgba(0,240,255,0.14), transparent 40%, transparent 60%, rgba(255,0,127,0.12));
+    pointer-events: none;
 }
 
 .lobby-player-label {
     font-family: var(--font-mono);
     font-size: 0.62rem;
     letter-spacing: 0.22em;
-    color: rgba(255, 255, 255, 0.28);
+    color: var(--text-muted);
     margin-bottom: 0.35rem;
 }
 
 .lobby-player-name {
     display: block;
     font-family: var(--font-outfit);
-    font-size: 1.55rem;
+    font-size: 1.15rem;
     font-weight: 700;
-    color: #fff;
-    letter-spacing: 0.02em;
+    color: var(--text-primary);
+    letter-spacing: 0.03em;
     margin-bottom: 0.45rem;
 }
 
@@ -468,8 +479,8 @@ header {
     flex-wrap: wrap;
     font-family: var(--font-mono);
     font-size: 0.76rem;
-    letter-spacing: 0.14em;
-    color: rgba(255, 255, 255, 0.82);
+    letter-spacing: 0.12em;
+    color: var(--text-muted);
 }
 
 .lobby-player-meta strong {
