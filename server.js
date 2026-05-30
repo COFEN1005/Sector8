@@ -48,6 +48,7 @@ function createRoom(roomId, random = false) {
         startConfig: null,
         history: [],
         profiles: { 1: null, 2: null },
+        profileDetails: { 1: null, 2: null },
         seats: {
             1: { socket: null, token: crypto.randomUUID() },
             2: { socket: null, token: crypto.randomUUID() }
@@ -70,7 +71,9 @@ function getRoomSnapshot(room) {
     return {
         started: room.started,
         config: room.startConfig,
-        history: room.history
+        history: room.history,
+        profiles: room.profiles,
+        profileDetails: room.profileDetails
     };
 }
 
@@ -97,6 +100,11 @@ function sendRandomQueueStatus(matchTier = 'rank') {
         if (!room.random || room.randomTier !== matchTier) return;
         roomSockets(room).forEach(socket => sendFrame(socket, payload));
     });
+}
+
+function sendRoomProfiles(room) {
+    const payload = { kind: 'room_profiles', profiles: room.profiles, profileDetails: room.profileDetails };
+    roomSockets(room).forEach(socket => sendFrame(socket, payload));
 }
 
 function sendJson(res, statusCode, payload) {
@@ -350,6 +358,13 @@ function trackRoomState(room, message, senderInfo) {
     }
     if (message.kind === 'profile' && senderInfo.player) {
         room.profiles[senderInfo.player] = message.username;
+        if (room.profileDetails[senderInfo.player]) {
+            room.profileDetails[senderInfo.player] = {
+                ...room.profileDetails[senderInfo.player],
+                name: message.username
+            };
+        }
+        sendRoomProfiles(room);
         return;
     }
     if (room.started && (message.kind === 'action' || message.kind === 'forfeit' || message.kind === 'win')) {
@@ -538,10 +553,14 @@ const server = http.createServer(async (req, res) => {
                     player2RatingDelta,
                     player1Level: player1Profile?.level || 1,
                     player2Level: player2Profile?.level || 1,
+                    player1StartRating: Number(body.player1StartRating || player1Profile?.rating || 0),
+                    player2StartRating: Number(body.player2StartRating || player2Profile?.rating || 0),
                     startedTime: body.startedTime,
                     endedTime: body.endedTime,
                     timeTaken: body.timeTaken,
-                    surrenderByPlayerId: body.surrenderByPlayerId || null
+                    surrenderByPlayerId: body.surrenderByPlayerId || null,
+                    winnerPlayerId: winnerPlayerId || null,
+                    loserPlayerId: loserPlayerId || null
                 });
                 return sendJson(res, 200, {
                     ok: true,
@@ -641,8 +660,28 @@ server.on('upgrade', (req, socket) => {
         randomWaitingCount: countRandomWaitingPlayers(room.randomTier || 'rank'),
         reconnectToken,
         snapshot: getRoomSnapshot(room),
-        profiles: room.profiles
+        profiles: room.profiles,
+        profileDetails: room.profileDetails
     });
+
+    if (authToken && role === 'player' && player) {
+        void (async () => {
+            try {
+                const result = await accountStore.restoreSession(authToken);
+                if (!result.ok || socket.destroyed) return;
+                const profile = result.profile;
+                room.profileDetails[player] = {
+                    playerId: profile.playerId,
+                    name: profile.name,
+                    level: profile.level,
+                    rating: profile.rating,
+                    exp: profile.exp
+                };
+                room.profiles[player] = profile.name;
+                sendRoomProfiles(room);
+            } catch {}
+        })();
+    }
 
     if (role === 'player' && player === 2 && room.seats[1].socket) {
         sendFrame(room.seats[1].socket, { kind: 'player_joined', player: 2 });

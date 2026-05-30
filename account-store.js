@@ -757,12 +757,20 @@ function createSqliteStore() {
       surrender_by_player_id INTEGER,
       created_at INTEGER NOT NULL,
       summary_json TEXT,
-      replay_json TEXT
+      replay_json TEXT,
+      winner_player_id INTEGER,
+      loser_player_id INTEGER,
+      player1_start_rating INTEGER,
+      player2_start_rating INTEGER
     );
   `);
 
   try { db.exec('ALTER TABLE match_history ADD COLUMN summary_json TEXT;'); } catch {}
   try { db.exec('ALTER TABLE match_history ADD COLUMN replay_json TEXT;'); } catch {}
+  try { db.exec('ALTER TABLE match_history ADD COLUMN winner_player_id INTEGER;'); } catch {}
+  try { db.exec('ALTER TABLE match_history ADD COLUMN loser_player_id INTEGER;'); } catch {}
+  try { db.exec('ALTER TABLE match_history ADD COLUMN player1_start_rating INTEGER;'); } catch {}
+  try { db.exec('ALTER TABLE match_history ADD COLUMN player2_start_rating INTEGER;'); } catch {}
 
   function withTransaction(fn) {
     db.exec('BEGIN IMMEDIATE;');
@@ -1131,6 +1139,10 @@ function createSqliteStore() {
       endedTime,
       timeTaken: Number(entry.timeTaken || Math.max(0, endedTime - startedTime)),
       surrenderByPlayerId: entry.surrenderByPlayerId || null,
+      winnerPlayerId: entry.winnerPlayerId || null,
+      loserPlayerId: entry.loserPlayerId || null,
+      player1StartRating: Number(entry.player1StartRating || 0),
+      player2StartRating: Number(entry.player2StartRating || 0),
       summaryJson: entry.summaryJson || null,
       replayJson: entry.replayJson || null
     };
@@ -1145,9 +1157,10 @@ function createSqliteStore() {
         match_key, player1_id, player2_id, player1_name, player2_name,
         winner, loser, result, player1_get_rating, player2_get_rating,
         player1_level, player2_level, started_time, ended_time, time_taken,
-        surrender_by_player_id, created_at, summary_json, replay_json
+        surrender_by_player_id, created_at, summary_json, replay_json,
+        winner_player_id, loser_player_id, player1_start_rating, player2_start_rating
     ) VALUES (
-        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
       )
     `).run(
       payload.matchKey || null,
@@ -1168,7 +1181,11 @@ function createSqliteStore() {
       payload.surrenderByPlayerId,
       ts,
       payload.summaryJson ? JSON.stringify(payload.summaryJson) : null,
-      payload.replayJson ? JSON.stringify(payload.replayJson) : null
+      payload.replayJson ? JSON.stringify(payload.replayJson) : null,
+      payload.winnerPlayerId,
+      payload.loserPlayerId,
+      payload.player1StartRating,
+      payload.player2StartRating
     );
     return info.lastInsertRowid;
   }

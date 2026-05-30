@@ -148,6 +148,7 @@ let lastTurnOwner = null;
 let currentMatchKey = null;
 let currentMatchStartedAt = 0;
 let currentMatchStartProfile = null;
+let currentMatchOpponentStartProfile = null;
 let currentMatchRecord = null;
 let currentMatchReplay = null;
 let activeMatchSummaryView = null;
@@ -216,6 +217,9 @@ let matchHistoryCache = [];
 let matchHistoryLoadedForPlayerId = null;
 let matchHistoryRequestToken = 0;
 let devTargetPlayer = null;
+let onlineProfileDetails = { 1: null, 2: null };
+let matchIntroActive = false;
+let matchIntroTimer = null;
 // Matchmaking state
 let matchmakingMode = false;
 let matchmakingRole = null; // 'host' or 'guest'
@@ -396,6 +400,7 @@ function createMatchRecordBase() {
             exp: authProfile.exp,
             rating: authProfile.rating
         } : null,
+        opponentStartProfile: currentMatchOpponentStartProfile ? { ...currentMatchOpponentStartProfile } : null,
         captures: [],
         result: null,
         winnerId: null,
@@ -481,16 +486,18 @@ function buildMatchSummary(reason, winnerId) {
             rating: currentMatchRecord?.startProfile?.rating ?? 0
         },
         p2: {
-            name: opponentName,
-            playerId: null,
-            level: 1,
-            rating: null
+            name: currentMatchRecord?.opponentStartProfile?.name || opponentName,
+            playerId: currentMatchRecord?.opponentStartProfile?.playerId || null,
+            level: currentMatchRecord?.opponentStartProfile?.level ?? 1,
+            rating: currentMatchRecord?.opponentStartProfile?.rating ?? null
         },
         captures: [...(currentMatchRecord?.captures || [])],
         capturedByPlayer1: (currentMatchRecord?.captures || []).filter(entry => Number(entry.victimPlayer) === 1),
         capturedByPlayer2: (currentMatchRecord?.captures || []).filter(entry => Number(entry.victimPlayer) === 2),
         resultText: viewerWon ? 'VICTORY' : 'DEFEAT',
         viewerWon,
+        winnerPlayerId: winnerId,
+        loserPlayerId: summary.loserId,
         startProfile,
         endProfile: endedProfile ? {
             id: endedProfile.id,
@@ -500,6 +507,9 @@ function buildMatchSummary(reason, winnerId) {
             exp: endedProfile.exp,
             rating: endedProfile.rating
         } : null,
+        player1StartRating: currentMatchRecord?.startProfile?.rating ?? null,
+        player2StartRating: currentMatchRecord?.opponentStartProfile?.rating ?? null,
+        opponentStartRating: currentMatchRecord?.opponentStartProfile?.rating ?? null,
         ratingDelta: null,
         expDelta: null
     };
@@ -556,6 +566,7 @@ function renderGameOverSummary(summary = null) {
         <div class="summary-row"><span>MODE</span><strong>${String(summary.matchType || 'unknown').toUpperCase()}</strong></div>
         <div class="summary-row"><span>TIME</span><strong>${Math.floor(timeTaken / 60000)}m ${String(Math.floor((timeTaken % 60000) / 1000)).padStart(2, '0')}s</strong></div>
         <div class="summary-row"><span>WINNER</span><strong>${summary.winnerName || 'UNKNOWN'}</strong></div>
+        <div class="summary-row"><span>OPP START RATING</span><strong>${(summary.player2StartRating ?? summary.opponentStartRating) == null ? '-' : (summary.player2StartRating ?? summary.opponentStartRating)}</strong></div>
         <div class="summary-row"><span>RATING Δ</span><strong>${summary.ratingDelta === null ? '-' : (summary.ratingDelta > 0 ? `+${summary.ratingDelta}` : String(summary.ratingDelta))}</strong></div>
         <div class="summary-row"><span>EXP Δ</span><strong>${summary.expDelta === null ? '-' : (summary.expDelta > 0 ? `+${summary.expDelta}` : String(summary.expDelta))}</strong></div>
     `;
@@ -636,14 +647,15 @@ function openMatchHistorySummary(matchEntry) {
         timeTaken: entry.time_taken || entry.timeTaken || 0,
         firstPlayer: entry.first_player || 1,
         p1: { name: entry.player1_name || 'PLAYER 1', playerId: null, level: entry.player1_level || 1, rating: null },
-        p2: { name: entry.player2_name || 'PLAYER 2', playerId: null, level: entry.player2_level || 1, rating: null },
+        p2: { name: entry.player2_name || 'PLAYER 2', playerId: null, level: entry.player2_level || 1, rating: entry.player2_start_rating ?? entry.summary_json?.player2StartRating ?? null },
         captures: [],
         capturedByPlayer1: [],
         capturedByPlayer2: [],
-        resultText: String(entry.result || '').toLowerCase() === 'lose' ? 'DEFEAT' : 'VICTORY',
-        viewerWon: String(entry.result || '').toLowerCase() !== 'lose',
+        resultText: getMatchHistoryOutcome(entry) === 'LOSE' ? 'DEFEAT' : 'VICTORY',
+        viewerWon: getMatchHistoryOutcome(entry) !== 'LOSE',
         ratingDelta: entry.player1_get_rating || 0,
-        expDelta: null
+        expDelta: null,
+        player2StartRating: entry.player2_start_rating ?? entry.summary_json?.player2StartRating ?? null
     };
     activeMatchSummaryView = summary;
     activeMatchSummaryView.replay = entry.replay_json || null;
@@ -937,6 +949,40 @@ function getMatchHistoryDelta(entry) {
     return Number(entry?.player1_get_rating || 0);
 }
 
+function getMatchHistoryOutcome(entry) {
+    const playerId = Number(authProfile?.id || 0);
+    const winnerId = Number(entry?.winner_player_id || 0);
+    const loserId = Number(entry?.loser_player_id || 0);
+    if (playerId && winnerId && playerId === winnerId) return 'WIN';
+    if (playerId && loserId && playerId === loserId) return 'LOSE';
+    return String(entry?.result || '').toLowerCase() === 'lose' ? 'LOSE' : 'WIN';
+}
+
+function getMatchTypeLabel(matchType) {
+    switch (String(matchType || '').toLowerCase()) {
+        case 'rank':
+            return 'ランクマッチ';
+        case 'normal':
+            return 'ノーマルマッチ';
+        case 'private':
+            return 'プライベートマッチ';
+        case 'local':
+            return 'ローカル対戦';
+        default:
+            return '未分類';
+    }
+}
+
+function getMatchTypeOrder(matchType) {
+    switch (String(matchType || '').toLowerCase()) {
+        case 'rank': return 0;
+        case 'normal': return 1;
+        case 'private': return 2;
+        case 'local': return 3;
+        default: return 4;
+    }
+}
+
 function formatMatchHistoryTimestamp(value) {
     const ts = Number(value || 0);
     if (!ts) return '日時不明';
@@ -981,34 +1027,54 @@ function renderMatchHistory(matches = [], state = {}) {
     }
 
     const profileId = Number(authProfile.id);
-    listEl.innerHTML = matches.map((entry, index) => {
-        const resultText = String(entry.result || '').toLowerCase() === 'lose' ? 'LOSE' : 'WIN';
-        const delta = getMatchHistoryDelta(entry);
-        const deltaText = delta > 0 ? `+${delta}` : String(delta);
-        const opponentName = Number(entry.player1_id) === profileId
-            ? (entry.player2_name || 'UNKNOWN')
-            : (entry.player1_name || 'UNKNOWN');
-        const winnerName = entry.winner || 'UNKNOWN';
-        const loserName = entry.loser || 'UNKNOWN';
-        const timeText = formatMatchHistoryTimestamp(entry.started_time || entry.created_at);
-        const durationText = formatMatchHistoryDuration(entry.time_taken);
-        const surrenderText = entry.surrender_by_player_id ? ' / SURRENDER' : '';
-        return `
-            <article class="match-history-card" data-match-index="${index}" title="クリックでサマリーを表示">
-                <div class="match-history-topline">
-                    <span class="match-history-result ${resultText === 'WIN' ? 'win' : 'lose'}">${resultText}</span>
-                    <strong class="match-history-opponent">VS ${opponentName}</strong>
-                    <span class="match-history-rating ${delta >= 0 ? 'positive' : 'negative'}">RATING ${deltaText}</span>
-                </div>
-                <div class="match-history-meta">
-                    <span>${timeText}</span>
-                    <span>${durationText}</span>
-                    <span>${winnerName} / ${loserName}${surrenderText}</span>
-                </div>
-                <div class="match-history-footer">${entry.replay_json ? 'REPLAY AVAILABLE' : 'SUMMARY ONLY'}</div>
-            </article>
-        `;
-    }).join('');
+    const entries = matches.map((entry, index) => ({ entry, index }));
+    const grouped = entries.reduce((acc, item) => {
+        const key = String(item.entry.match_type || 'unknown').toLowerCase();
+        (acc[key] ||= []).push(item);
+        return acc;
+    }, {});
+    const sortedGroups = Object.entries(grouped).sort((a, b) => getMatchTypeOrder(a[0]) - getMatchTypeOrder(b[0]));
+
+    listEl.innerHTML = sortedGroups.map(([matchType, items]) => `
+        <section class="match-history-group">
+            <div class="match-history-group-header">
+                <span>${getMatchTypeLabel(matchType)}</span>
+                <strong>${items.length}</strong>
+            </div>
+            <div class="match-history-group-list">
+                ${items.map(({ entry, index }) => {
+                    const resultText = getMatchHistoryOutcome(entry);
+                    const delta = getMatchHistoryDelta(entry);
+                    const deltaText = delta > 0 ? `+${delta}` : String(delta);
+                    const opponentStartRating = entry.player2_start_rating ?? entry.summary_json?.player2StartRating ?? null;
+                    const opponentName = Number(entry.player1_id) === profileId
+                        ? (entry.player2_name || 'UNKNOWN')
+                        : (entry.player1_name || 'UNKNOWN');
+                    const winnerName = entry.winner || 'UNKNOWN';
+                    const loserName = entry.loser || 'UNKNOWN';
+                    const timeText = formatMatchHistoryTimestamp(entry.started_time || entry.created_at);
+                    const durationText = formatMatchHistoryDuration(entry.time_taken);
+                    const surrenderText = entry.surrender_by_player_id ? ' / SURRENDER' : '';
+                    return `
+                        <article class="match-history-card" data-match-index="${index}" title="クリックでサマリーを表示">
+                            <div class="match-history-topline">
+                                <span class="match-history-result ${resultText === 'WIN' ? 'win' : 'lose'}">${resultText}</span>
+                                <strong class="match-history-opponent">VS ${opponentName}</strong>
+                                <span class="match-history-rating ${delta >= 0 ? 'positive' : 'negative'}">RATING ${deltaText}</span>
+                                <span class="match-history-start-rating">OPP START ${opponentStartRating == null ? '-' : opponentStartRating}</span>
+                            </div>
+                            <div class="match-history-meta">
+                                <span>${timeText}</span>
+                                <span>${durationText}</span>
+                                <span>${winnerName} / ${loserName}${surrenderText}</span>
+                            </div>
+                            <div class="match-history-footer">${entry.replay_json ? 'REPLAY AVAILABLE' : 'SUMMARY ONLY'}</div>
+                        </article>
+                    `;
+                }).join('')}
+            </div>
+        </section>
+    `).join('');
 }
 
 async function loadMatchHistory({ force = false } = {}) {
@@ -1147,6 +1213,7 @@ function startMatchTracking() {
         exp: authProfile.exp,
         rating: authProfile.rating
     } : null;
+    currentMatchOpponentStartProfile = onlineMode ? { ...getOnlineProfileData(getMatchIntroOpponentPlayer()) } : null;
     resetMatchRecording();
 }
 
@@ -1173,6 +1240,8 @@ async function submitMatchHistory(reason, winnerId) {
         matchType: getCurrentMatchType(),
         player1Level: authProfile.level,
         player2Level: 1,
+        player1StartRating: currentMatchRecord?.startProfile?.rating ?? authProfile.rating ?? 0,
+        player2StartRating: currentMatchRecord?.opponentStartProfile?.rating ?? null,
         startedTime: currentMatchStartedAt || Date.now(),
         endedTime: Date.now(),
         timeTaken: Math.max(0, Date.now() - (currentMatchStartedAt || Date.now())),
@@ -1184,7 +1253,20 @@ async function submitMatchHistory(reason, winnerId) {
     };
     try {
         const result = await apiRequest('/api/matches', { method: 'POST', body: payload, auth: true });
-        if (result.player1) applyAuthProfile(result.player1, authSession.token);
+        if (result.player1) {
+            const endProfile = result.player1;
+            summary.endProfile = {
+                id: endProfile.id,
+                playerId: endProfile.playerId,
+                name: endProfile.name,
+                level: endProfile.level,
+                exp: endProfile.exp,
+                rating: endProfile.rating
+            };
+            summary.ratingDelta = Number(endProfile.rating || 0) - Number(currentMatchStartProfile?.rating || authProfile?.rating || 0);
+            summary.expDelta = Number(endProfile.exp || 0) - Number(currentMatchStartProfile?.exp || authProfile?.exp || 0);
+            applyAuthProfile(result.player1, authSession.token);
+        }
         if (!document.getElementById('menu-panel')?.classList.contains('hidden')) {
             loadMatchHistory({ force: true }).catch(() => {});
         }
@@ -1200,7 +1282,72 @@ async function submitMatchHistory(reason, winnerId) {
 }
 
 function getOnlineDisplayName(player) {
-    return onlineUsernames[player] || `P${player}`;
+    return onlineProfileDetails[player]?.name || onlineUsernames[player] || `P${player}`;
+}
+
+function normalizeOnlineProfileData(profile, fallbackName = null) {
+    if (!profile) return null;
+    if (typeof profile === 'string') {
+        const name = sanitizeUsername(profile) || sanitizeUsername(fallbackName) || null;
+        return name ? { name, level: null, rating: null, playerId: null } : null;
+    }
+    const name = sanitizeUsername(profile.name || fallbackName || '');
+    if (!name) return null;
+    return {
+        name,
+        level: profile.level ?? null,
+        rating: profile.rating ?? null,
+        playerId: profile.playerId || profile.player_id || null
+    };
+}
+
+function applyOnlineProfileData(player, profile, fallbackName = null) {
+    const normalized = normalizeOnlineProfileData(profile, fallbackName);
+    onlineProfileDetails[player] = normalized;
+    if (normalized?.name) onlineUsernames[player] = normalized.name;
+    if (matchIntroActive) refreshMatchIntroCutIn();
+    return normalized;
+}
+
+function getOnlineProfileData(player) {
+    return onlineProfileDetails[player] || {
+        name: onlineUsernames[player] || `P${player}`,
+        level: null,
+        rating: null,
+        playerId: null
+    };
+}
+
+function getMatchIntroOpponentPlayer() {
+    if (!onlineMode || !localPlayer) return 2;
+    return localPlayer === 1 ? 2 : 1;
+}
+
+function showMatchIntroCutIn() {
+    const overlay = document.getElementById('match-intro-overlay');
+    if (!overlay) return;
+    overlay.classList.remove('hidden');
+    matchIntroActive = true;
+    refreshMatchIntroCutIn();
+    window.clearTimeout(matchIntroTimer);
+    matchIntroTimer = window.setTimeout(() => {
+        overlay.classList.add('hidden');
+        matchIntroActive = false;
+        matchIntroTimer = null;
+        startAfkTurnReminder();
+    }, 2000);
+}
+
+function refreshMatchIntroCutIn() {
+    const nameEl = document.getElementById('match-intro-opponent-name');
+    const levelEl = document.getElementById('match-intro-opponent-level');
+    const ratingEl = document.getElementById('match-intro-opponent-rating');
+    if (!matchIntroActive || !nameEl || !levelEl || !ratingEl) return;
+    const opponent = getMatchIntroOpponentPlayer();
+    const profile = getOnlineProfileData(opponent);
+    levelEl.textContent = profile.level == null ? 'LV ?' : `LV ${profile.level}`;
+    ratingEl.textContent = profile.rating == null ? 'RATING ?' : `RATING ${profile.rating}`;
+    nameEl.textContent = profile.name || `P${opponent}`;
 }
 
 function saveOnlineSession() {
@@ -1233,6 +1380,12 @@ function deactivateOnlineMode(clearSession = true) {
     onlineAbilityChoices = { 1: null, 2: null };
     onlineReadyState = { 1: false, 2: false };
     onlineUsernames = { 1: null, 2: null };
+    onlineProfileDetails = { 1: null, 2: null };
+    matchIntroActive = false;
+    window.clearTimeout(matchIntroTimer);
+    matchIntroTimer = null;
+    document.getElementById('match-intro-overlay')?.classList.add('hidden');
+    currentMatchOpponentStartProfile = null;
     if (clearSession) clearOnlineSession();
 }
 
@@ -1855,6 +2008,11 @@ function resetOnlineMatchmakingState(keepPanel = true) {
     onlineAbilityChoices = { 1: null, 2: null };
     onlineReadyState = { 1: false, 2: false };
     onlineUsernames = { 1: null, 2: null };
+    onlineProfileDetails = { 1: null, 2: null };
+    matchIntroActive = false;
+    window.clearTimeout(matchIntroTimer);
+    matchIntroTimer = null;
+    document.getElementById('match-intro-overlay')?.classList.add('hidden');
     onlineMatchPreviewActive = false;
     clearOnlineSession();
     updateRandomQueueCount(0);
@@ -2312,8 +2470,8 @@ function handleOnlineMessage(message) {
         saveOnlineSession();
         updateRandomQueueCount(message.randomWaitingCount ?? randomWaitingCount);
         if (message.profiles) {
-            onlineUsernames[1] = message.profiles[1] || onlineUsernames[1];
-            onlineUsernames[2] = message.profiles[2] || onlineUsernames[2];
+            applyOnlineProfileData(1, message.profileDetails?.[1] || message.profiles[1], message.profiles[1]);
+            applyOnlineProfileData(2, message.profileDetails?.[2] || message.profiles[2], message.profiles[2]);
         }
         if (localPlayer) onlineUsernames[localPlayer] = localUsername;
         if (localPlayer && onlineSocket?.readyState === WebSocket.OPEN) {
@@ -2345,6 +2503,16 @@ function handleOnlineMessage(message) {
         addConsoleLog(`ONLINE: あなたは ${spectatorMode ? `観戦者 ${localUsername}` : `${localUsername} / Player ${localPlayer}` } です。`, 'system');
         updateUI();
         maybeAutoStartRandomMatch();
+        return;
+    }
+
+    if (message.kind === 'room_profiles') {
+        if (message.profiles) {
+            applyOnlineProfileData(1, message.profileDetails?.[1] || message.profiles[1], message.profiles[1]);
+            applyOnlineProfileData(2, message.profileDetails?.[2] || message.profiles[2], message.profiles[2]);
+        }
+        updateMatchmakingPlayerSummary();
+        updateLobbyPlayerCard();
         return;
     }
 
@@ -2390,7 +2558,10 @@ function handleOnlineMessage(message) {
     if (message.player === localPlayer) return;
 
     if (message.kind === 'profile') {
-        onlineUsernames[message.player] = sanitizeUsername(message.username) || `P${message.player}`;
+        applyOnlineProfileData(message.player, {
+            ...(onlineProfileDetails[message.player] || {}),
+            name: sanitizeUsername(message.username) || `P${message.player}`
+        }, message.username);
         addConnectionLog(`${getOnlineDisplayName(message.player)} (P${message.player}) が参加しました。`);
         updateMatchmakingPlayerSummary();
         maybeAutoStartRandomMatch();
@@ -2674,9 +2845,9 @@ function playTurnSfx() {
 function startAfkTurnReminder() {
     window.clearTimeout(afkTurnTimer);
     afkTurnPopupShown = false;
-    if (replayPlaybackActive || !canControlCurrentTurn() || isGameOver || activePhase !== 'battle') return;
+    if (replayPlaybackActive || matchIntroActive || !canControlCurrentTurn() || isGameOver || activePhase !== 'battle') return;
     afkTurnTimer = window.setTimeout(() => {
-        if (canControlCurrentTurn() && !isGameOver && activePhase === 'battle') {
+        if (canControlCurrentTurn() && !isGameOver && activePhase === 'battle' && !matchIntroActive) {
             afkTurnPopupShown = true;
             showStatusAlert('あなたの番です', 'warning', 0);
         }
@@ -2794,12 +2965,20 @@ function startGame(config = null, fromOnline = false) {
     switchActiveMap(getViewerPlayer() === 2 ? 'area3' : 'area1');
     renderBoard();
     updateUI();
+    window.clearTimeout(matchIntroTimer);
+    matchIntroTimer = null;
+    if (onlineMode && fromOnline && !replayPlaybackActive && !reusePreview) {
+        showMatchIntroCutIn();
+    } else {
+        matchIntroActive = false;
+        document.getElementById('match-intro-overlay')?.classList.add('hidden');
+    }
 
     addConsoleLog(`GAME INITIATED. PLAYER ${firstPlayer} TURN.`, 'system');
     showTurnBanner();
     if (lastTurnOwner !== currentPlayer) playTurnSfx();
     lastTurnOwner = currentPlayer;
-    startAfkTurnReminder();
+    if (!matchIntroActive) startAfkTurnReminder();
     startKeepAliveWarningTimer();
     clearStatusAlert();
     syncBgmPlayback();
@@ -4430,13 +4609,18 @@ function resetToSetup(fromOnline = false) {
     document.getElementById('setup-panel').classList.remove('hidden');
     onlineMatchPreviewActive = false;
     replayPlaybackActive = false;
+    matchIntroActive = false;
     window.clearTimeout(replayPlaybackTimer);
     replayPlaybackTimer = null;
     replayPlaybackSource = null;
     replayPlaybackRunId++;
+    window.clearTimeout(matchIntroTimer);
+    matchIntroTimer = null;
+    document.getElementById('match-intro-overlay')?.classList.add('hidden');
     currentMatchRecord = null;
     currentMatchReplay = null;
     activeMatchSummaryView = null;
+    currentMatchOpponentStartProfile = null;
 
     boards = { area1: [], area2: [], area3: [] };
     units = [];

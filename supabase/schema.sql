@@ -74,7 +74,11 @@ create table if not exists match_history (
   surrender_by_player_id bigint references players(id) on delete set null,
   created_at bigint not null,
   summary_json jsonb,
-  replay_json jsonb
+  replay_json jsonb,
+  winner_player_id bigint references players(id) on delete set null,
+  loser_player_id bigint references players(id) on delete set null,
+  player1_start_rating integer,
+  player2_start_rating integer
 );
 
 create index if not exists match_history_player1_idx on match_history (player1_id);
@@ -86,3 +90,15 @@ alter table if exists match_history
 
 alter table if exists match_history
   add column if not exists replay_json jsonb;
+
+alter table if exists match_history
+  add column if not exists winner_player_id bigint references players(id) on delete set null;
+
+alter table if exists match_history
+  add column if not exists loser_player_id bigint references players(id) on delete set null;
+
+alter table if exists match_history
+  add column if not exists player1_start_rating integer;
+
+alter table if exists match_history
+  add column if not exists player2_start_rating integer;

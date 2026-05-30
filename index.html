@@ -40,6 +40,22 @@
                     <summary class="small-tool-btn">NEWS</summary>
                     <div class="news-menu-panel">
                         <details class="news-item">
+                            <summary>PATCH 0.7.15</summary>
+                            <ul class="news-list">
+                                <li>マッチ成立時に相手の名前・レベル・レートを2秒表示するカットインを追加</li>
+                                <li>対戦履歴に相手の対戦開始時レートを表示するよう変更</li>
+                                <li>対局後サマリーのレート差表示を見直し</li>
+                            </ul>
+                        </details>
+                        <details class="news-item">
+                            <summary>PATCH 0.7.14</summary>
+                            <ul class="news-list">
+                                <li>対戦履歴をランク・ノーマル・プライベート・ローカルで分割表示するよう変更</li>
+                                <li>オンライン履歴の勝敗判定を勝者ID基準に修正</li>
+                                <li>対局後サマリーの枠外はみ出しを調整</li>
+                            </ul>
+                        </details>
+                        <details class="news-item">
                             <summary>PATCH 0.7.13</summary>
                             <ul class="news-list">
                                 <li>対戦履歴からサマリーを再表示できるように変更</li>
@@ -661,6 +677,20 @@
             </div>
         </div>
 
+        <!-- MATCH INTRO -->
+        <div id="match-intro-overlay" class="overlay hidden">
+            <div class="match-intro-panel glass-panel">
+                <div class="match-intro-tag">MATCH FOUND</div>
+                <h2 class="match-intro-vs">VS</h2>
+                <div class="match-intro-name" id="match-intro-opponent-name">UNKNOWN</div>
+                <div class="match-intro-meta">
+                    <span id="match-intro-opponent-level">LV ?</span>
+                    <span id="match-intro-opponent-rating">RATING ?</span>
+                </div>
+                <div class="match-intro-hint">ENGAGING BATTLE NETWORK...</div>
+            </div>
+        </div>
+
         <!-- DIRECTION OVERLAY (千里眼) -->
         <div id="direction-overlay" class="overlay hidden">
             <div class="modal glass-panel mini">
@@ -676,7 +706,7 @@
         </div>
     </div>
 
-    <div class="patch-badge">PATCH ver.0.7.13</div>
+    <div class="patch-badge">PATCH ver.0.7.15</div>
     <script>
     // Mode tab switching helper (called from inline onclick)
     function setModeTab(mode) {
