@@ -1,6 +1,8 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const https = require('node:https');
+const { URL } = require('node:url');
 const { DatabaseSync } = require('node:sqlite');
 
 const ROOT = __dirname;
@@ -92,7 +94,573 @@ function calculateRatingDelta(playerRating, opponentRating, didWin) {
   return didWin ? base + diff : -(base + Math.round((playerRating - opponentRating) / 100));
 }
 
-function createStore() {
+function createSupabaseClient() {
+  const supabaseUrl = String(process.env.SUPABASE_URL || '').trim();
+  const supabaseKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || '').trim();
+  if (!supabaseUrl || !supabaseKey) return null;
+
+  const origin = new URL(supabaseUrl).origin;
+
+  function request(method, pathname, { query = {}, body = null, prefer = 'return=representation' } = {}) {
+    return new Promise((resolve, reject) => {
+      const url = new URL(pathname, origin);
+      for (const [key, value] of Object.entries(query)) {
+        if (value === undefined || value === null || value === '') continue;
+        if (Array.isArray(value)) {
+          value.forEach(item => url.searchParams.append(key, String(item)));
+        } else {
+          url.searchParams.append(key, String(value));
+        }
+      }
+
+      const headers = {
+        apikey: supabaseKey,
+        Authorization: `Bearer ${supabaseKey}`,
+        Accept: 'application/json'
+      };
+      if (prefer) headers.Prefer = prefer;
+      let payload = null;
+      if (body !== null && body !== undefined) {
+        headers['Content-Type'] = 'application/json';
+        payload = JSON.stringify(body);
+      }
+
+      const req = https.request(url, { method, headers }, res => {
+        const chunks = [];
+        res.setEncoding('utf8');
+        res.on('data', chunk => chunks.push(chunk));
+        res.on('end', () => {
+          const text = chunks.join('');
+          let data = null;
+          if (text) {
+            try {
+              data = JSON.parse(text);
+            } catch {
+              data = text;
+            }
+          }
+          if (res.statusCode >= 400) {
+            const message = typeof data === 'object' && data
+              ? data.message || data.error || data.details || text || `supabase_request_failed_${res.statusCode}`
+              : text || `supabase_request_failed_${res.statusCode}`;
+            const error = new Error(message);
+            error.status = res.statusCode;
+            error.response = data;
+            return reject(error);
+          }
+          resolve({ status: res.statusCode, data });
+        });
+      });
+
+      req.on('error', reject);
+      req.setTimeout(15000, () => req.destroy(new Error('supabase_request_timeout')));
+      if (payload) req.write(payload);
+      req.end();
+    });
+  }
+
+  return { request };
+}
+
+function createSupabaseStore() {
+  const client = createSupabaseClient();
+  if (!client) return null;
+
+  function rowToProfile(row) {
+    if (!row) return null;
+    return {
+      id: row.id,
+      playerId: row.player_id,
+      name: row.name,
+      friendCode: formatFriendCode(row.friend_code),
+      level: row.level,
+      exp: row.exp,
+      nextLevelExp: Math.max(0, LEVEL_EXP_PER_LEVEL - row.exp),
+      rating: row.rating,
+      pinFailCount: row.pin_fail_count,
+      pinLockedUntil: row.pin_locked_until,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      lastLoginAt: row.last_login_at
+    };
+  }
+
+  async function selectOne(table, query = {}) {
+    const response = await client.request('GET', `/rest/v1/${table}`, {
+      query: { select: '*', ...query }
+    });
+    return Array.isArray(response.data) ? response.data[0] || null : null;
+  }
+
+  async function selectMany(table, query = {}) {
+    const response = await client.request('GET', `/rest/v1/${table}`, {
+      query: { select: '*', ...query }
+    });
+    return Array.isArray(response.data) ? response.data : [];
+  }
+
+  async function updateRows(table, query, body) {
+    const response = await client.request('PATCH', `/rest/v1/${table}`, {
+      query,
+      body
+    });
+    return Array.isArray(response.data) ? response.data : [];
+  }
+
+  async function insertRows(table, body, query = {}) {
+    const response = await client.request('POST', `/rest/v1/${table}`, {
+      query,
+      body
+    });
+    return Array.isArray(response.data) ? response.data : [];
+  }
+
+  async function deleteRows(table, query) {
+    await client.request('DELETE', `/rest/v1/${table}`, {
+      query,
+      prefer: 'return=minimal'
+    });
+  }
+
+  async function getPlayerRowById(id) {
+    const numericId = Number(id);
+    if (!Number.isFinite(numericId) || numericId <= 0) return null;
+    return selectOne('players', { id: `eq.${numericId}` });
+  }
+
+  async function getPlayerRowByPlayerId(playerId) {
+    const normalized = normalizePlayerId(playerId);
+    if (!normalized) return null;
+    return selectOne('players', { player_id_norm: `eq.${normalized}` });
+  }
+
+  async function getPlayerRowByFriendCode(friendCode) {
+    const normalized = normalizeFriendCode(friendCode);
+    if (!normalized) return null;
+    return selectOne('players', { friend_code: `eq.${normalized}` });
+  }
+
+  async function getPlayerRowByName(name) {
+    const cleanName = sanitizeDisplayName(name);
+    if (!cleanName) return null;
+    return selectOne('players', { name_norm: `eq.${cleanName.toUpperCase()}` });
+  }
+
+  async function getPlayersByIds(ids) {
+    const uniqueIds = [...new Set(ids.map(value => Number(value)).filter(value => Number.isFinite(value) && value > 0))];
+    if (!uniqueIds.length) return [];
+    return selectMany('players', { id: `in.(${uniqueIds.join(',')})` });
+  }
+
+  async function getFriendPair(aId, bId) {
+    const low = Math.min(Number(aId), Number(bId));
+    const high = Math.max(Number(aId), Number(bId));
+    return { low, high };
+  }
+
+  async function areFriends(aId, bId) {
+    const { low, high } = await getFriendPair(aId, bId);
+    const row = await selectOne('friends', {
+      or: `(and(player1_id.eq.${low},player2_id.eq.${high}),and(player1_id.eq.${high},player2_id.eq.${low}))`
+    });
+    return Boolean(row);
+  }
+
+  async function hasMatchHistoryByKey(matchKey) {
+    const key = String(matchKey || '').trim();
+    if (!key) return null;
+    return selectOne('match_history', { match_key: `eq.${key}` });
+  }
+
+  async function createSession(playerId, deviceLabel = null) {
+    const token = crypto.randomBytes(32).toString('hex');
+    const ts = now();
+    await insertRows('auth_sessions', {
+      token,
+      player_id: playerId,
+      created_at: ts,
+      last_seen_at: ts,
+      expires_at: ts + SESSION_TTL_MS,
+      device_label: deviceLabel
+    }, {});
+    return token;
+  }
+
+  async function getSession(token) {
+    const sessionToken = String(token || '').trim();
+    if (!sessionToken) return null;
+    const session = await selectOne('auth_sessions', { token: `eq.${sessionToken}` });
+    if (!session) return null;
+    if (Number(session.expires_at) <= now()) {
+      await deleteRows('auth_sessions', { token: `eq.${sessionToken}` });
+      return null;
+    }
+    await updateRows('auth_sessions', { token: `eq.${sessionToken}` }, { last_seen_at: now() });
+    const profile = rowToProfile(await getPlayerRowById(session.player_id));
+    if (!profile) return null;
+    return { token: session.token, profile };
+  }
+
+  async function deleteSession(token) {
+    const sessionToken = String(token || '').trim();
+    if (!sessionToken) return;
+    await deleteRows('auth_sessions', { token: `eq.${sessionToken}` });
+  }
+
+  async function registerPlayer({ name, pin }) {
+    const cleanName = sanitizeDisplayName(name);
+    const cleanPin = String(pin || '').trim();
+    if (!cleanName || cleanName.length > 24) {
+      return { ok: false, error: 'name_invalid' };
+    }
+    if (!/^\d{4}$/.test(cleanPin)) {
+      return { ok: false, error: 'pin_invalid' };
+    }
+
+    for (let attempt = 0; attempt < 100; attempt++) {
+      const playerId = safeId(PLAYER_ID_LENGTH);
+      const friendCode = safeId(FRIEND_CODE_LENGTH);
+      const existingId = await getPlayerRowByPlayerId(playerId);
+      const existingCode = await getPlayerRowByFriendCode(friendCode);
+      if (existingId || existingCode) continue;
+
+      const { salt, hash } = hashPin(cleanPin);
+      const ts = now();
+      try {
+        const rows = await insertRows('players', {
+          player_id: playerId,
+          player_id_norm: playerId,
+          name: cleanName,
+          name_norm: cleanName.toUpperCase(),
+          pin_salt: salt,
+          pin_hash: hash,
+          friend_code: friendCode,
+          level: 1,
+          exp: 0,
+          rating: 1500,
+          pin_fail_count: 0,
+          pin_locked_until: 0,
+          created_at: ts,
+          updated_at: ts,
+          last_login_at: ts
+        }, { select: '*' });
+        const row = rows[0];
+        if (!row) continue;
+        const token = await createSession(row.id);
+        return { ok: true, profile: rowToProfile(row), token };
+      } catch (error) {
+        if (String(error.message || '').includes('duplicate')) continue;
+        throw error;
+      }
+    }
+
+    throw new Error('failed_to_generate_unique_player');
+  }
+
+  async function loginPlayer({ playerId, pin, deviceLabel = null }) {
+    const normalized = normalizePlayerId(playerId);
+    const cleanPin = String(pin || '').trim();
+    if (!normalized || !/^\d{4}$/.test(cleanPin)) {
+      return { ok: false, error: 'credentials_invalid' };
+    }
+
+    const row = await getPlayerRowByPlayerId(normalized);
+    if (!row) {
+      return { ok: false, error: 'credentials_invalid' };
+    }
+
+    const ts = now();
+    const ok = verifyPin(cleanPin, row.pin_salt, row.pin_hash);
+    if (!ok) {
+      await updateRows('players', { id: `eq.${row.id}` }, {
+        pin_fail_count: Number(row.pin_fail_count || 0) + 1,
+        pin_locked_until: 0,
+        updated_at: ts
+      });
+      return { ok: false, error: 'credentials_invalid' };
+    }
+
+    await updateRows('players', { id: `eq.${row.id}` }, {
+      pin_fail_count: 0,
+      pin_locked_until: 0,
+      last_login_at: ts,
+      updated_at: ts
+    });
+    const token = await createSession(row.id, deviceLabel);
+    return { ok: true, profile: rowToProfile(await getPlayerRowById(row.id)), token };
+  }
+
+  async function restoreSession(token) {
+    if (!token) return { ok: false, error: 'missing' };
+    const session = await getSession(token);
+    if (!session) return { ok: false, error: 'invalid' };
+    return { ok: true, profile: session.profile };
+  }
+
+  async function logoutSession(token) {
+    if (token) await deleteSession(token);
+    return { ok: true };
+  }
+
+  async function getPlayerById(id) {
+    return rowToProfile(await getPlayerRowById(id));
+  }
+
+  async function getPlayerByPlayerId(playerId) {
+    return rowToProfile(await getPlayerRowByPlayerId(playerId));
+  }
+
+  async function getPlayerByFriendCode(friendCode) {
+    return rowToProfile(await getPlayerRowByFriendCode(friendCode));
+  }
+
+  async function getPlayerByName(name) {
+    return rowToProfile(await getPlayerRowByName(name));
+  }
+
+  async function updatePlayerName(playerId, name) {
+    const cleanName = sanitizeDisplayName(name);
+    if (!cleanName) return { ok: false, error: 'name_invalid' };
+    const ts = now();
+    const rows = await updateRows('players', { id: `eq.${playerId}` }, {
+      name: cleanName,
+      name_norm: cleanName.toUpperCase(),
+      updated_at: ts
+    });
+    return { ok: true, profile: rowToProfile(rows[0] || await getPlayerRowById(playerId)) };
+  }
+
+  async function adjustPlayerProgress(playerId, ratingDelta = 0, expDelta = 0) {
+    const row = await getPlayerRowById(playerId);
+    if (!row) return { ok: false, error: 'not_found' };
+    const levelState = adjustExperience(row.level, row.exp, Number(expDelta || 0));
+    const ts = now();
+    const rows = await updateRows('players', { id: `eq.${playerId}` }, {
+      level: levelState.level,
+      exp: levelState.exp,
+      rating: Number(row.rating || 0) + Number(ratingDelta || 0),
+      updated_at: ts
+    });
+    return { ok: true, profile: rowToProfile(rows[0] || await getPlayerRowById(playerId)) };
+  }
+
+  async function deletePlayerById(playerId) {
+    const row = await getPlayerRowById(playerId);
+    if (!row) return { ok: false, error: 'not_found' };
+    await deleteRows('players', { id: `eq.${playerId}` });
+    return { ok: true, profile: rowToProfile(row) };
+  }
+
+  async function listFriends(playerId) {
+    const rows = await selectMany('friends', {
+      or: `(player1_id.eq.${playerId},player2_id.eq.${playerId})`,
+      order: 'created_at.desc'
+    });
+    const friendIds = rows.map(row => Number(row.player1_id) === Number(playerId) ? row.player2_id : row.player1_id);
+    const players = await getPlayersByIds(friendIds);
+    const playerMap = new Map(players.map(player => [player.id, player]));
+    return rows.map(row => {
+      const friendId = Number(row.player1_id) === Number(playerId) ? row.player2_id : row.player1_id;
+      const friend = playerMap.get(friendId);
+      if (!friend) return null;
+      return {
+        id: friend.id,
+        playerId: friend.player_id,
+        name: friend.name,
+        friendCode: formatFriendCode(friend.friend_code),
+        level: friend.level,
+        exp: friend.exp,
+        rating: friend.rating,
+        friendSince: row.created_at,
+        lastLoginAt: friend.last_login_at
+      };
+    }).filter(Boolean);
+  }
+
+  async function listFriendRequests(playerId) {
+    const rows = await selectMany('friend_requests', {
+      or: `(sender_player_id.eq.${playerId},receiver_player_id.eq.${playerId})`,
+      order: 'created_at.desc'
+    });
+    const ids = [...new Set(rows.flatMap(row => [Number(row.sender_player_id), Number(row.receiver_player_id)]).filter(value => Number.isFinite(value) && value > 0))];
+    const players = await getPlayersByIds(ids);
+    const playerMap = new Map(players.map(player => [player.id, player]));
+    return rows.map(row => {
+      const sender = playerMap.get(Number(row.sender_player_id));
+      const receiver = playerMap.get(Number(row.receiver_player_id));
+      if (!sender || !receiver) return null;
+      return {
+        id: row.id,
+        status: row.status,
+        createdAt: row.created_at,
+        respondedAt: row.responded_at,
+        sender: {
+          id: sender.id,
+          name: sender.name,
+          friendCode: formatFriendCode(sender.friend_code)
+        },
+        receiver: {
+          id: receiver.id,
+          name: receiver.name,
+          friendCode: formatFriendCode(receiver.friend_code)
+        }
+      };
+    }).filter(Boolean);
+  }
+
+  async function sendFriendRequest(senderPlayerId, friendCode) {
+    const sender = await getPlayerById(senderPlayerId);
+    const receiver = await getPlayerByFriendCode(friendCode);
+    if (!sender) return { ok: false, error: 'sender_missing' };
+    if (!receiver) return { ok: false, error: 'receiver_missing' };
+    if (sender.id === receiver.id) return { ok: false, error: 'self' };
+    if (await areFriends(sender.id, receiver.id)) return { ok: false, error: 'already_friend' };
+
+    const existing = await selectOne('friend_requests', {
+      or: `(and(sender_player_id.eq.${sender.id},receiver_player_id.eq.${receiver.id}),and(sender_player_id.eq.${receiver.id},receiver_player_id.eq.${sender.id}))`,
+      order: 'created_at.desc'
+    });
+    if (existing && existing.status === 'pending') return { ok: false, error: 'pending' };
+    if (existing && existing.status === 'accepted') return { ok: false, error: 'already_friend' };
+
+    const ts = now();
+    const rows = await insertRows('friend_requests', {
+      sender_player_id: sender.id,
+      receiver_player_id: receiver.id,
+      status: 'pending',
+      created_at: ts,
+      responded_at: null
+    }, { select: 'id' });
+    return { ok: true, requestId: rows[0]?.id || null };
+  }
+
+  async function respondFriendRequest(receiverPlayerId, requestId, action) {
+    const row = await selectOne('friend_requests', { id: `eq.${Number(requestId)}` });
+    if (!row) return { ok: false, error: 'not_found' };
+    if (Number(row.receiver_player_id) !== Number(receiverPlayerId)) return { ok: false, error: 'forbidden' };
+    if (row.status !== 'pending') return { ok: false, error: 'already_handled' };
+    const ts = now();
+
+    if (action === 'accept') {
+      const pair = await getFriendPair(row.sender_player_id, row.receiver_player_id);
+      try {
+        await insertRows('friends', {
+          player1_id: pair.low,
+          player2_id: pair.high,
+          created_at: ts
+        }, { select: 'player1_id' });
+      } catch (error) {
+        if (!String(error.message || '').includes('duplicate')) throw error;
+      }
+      await updateRows('friend_requests', { id: `eq.${row.id}` }, {
+        status: 'accepted',
+        responded_at: ts
+      });
+      return { ok: true, status: 'accepted' };
+    }
+
+    if (action === 'reject') {
+      await updateRows('friend_requests', { id: `eq.${row.id}` }, {
+        status: 'rejected',
+        responded_at: ts
+      });
+      return { ok: true, status: 'rejected' };
+    }
+
+    return { ok: false, error: 'invalid_action' };
+  }
+
+  async function listRecentMatches(playerId, limit = 20) {
+    return selectMany('match_history', {
+      or: `(player1_id.eq.${playerId},player2_id.eq.${playerId})`,
+      order: 'started_time.desc',
+      limit: Math.max(1, Math.min(50, Number(limit) || 20))
+    });
+  }
+
+  async function recordMatchHistory(entry) {
+    const ts = now();
+    const startedTime = Number(entry.startedTime || ts);
+    const endedTime = Number(entry.endedTime || ts);
+    const payload = {
+      match_key: String(entry.matchKey || '') || null,
+      player1_id: entry.player1Id || null,
+      player2_id: entry.player2Id || null,
+      player1_name: sanitizeDisplayName(entry.player1Name || 'PLAYER 1'),
+      player2_name: sanitizeDisplayName(entry.player2Name || 'PLAYER 2'),
+      winner: String(entry.winner || ''),
+      loser: String(entry.loser || ''),
+      result: String(entry.result || 'win'),
+      player1_get_rating: Number(entry.player1RatingDelta || 0),
+      player2_get_rating: Number(entry.player2RatingDelta || 0),
+      player1_level: Number(entry.player1Level || 1),
+      player2_level: Number(entry.player2Level || 1),
+      started_time: startedTime,
+      ended_time: endedTime,
+      time_taken: Number(entry.timeTaken || Math.max(0, endedTime - startedTime)),
+      surrender_by_player_id: entry.surrenderByPlayerId || null,
+      created_at: ts
+    };
+
+    if (payload.match_key) {
+      const existing = await hasMatchHistoryByKey(payload.match_key);
+      if (existing) return existing.id;
+    }
+
+    const rows = await insertRows('match_history', payload, { select: 'id' });
+    return rows[0]?.id || null;
+  }
+
+  async function updatePlayerProgress(playerId, ratingDelta, expGain = 50) {
+    const row = await getPlayerRowById(playerId);
+    if (!row) return null;
+    const levelState = applyExperience(row.level, row.exp, expGain);
+    const ts = now();
+    const rows = await updateRows('players', { id: `eq.${playerId}` }, {
+      level: levelState.level,
+      exp: levelState.exp,
+      rating: Number(row.rating || 0) + Number(ratingDelta || 0),
+      updated_at: ts
+    });
+    return rowToProfile(rows[0] || await getPlayerRowById(playerId));
+  }
+
+  return {
+    db: null,
+    backend: 'supabase',
+    createSession,
+    deleteSession,
+    getSession,
+    registerPlayer,
+    loginPlayer,
+    restoreSession,
+    logoutSession,
+    getPlayerById,
+    getPlayerByPlayerId,
+    getPlayerByFriendCode,
+    getPlayerByName,
+    updatePlayerName,
+    adjustPlayerProgress,
+    deletePlayerById,
+    listFriends,
+    listFriendRequests,
+    sendFriendRequest,
+    respondFriendRequest,
+    recordMatchHistory,
+    listRecentMatches,
+    updatePlayerProgress,
+    calculateRatingDelta,
+    normalizePlayerId,
+    normalizeFriendCode,
+    formatFriendCode,
+    sanitizeDisplayName,
+    applyExperience,
+    adjustExperience,
+    hasMatchHistoryByKey
+  };
+}
+
+function createSqliteStore() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
   const db = new DatabaseSync(DB_PATH);
   db.exec('PRAGMA foreign_keys = ON;');
@@ -575,6 +1143,12 @@ function createStore() {
     return info.lastInsertRowid;
   }
 
+  function hasMatchHistoryByKey(matchKey) {
+    const key = String(matchKey || '').trim();
+    if (!key) return null;
+    return db.prepare('SELECT id FROM match_history WHERE match_key = ?').get(key);
+  }
+
   function updatePlayerProgress(playerId, ratingDelta, expGain = 50) {
     const row = db.prepare('SELECT * FROM players WHERE id = ?').get(playerId);
     if (!row) return null;
@@ -617,12 +1191,21 @@ function createStore() {
     formatFriendCode,
     sanitizeDisplayName,
     applyExperience,
-    adjustExperience
+    adjustExperience,
+    hasMatchHistoryByKey
   };
+}
+
+function createStore() {
+  if (process.env.SUPABASE_URL && (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY)) {
+    return createSupabaseStore();
+  }
+  return createSqliteStore();
 }
 
 module.exports = {
   createStore,
+  createSupabaseStore,
   calculateRatingDelta,
   formatFriendCode,
   normalizePlayerId,

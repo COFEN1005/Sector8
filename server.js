@@ -80,13 +80,13 @@ function countRandomWaitingPlayers(matchTier = 'rank') {
     return room.seats[1].socket && !room.seats[2].socket ? 1 : 0;
 }
 
-function resolveDevPlayer(query) {
+async function resolveDevPlayer(query) {
     const normalizedId = normalizePlayerId(query || '');
     if (normalizedId) {
-        const byId = accountStore.getPlayerByPlayerId(normalizedId);
+        const byId = await accountStore.getPlayerByPlayerId(normalizedId);
         if (byId) return byId;
     }
-    const byName = accountStore.getPlayerByName(query || '');
+    const byName = await accountStore.getPlayerByName(query || '');
     if (byName) return byName;
     return null;
 }
@@ -365,7 +365,7 @@ const server = http.createServer(async (req, res) => {
             const method = req.method || 'GET';
             const body = method === 'GET' || method === 'HEAD' ? {} : await readJsonBody(req);
             const sessionToken = body.token || body.sessionToken || getBearerToken(req);
-            const session = sessionToken ? accountStore.getSession(sessionToken) : null;
+            const session = sessionToken ? await accountStore.getSession(sessionToken) : null;
 
             if (method === 'GET' && url.pathname === '/api/auth/me') {
                 if (!session) return sendJson(res, 401, { ok: false, error: 'unauthorized' });
@@ -373,7 +373,7 @@ const server = http.createServer(async (req, res) => {
             }
 
             if (method === 'POST' && url.pathname === '/api/auth/register') {
-                const result = accountStore.registerPlayer({ name: body.name, pin: body.pin });
+                const result = await accountStore.registerPlayer({ name: body.name, pin: body.pin });
                 if (!result.ok) return sendJson(res, 400, { ok: false, error: result.error });
                 return sendJson(res, 200, {
                     ok: true,
@@ -383,7 +383,7 @@ const server = http.createServer(async (req, res) => {
             }
 
             if (method === 'POST' && url.pathname === '/api/auth/login') {
-                const result = accountStore.loginPlayer({
+                const result = await accountStore.loginPlayer({
                     playerId: body.playerId,
                     pin: body.pin,
                     deviceLabel: sanitizeDisplayName(body.deviceLabel || body.device || '')
@@ -398,19 +398,19 @@ const server = http.createServer(async (req, res) => {
             }
 
             if (method === 'POST' && url.pathname === '/api/auth/restore') {
-                const result = accountStore.restoreSession(body.token || sessionToken);
+                const result = await accountStore.restoreSession(body.token || sessionToken);
                 if (!result.ok) return sendJson(res, 401, { ok: false, error: result.error });
                 return sendJson(res, 200, { ok: true, profile: result.profile });
             }
 
             if (method === 'POST' && url.pathname === '/api/auth/logout') {
-                accountStore.logoutSession(body.token || sessionToken);
+                await accountStore.logoutSession(body.token || sessionToken);
                 return sendJson(res, 200, { ok: true });
             }
 
             if (method === 'POST' && url.pathname === '/api/account/name') {
                 if (!session) return sendJson(res, 401, { ok: false, error: 'unauthorized' });
-                const result = accountStore.updatePlayerName(session.profile.id, body.name);
+                const result = await accountStore.updatePlayerName(session.profile.id, body.name);
                 if (!result.ok) return sendJson(res, 400, { ok: false, error: result.error });
                 return sendJson(res, 200, { ok: true, profile: result.profile });
             }
@@ -422,25 +422,25 @@ const server = http.createServer(async (req, res) => {
 
                 if (method === 'GET' && url.pathname === '/api/dev/player') {
                     const query = body.query || url.searchParams.get('query') || '';
-                    const player = resolveDevPlayer(query);
+                    const player = await resolveDevPlayer(query);
                     if (!player) return sendJson(res, 404, { ok: false, error: 'not_found' });
                     return sendJson(res, 200, { ok: true, player });
                 }
 
                 if (method === 'POST' && url.pathname === '/api/dev/player-adjust') {
-                    const target = resolveDevPlayer(body.query || body.playerId || '');
+                    const target = await resolveDevPlayer(body.query || body.playerId || '');
                     if (!target) return sendJson(res, 404, { ok: false, error: 'not_found' });
                     const ratingDelta = Number(body.ratingDelta || 0);
                     const expDelta = Number(body.expDelta || 0);
-                    const result = accountStore.adjustPlayerProgress(target.id, ratingDelta, expDelta);
+                    const result = await accountStore.adjustPlayerProgress(target.id, ratingDelta, expDelta);
                     if (!result.ok) return sendJson(res, 400, { ok: false, error: result.error });
                     return sendJson(res, 200, { ok: true, player: result.profile });
                 }
 
                 if (method === 'DELETE' && url.pathname === '/api/dev/player') {
-                    const target = resolveDevPlayer(body.query || body.playerId || '');
+                    const target = await resolveDevPlayer(body.query || body.playerId || '');
                     if (!target) return sendJson(res, 404, { ok: false, error: 'not_found' });
-                    const result = accountStore.deletePlayerById(target.id);
+                    const result = await accountStore.deletePlayerById(target.id);
                     if (!result.ok) return sendJson(res, 400, { ok: false, error: result.error });
                     return sendJson(res, 200, { ok: true, player: result.profile });
                 }
@@ -451,24 +451,24 @@ const server = http.createServer(async (req, res) => {
             if (method === 'GET' && url.pathname === '/api/players/lookup') {
                 const friendCode = normalizeFriendCode(url.searchParams.get('friendCode') || '');
                 if (!friendCode) return sendJson(res, 400, { ok: false, error: 'friend_code_missing' });
-                const profile = accountStore.getPlayerByFriendCode(friendCode);
+                const profile = await accountStore.getPlayerByFriendCode(friendCode);
                 if (!profile) return sendJson(res, 404, { ok: false, error: 'not_found' });
                 return sendJson(res, 200, { ok: true, player: profile });
             }
 
             if (method === 'GET' && url.pathname === '/api/friends') {
                 if (!session) return sendJson(res, 401, { ok: false, error: 'unauthorized' });
-                return sendJson(res, 200, { ok: true, friends: accountStore.listFriends(session.profile.id) });
+                return sendJson(res, 200, { ok: true, friends: await accountStore.listFriends(session.profile.id) });
             }
 
             if (method === 'GET' && url.pathname === '/api/friends/requests') {
                 if (!session) return sendJson(res, 401, { ok: false, error: 'unauthorized' });
-                return sendJson(res, 200, { ok: true, requests: accountStore.listFriendRequests(session.profile.id) });
+                return sendJson(res, 200, { ok: true, requests: await accountStore.listFriendRequests(session.profile.id) });
             }
 
             if (method === 'POST' && url.pathname === '/api/friends/request') {
                 if (!session) return sendJson(res, 401, { ok: false, error: 'unauthorized' });
-                const result = accountStore.sendFriendRequest(session.profile.id, body.friendCode || '');
+                const result = await accountStore.sendFriendRequest(session.profile.id, body.friendCode || '');
                 if (!result.ok) return sendJson(res, 400, { ok: false, error: result.error });
                 return sendJson(res, 200, { ok: true, requestId: result.requestId });
             }
@@ -477,7 +477,7 @@ const server = http.createServer(async (req, res) => {
                 if (!session) return sendJson(res, 401, { ok: false, error: 'unauthorized' });
                 const match = url.pathname.match(/^\/api\/friends\/requests\/(\d+)\/respond$/);
                 const requestId = Number(match?.[1] || 0);
-                const result = accountStore.respondFriendRequest(session.profile.id, requestId, body.action);
+                const result = await accountStore.respondFriendRequest(session.profile.id, requestId, body.action);
                 if (!result.ok) return sendJson(res, 400, { ok: false, error: result.error });
                 return sendJson(res, 200, { ok: true, status: result.status });
             }
@@ -485,14 +485,14 @@ const server = http.createServer(async (req, res) => {
             if (method === 'GET' && url.pathname === '/api/matches') {
                 if (!session) return sendJson(res, 401, { ok: false, error: 'unauthorized' });
                 const limit = Math.min(50, Math.max(1, Number(url.searchParams.get('limit') || 20)));
-                return sendJson(res, 200, { ok: true, matches: accountStore.listRecentMatches(session.profile.id, limit) });
+                return sendJson(res, 200, { ok: true, matches: await accountStore.listRecentMatches(session.profile.id, limit) });
             }
 
             if (method === 'POST' && url.pathname === '/api/matches') {
                 if (!session) return sendJson(res, 401, { ok: false, error: 'unauthorized' });
                 const matchKey = String(body.matchKey || '').trim();
                 if (matchKey) {
-                    const existing = accountStore.db.prepare('SELECT id FROM match_history WHERE match_key = ?').get(matchKey);
+                    const existing = await accountStore.hasMatchHistoryByKey(matchKey);
                     if (existing) return sendJson(res, 200, { ok: true, id: existing.id, duplicate: true });
                 }
 
@@ -502,8 +502,8 @@ const server = http.createServer(async (req, res) => {
                 const loserPlayerId = body.loserPlayerId ? Number(body.loserPlayerId) : null;
                 const matchType = String(body.matchType || 'normal');
                 const player1Won = String(body.result || '') === 'win';
-                let player1Profile = player1Id ? accountStore.getPlayerById(player1Id) : null;
-                let player2Profile = player2Id ? accountStore.getPlayerById(player2Id) : null;
+                let player1Profile = player1Id ? await accountStore.getPlayerById(player1Id) : null;
+                let player2Profile = player2Id ? await accountStore.getPlayerById(player2Id) : null;
                 let player1RatingDelta = 0;
                 let player2RatingDelta = 0;
 
@@ -517,18 +517,18 @@ const server = http.createServer(async (req, res) => {
                             player2RatingDelta = calculateRatingDelta(player2Profile.rating, player1Profile.rating, true);
                         }
                     }
-                    player1Profile = accountStore.updatePlayerProgress(player1Profile.id, player1RatingDelta, 50);
-                    player2Profile = accountStore.updatePlayerProgress(player2Profile.id, player2RatingDelta, 50);
+                    player1Profile = await accountStore.updatePlayerProgress(player1Profile.id, player1RatingDelta, 50);
+                    player2Profile = await accountStore.updatePlayerProgress(player2Profile.id, player2RatingDelta, 50);
                 } else if (matchType === 'rank' && player1Profile && !player2Profile) {
                     if (player1Won) {
                         player1RatingDelta = calculateRatingDelta(player1Profile.rating, 1500, true);
                     } else {
                         player1RatingDelta = calculateRatingDelta(player1Profile.rating, 1500, false);
                     }
-                    player1Profile = accountStore.updatePlayerProgress(player1Profile.id, player1RatingDelta, 50);
+                    player1Profile = await accountStore.updatePlayerProgress(player1Profile.id, player1RatingDelta, 50);
                 }
 
-                const matchId = accountStore.recordMatchHistory({
+                const matchId = await accountStore.recordMatchHistory({
                     matchKey,
                     player1Id: player1Profile?.id || player1Id,
                     player2Id: player2Profile?.id || player2Id,

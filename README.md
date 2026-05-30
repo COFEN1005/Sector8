@@ -10,6 +10,13 @@ npm start
 
 Open `http://localhost:8787/`.
 
+## Supabase backend
+
+Set these environment variables to move account data to Supabase instead of the local SQLite file:
+
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+
 ## Online match flow
 
 1. Open the game URL.
