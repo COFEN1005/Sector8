@@ -393,15 +393,17 @@ function updateAccountUI() {
     if (copyPlayerIdBtn) copyPlayerIdBtn.disabled = !loggedIn;
     if (copyFriendCodeBtn) copyFriendCodeBtn.disabled = !loggedIn;
     const playerIdInput = document.getElementById('account-player-id-input');
-    if (!loggedIn && playerIdInput && !playerIdInput.value) {
-        try {
-            const lastPlayerId = window.localStorage.getItem(LAST_PLAYER_ID_STORAGE_KEY) || '';
-            if (lastPlayerId) playerIdInput.value = lastPlayerId;
-        } catch {}
-    }
     if (loginBtn) loginBtn.disabled = !playerIdInput?.value || !document.getElementById('account-pin-input')?.value;
     if (registerBtn) registerBtn.disabled = !document.getElementById('account-pin-input')?.value;
     if (logoutBtn) logoutBtn.disabled = !loggedIn;
+}
+
+function clearAccountInputs() {
+    const playerIdInput = document.getElementById('account-player-id-input');
+    const pinInput = document.getElementById('account-pin-input');
+    if (playerIdInput) playerIdInput.value = '';
+    if (pinInput) pinInput.value = '';
+    updateAccountUI();
 }
 
 function setAccountStatus(message, tone = 'system') {
@@ -625,7 +627,7 @@ async function logoutAccount() {
     authSession = null;
     authProfile = null;
     saveAuthSession();
-    updateAccountUI();
+    clearAccountInputs();
     showStatusAlert('LOGGED OUT', 'system', 2500);
     setAccountStatus('LOGGED OUT', 'system');
 }

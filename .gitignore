@@ -5,4 +5,3 @@ supabase.local.json
 .DS_Store
 Thumbs.db
 gitstore/
-PUSH_TO_GITHUB.bat
