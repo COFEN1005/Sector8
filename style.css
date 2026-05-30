@@ -41,15 +41,18 @@ body {
     background-size: 100% 100%, 100% 100%, 20px 20px, 20px 20px;
     color: var(--text-primary);
     font-family: var(--font-outfit);
-    height: 100vh;
-    overflow: hidden;
+    min-height: 100vh;
+    min-height: 100dvh;
+    overflow-x: hidden;
+    overflow-y: auto;
 }
 
 /* --- APP CONTAINER LAYOUT --- */
 #app-container {
     display: flex;
     flex-direction: column;
-    height: 100vh;
+    min-height: 100vh;
+    min-height: 100dvh;
     padding: 1.5rem;
 }
 
@@ -525,7 +528,9 @@ main {
     display: flex;
     gap: 1.5rem;
     flex: 1;
-    height: calc(100vh - 120px);
+    min-height: 0;
+    height: auto;
+    align-items: stretch;
 }
 
 body.device-pc main {
@@ -645,6 +650,7 @@ details li {
     justify-content: center;
     position: relative;
     padding: 1rem;
+    min-height: 0;
 }
 
 #game-board-wrapper {
