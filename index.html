@@ -39,7 +39,16 @@
                 <details class="news-menu">
                     <summary class="small-tool-btn">NEWS</summary>
                     <div class="news-menu-panel">
-                        <details class="news-item" open>
+                        <details class="news-item">
+                            <summary>PATCH 0.7.10</summary>
+                            <ul class="news-list">
+                                <li>ロビー左上のプレイヤーカード位置を見直し、メニューとぶつからないよう調整</li>
+                                <li>MENU / NEWS / SETTING の見た目を統一し、ポップアップの質感を調整</li>
+                                <li>甲の能力詳細に行動範囲・視界範囲を整理して表示</li>
+                                <li>NEWS の各履歴を初期状態で折りたたむよう変更</li>
+                            </ul>
+                        </details>
+                        <details class="news-item">
                             <summary>PATCH 0.7.9</summary>
                             <ul class="news-list">
                                 <li>レートを勝ち +10 / 負け -10 を基本に見直し、差分補正を追加</li>
@@ -48,20 +57,20 @@
                                 <li>ロビー左上にプレイヤー名 / レベル / レートを表示するように変更</li>
                             </ul>
                         </details>
-                        <details class="news-item" open>
+                        <details class="news-item">
                             <summary>PATCH 0.7.6</summary>
                             <ul class="news-list">
                                 <li>対戦後の経験値付与を全試合に反映するよう修正</li>
                             </ul>
                         </details>
-                        <details class="news-item" open>
+                        <details class="news-item">
                             <summary>PATCH 0.7.5</summary>
                             <ul class="news-list">
                                 <li>レーティングの勝敗向きが逆になっていた不具合を修正</li>
                                 <li>負けた側のレート減算を正しく反映するよう変更</li>
                             </ul>
                         </details>
-                        <details class="news-item" open>
+                        <details class="news-item">
                             <summary>PATCH 0.7.4</summary>
                             <ul class="news-list">
                                 <li>甲アビリティ選択後の準備完了前はコマを動かせないよう変更</li>
@@ -70,7 +79,7 @@
                                 <li>PLAYER ACCOUNT を折りたためるように変更</li>
                             </ul>
                         </details>
-                        <details class="news-item" open>
+                        <details class="news-item">
                             <summary>PATCH 0.7.3</summary>
                             <ul class="news-list">
                                 <li>PLAYER ACCOUNT の入力案内を追加</li>
@@ -79,7 +88,7 @@
                                 <li>PLAYER ID と FRIEND CODE をコピーできるように変更</li>
                             </ul>
                         </details>
-                        <details class="news-item" open>
+                        <details class="news-item">
                             <summary>PATCH 0.7.2</summary>
                             <ul class="news-list">
                                 <li>オンライン対戦成立後に盤面を見てから甲アビリティを選ぶよう変更</li>
@@ -89,7 +98,7 @@
                                 <li>ターンスキップの同期を修正</li>
                             </ul>
                         </details>
-                        <details class="news-item" open>
+                        <details class="news-item">
                             <summary>PATCH 0.7.0</summary>
                             <ul class="news-list">
                                 <li>4桁PINの失敗ロックを一時無効化</li>
@@ -100,14 +109,14 @@
                                 <li>ワープマスを通過可能に調整</li>
                             </ul>
                         </details>
-                        <details class="news-item" open>
+                        <details class="news-item">
                             <summary>PATCH 0.6.4</summary>
                             <ul class="news-list">
                                 <li>サレンダー時の勝利側テキストを専用文言に修正</li>
                                 <li>ターンスキップボタンをサレンダーの上に配置</li>
                             </ul>
                         </details>
-                        <details class="news-item" open>
+                        <details class="news-item">
                             <summary>PATCH 0.6.3</summary>
                             <ul class="news-list">
                                 <li>移動/ターン消費の致命的バグを修正</li>
@@ -618,7 +627,7 @@
         </div>
     </div>
 
-    <div class="patch-badge">PATCH ver.0.7.9</div>
+    <div class="patch-badge">PATCH ver.0.7.10</div>
     <script>
     // Mode tab switching helper (called from inline onclick)
     function setModeTab(mode) {
