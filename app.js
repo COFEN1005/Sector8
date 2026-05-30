@@ -203,6 +203,9 @@ let manualDisconnect = false;
 let onlineSession = null;
 let authSession = null;
 let authProfile = null;
+let matchHistoryCache = [];
+let matchHistoryLoadedForPlayerId = null;
+let matchHistoryRequestToken = 0;
 let devTargetPlayer = null;
 // Matchmaking state
 let matchmakingMode = false;
@@ -592,6 +595,117 @@ async function deleteDevTargetPlayer() {
     return result.player;
 }
 
+function getMatchHistoryDelta(entry) {
+    if (!authProfile) return 0;
+    if (Number(entry?.player1_id) === Number(authProfile.id)) return Number(entry?.player1_get_rating || 0);
+    if (Number(entry?.player2_id) === Number(authProfile.id)) return Number(entry?.player2_get_rating || 0);
+    return Number(entry?.player1_get_rating || 0);
+}
+
+function formatMatchHistoryTimestamp(value) {
+    const ts = Number(value || 0);
+    if (!ts) return '日時不明';
+    return new Intl.DateTimeFormat('ja-JP', {
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+    }).format(new Date(ts));
+}
+
+function formatMatchHistoryDuration(value) {
+    const ms = Math.max(0, Number(value || 0));
+    const totalSeconds = Math.max(0, Math.round(ms / 1000));
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}m ${String(seconds).padStart(2, '0')}s`;
+}
+
+function renderMatchHistory(matches = [], state = {}) {
+    const listEl = document.getElementById('match-history-list');
+    if (!listEl) return;
+
+    if (!authSession?.token || !authProfile) {
+        listEl.innerHTML = '<div class="match-history-empty">ログインすると対戦履歴が表示されます。</div>';
+        return;
+    }
+
+    if (state.loading) {
+        listEl.innerHTML = '<div class="match-history-empty">読み込み中...</div>';
+        return;
+    }
+
+    if (state.error) {
+        listEl.innerHTML = `<div class="match-history-empty error">${state.error}</div>`;
+        return;
+    }
+
+    if (!Array.isArray(matches) || !matches.length) {
+        listEl.innerHTML = '<div class="match-history-empty">まだ対戦履歴がありません。</div>';
+        return;
+    }
+
+    const profileId = Number(authProfile.id);
+    listEl.innerHTML = matches.map(entry => {
+        const resultText = String(entry.result || '').toLowerCase() === 'lose' ? 'LOSE' : 'WIN';
+        const delta = getMatchHistoryDelta(entry);
+        const deltaText = delta > 0 ? `+${delta}` : String(delta);
+        const opponentName = Number(entry.player1_id) === profileId
+            ? (entry.player2_name || 'UNKNOWN')
+            : (entry.player1_name || 'UNKNOWN');
+        const winnerName = entry.winner || 'UNKNOWN';
+        const loserName = entry.loser || 'UNKNOWN';
+        const timeText = formatMatchHistoryTimestamp(entry.started_time || entry.created_at);
+        const durationText = formatMatchHistoryDuration(entry.time_taken);
+        const surrenderText = entry.surrender_by_player_id ? ' / SURRENDER' : '';
+        return `
+            <article class="match-history-card">
+                <div class="match-history-topline">
+                    <span class="match-history-result ${resultText === 'WIN' ? 'win' : 'lose'}">${resultText}</span>
+                    <strong class="match-history-opponent">VS ${opponentName}</strong>
+                    <span class="match-history-rating ${delta >= 0 ? 'positive' : 'negative'}">RATING ${deltaText}</span>
+                </div>
+                <div class="match-history-meta">
+                    <span>${timeText}</span>
+                    <span>${durationText}</span>
+                    <span>${winnerName} / ${loserName}${surrenderText}</span>
+                </div>
+            </article>
+        `;
+    }).join('');
+}
+
+async function loadMatchHistory({ force = false } = {}) {
+    const listEl = document.getElementById('match-history-list');
+    if (!listEl) return;
+    if (!authSession?.token || !authProfile) {
+        matchHistoryCache = [];
+        matchHistoryLoadedForPlayerId = null;
+        renderMatchHistory();
+        return;
+    }
+
+    const profileId = Number(authProfile.id);
+    if (!force && matchHistoryLoadedForPlayerId === profileId && matchHistoryCache.length) {
+        renderMatchHistory(matchHistoryCache);
+        return;
+    }
+
+    const requestToken = ++matchHistoryRequestToken;
+    renderMatchHistory([], { loading: true });
+    try {
+        const result = await apiRequest('/api/matches?limit=10', { method: 'GET', auth: true });
+        if (requestToken !== matchHistoryRequestToken) return;
+        matchHistoryCache = Array.isArray(result.matches) ? result.matches : [];
+        matchHistoryLoadedForPlayerId = profileId;
+        renderMatchHistory(matchHistoryCache);
+    } catch (error) {
+        if (requestToken !== matchHistoryRequestToken) return;
+        renderMatchHistory([], { error: '対戦履歴の読み込みに失敗しました。' });
+        console.warn('match history load failed', error);
+    }
+}
+
 function applyAuthProfile(profile, token) {
     authProfile = profile || null;
     authSession = token ? { token } : null;
@@ -614,6 +728,7 @@ async function restoreAuthSession() {
     try {
         const result = await apiRequest('/api/auth/restore', { method: 'POST', body: { token: authSession.token }, auth: false });
         applyAuthProfile(result.profile, authSession.token);
+        loadMatchHistory({ force: true }).catch(() => {});
         showStatusAlert(`LOGIN RESTORED: ${result.profile.name}`, 'system', 2500);
         return true;
     } catch {
@@ -630,6 +745,7 @@ async function registerAccount() {
     const pin = String(document.getElementById('account-pin-input')?.value || '').trim();
     const result = await apiRequest('/api/auth/register', { method: 'POST', body: { name, pin }, auth: false });
     applyAuthProfile(result.profile, result.token);
+    loadMatchHistory({ force: true }).catch(() => {});
     try { window.localStorage.setItem(LAST_PLAYER_ID_STORAGE_KEY, result.profile.playerId); } catch {}
     showStatusAlert(`REGISTERED: ${result.profile.playerId}`, 'success', 3500);
     setAccountStatus(`REGISTERED / ${result.profile.playerId}`, 'success');
@@ -645,6 +761,7 @@ async function loginAccount() {
         auth: false
     });
     applyAuthProfile(result.profile, result.token);
+    loadMatchHistory({ force: true }).catch(() => {});
     try { window.localStorage.setItem(LAST_PLAYER_ID_STORAGE_KEY, result.profile.playerId); } catch {}
     showStatusAlert(`LOGIN OK: ${result.profile.name}`, 'success', 2500);
     setAccountStatus(`LOGIN OK / ${result.profile.name}`, 'success');
@@ -661,6 +778,9 @@ async function logoutAccount() {
     authProfile = null;
     saveAuthSession();
     clearAccountInputs();
+    matchHistoryCache = [];
+    matchHistoryLoadedForPlayerId = null;
+    renderMatchHistory();
     showStatusAlert('LOGGED OUT', 'system', 2500);
     setAccountStatus('LOGGED OUT', 'system');
 }
@@ -712,6 +832,9 @@ async function submitMatchHistory(reason, winnerId) {
     try {
         const result = await apiRequest('/api/matches', { method: 'POST', body: payload, auth: true });
         if (result.player1) applyAuthProfile(result.player1, authSession.token);
+        if (!document.getElementById('menu-panel')?.classList.contains('hidden')) {
+            loadMatchHistory({ force: true }).catch(() => {});
+        }
     } catch (error) {
         console.warn('match history save failed', error);
     }
@@ -1027,6 +1150,9 @@ function setupUIEventListeners() {
         menuToggle.addEventListener('click', () => {
             menuPanel.classList.toggle('hidden');
             menuToggle.classList.toggle('active', !menuPanel.classList.contains('hidden'));
+            if (!menuPanel.classList.contains('hidden')) {
+                loadMatchHistory({ force: true }).catch(() => {});
+            }
         });
     }
     document.getElementById('btn-opt-ai').addEventListener('click', () => setOpponent(true));
@@ -1124,6 +1250,8 @@ function setupUIEventListeners() {
     if (copyPlayerIdBtn) copyPlayerIdBtn.addEventListener('click', () => copyAccountIdentifier('playerId'));
     const copyFriendCodeBtn = document.getElementById('btn-copy-friend-code');
     if (copyFriendCodeBtn) copyFriendCodeBtn.addEventListener('click', () => copyAccountIdentifier('friendCode'));
+    const refreshMatchHistoryBtn = document.getElementById('btn-refresh-match-history');
+    if (refreshMatchHistoryBtn) refreshMatchHistoryBtn.addEventListener('click', () => loadMatchHistory({ force: true }).catch(() => {}));
     const devLookupBtn = document.getElementById('btn-dev-lookup');
     if (devLookupBtn) devLookupBtn.addEventListener('click', () => lookupDevTarget().catch(() => {
         showStatusAlert('対象の取得に失敗しました。', 'warning', 3000);

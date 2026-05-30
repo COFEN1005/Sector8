@@ -152,12 +152,109 @@ header {
     z-index: 2500;
 }
 
+.menu-section-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.6rem;
+    margin-bottom: 0.7rem;
+}
+
+.menu-section-header .account-hint {
+    margin: 0;
+    flex: 1;
+}
+
 .news-item summary::-webkit-details-marker {
     display: none;
 }
 
 .news-item .news-list {
     padding: 0 1.4rem 0.75rem 1.8rem;
+}
+
+.match-history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+}
+
+.match-history-empty {
+    padding: 0.75rem 0.8rem;
+    border: 1px dashed rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    background: rgba(10, 15, 25, 0.4);
+    color: rgba(226, 232, 240, 0.8);
+    font-size: 0.83rem;
+    line-height: 1.45;
+}
+
+.match-history-empty.error {
+    border-color: rgba(255, 125, 125, 0.28);
+    color: #ffb3b3;
+}
+
+.match-history-card {
+    padding: 0.72rem 0.8rem;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.match-history-topline {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    flex-wrap: wrap;
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+}
+
+.match-history-result {
+    padding: 0.18rem 0.46rem;
+    border-radius: 999px;
+    border: 1px solid currentColor;
+    letter-spacing: 0.08em;
+}
+
+.match-history-result.win {
+    color: var(--neon-cyan);
+    background: rgba(34, 211, 238, 0.08);
+}
+
+.match-history-result.lose {
+    color: #ff8a8a;
+    background: rgba(255, 138, 138, 0.08);
+}
+
+.match-history-opponent {
+    font-size: 0.86rem;
+    color: var(--text-primary);
+}
+
+.match-history-rating {
+    margin-left: auto;
+    font-size: 0.76rem;
+    letter-spacing: 0.08em;
+}
+
+.match-history-rating.positive {
+    color: var(--accent-gold);
+}
+
+.match-history-rating.negative {
+    color: #ff8a8a;
+}
+
+.match-history-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.8rem;
+    margin-top: 0.45rem;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: rgba(203, 213, 225, 0.78);
 }
 
 .audio-group {
