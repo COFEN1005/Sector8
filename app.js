@@ -220,6 +220,7 @@ let devTargetPlayer = null;
 let onlineProfileDetails = { 1: null, 2: null };
 let matchIntroActive = false;
 let matchIntroTimer = null;
+let pendingMatchIntroCutIn = false;
 // Matchmaking state
 let matchmakingMode = false;
 let matchmakingRole = null; // 'host' or 'guest'
@@ -1327,6 +1328,7 @@ function showMatchIntroCutIn() {
     const overlay = document.getElementById('match-intro-overlay');
     if (!overlay) return;
     overlay.classList.remove('hidden');
+    overlay.getBoundingClientRect();
     matchIntroActive = true;
     refreshMatchIntroCutIn();
     window.clearTimeout(matchIntroTimer);
@@ -1348,6 +1350,18 @@ function refreshMatchIntroCutIn() {
     levelEl.textContent = profile.level == null ? 'LV ?' : `LV ${profile.level}`;
     ratingEl.textContent = profile.rating == null ? 'RATING ?' : `RATING ${profile.rating}`;
     nameEl.textContent = profile.name || `P${opponent}`;
+}
+
+function queueMatchIntroCutIn() {
+    pendingMatchIntroCutIn = true;
+    window.clearTimeout(matchIntroTimer);
+    window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+            if (!pendingMatchIntroCutIn) return;
+            pendingMatchIntroCutIn = false;
+            showMatchIntroCutIn();
+        });
+    });
 }
 
 function saveOnlineSession() {
@@ -1384,6 +1398,7 @@ function deactivateOnlineMode(clearSession = true) {
     matchIntroActive = false;
     window.clearTimeout(matchIntroTimer);
     matchIntroTimer = null;
+    pendingMatchIntroCutIn = false;
     document.getElementById('match-intro-overlay')?.classList.add('hidden');
     currentMatchOpponentStartProfile = null;
     if (clearSession) clearOnlineSession();
@@ -2012,6 +2027,7 @@ function resetOnlineMatchmakingState(keepPanel = true) {
     matchIntroActive = false;
     window.clearTimeout(matchIntroTimer);
     matchIntroTimer = null;
+    pendingMatchIntroCutIn = false;
     document.getElementById('match-intro-overlay')?.classList.add('hidden');
     onlineMatchPreviewActive = false;
     clearOnlineSession();
@@ -2444,6 +2460,7 @@ function startOnlineBattle() {
 
     p1Ability = config.p1Ability;
     p2Ability = config.p2Ability;
+    pendingMatchIntroCutIn = true;
     startGame(config, true);
     if (onlineMode && localPlayer === 1) {
         sendOnlineMessage({ kind: 'start', config });
@@ -2487,6 +2504,7 @@ function handleOnlineMessage(message) {
             }
         }
         if (message.snapshot?.started && activePhase !== 'battle') {
+            pendingMatchIntroCutIn = true;
             startGame(message.snapshot.config, true);
             applyingRemoteAction = true;
             try {
@@ -2968,7 +2986,7 @@ function startGame(config = null, fromOnline = false) {
     window.clearTimeout(matchIntroTimer);
     matchIntroTimer = null;
     if (onlineMode && fromOnline && !replayPlaybackActive && !reusePreview) {
-        showMatchIntroCutIn();
+        queueMatchIntroCutIn();
     } else {
         matchIntroActive = false;
         document.getElementById('match-intro-overlay')?.classList.add('hidden');
@@ -4138,7 +4156,9 @@ function executeMove(unit, destRow, destCol) {
     const targetCol = resolved.targetCol;
     const captured = [];
     let logType = unit.player === 1 ? 'p1' : 'p2';
-    const shouldFocusMove = !shouldHideAiActionFeedback(unit.player);
+    const shouldFocusMove = onlineMode
+        ? unit.player === localPlayer
+        : !shouldHideAiActionFeedback(unit.player);
 
     if (resolved.localOccupant && resolved.localOccupant.player !== unit.player) {
         captured.push({ unit: resolved.localOccupant, map: startMap, row: destRow, col: destCol });

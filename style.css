@@ -2089,6 +2089,10 @@ body.opponent-turn #turn-indicator {
     transition: opacity 0.3s;
 }
 
+#match-intro-overlay {
+    z-index: 5000;
+}
+
 .overlay.hidden {
     opacity: 0;
     pointer-events: none;
