@@ -1146,13 +1146,41 @@ function setupUIEventListeners() {
     document.getElementById('btn-start-game').addEventListener('click', () => startGame());
     const menuToggle = document.getElementById('btn-toggle-menu');
     const menuPanel = document.getElementById('menu-panel');
+    const newsMenu = document.querySelector('.news-menu');
+    const settingsMenu = document.querySelector('.settings-menu');
+
+    const closeHeaderPanels = (except = null) => {
+        if (except !== 'menu' && menuPanel) {
+            menuPanel.classList.add('hidden');
+            menuToggle?.classList.remove('active');
+        }
+        if (except !== 'news' && newsMenu?.open) {
+            newsMenu.open = false;
+        }
+        if (except !== 'settings' && settingsMenu?.open) {
+            settingsMenu.open = false;
+        }
+    };
+
     if (menuToggle && menuPanel) {
         menuToggle.addEventListener('click', () => {
+            const willOpen = menuPanel.classList.contains('hidden');
+            closeHeaderPanels('menu');
             menuPanel.classList.toggle('hidden');
-            menuToggle.classList.toggle('active', !menuPanel.classList.contains('hidden'));
+            menuToggle.classList.toggle('active', willOpen);
             if (!menuPanel.classList.contains('hidden')) {
                 loadMatchHistory({ force: true }).catch(() => {});
             }
+        });
+    }
+    if (newsMenu) {
+        newsMenu.addEventListener('toggle', () => {
+            if (newsMenu.open) closeHeaderPanels('news');
+        });
+    }
+    if (settingsMenu) {
+        settingsMenu.addEventListener('toggle', () => {
+            if (settingsMenu.open) closeHeaderPanels('settings');
         });
     }
     document.getElementById('btn-opt-ai').addEventListener('click', () => setOpponent(true));
