@@ -33,6 +33,7 @@
                 </div>
             </div>
             <div class="audio-controls">
+                <button id="btn-toggle-menu" class="small-tool-btn" type="button">MENU</button>
                 <details class="news-menu">
                     <summary class="small-tool-btn">NEWS</summary>
                     <div class="news-menu-panel">
@@ -241,6 +242,106 @@
                         <p>・<strong>固定壁 (w)</strong>: 移動と視界を遮断。甲の「爆破」でのみ破壊可能。</p>
                     </details>
                 </div>
+                <div id="menu-panel" class="menu-panel hidden">
+                    <details class="config-group account-group" open>
+                        <summary>PLAYER ACCOUNT</summary>
+                        <div class="account-group-body">
+                            <div class="account-hint">新規作成は上の USER NAME を使い、PLAYER ID はログイン用のID、PIN は4桁の数字です。</div>
+                            <div class="account-credential-grid">
+                                <input id="account-player-id-input" class="neon-input" type="text" maxlength="16" placeholder="LOGIN ID" autocapitalize="characters" autocomplete="off" spellcheck="false" title="ログインに使う PLAYER ID を入力します" />
+                                <input id="account-pin-input" class="neon-input" type="password" maxlength="4" placeholder="4-DIGIT PIN" inputmode="numeric" autocomplete="new-password" title="4桁の数字PINを入力します" />
+                            </div>
+                            <div class="account-actions">
+                                <button id="btn-account-register" class="small-tool-btn" type="button" title="新しいアカウントを作成します">REGISTER</button>
+                                <button id="btn-account-login" class="small-tool-btn" type="button" title="PLAYER ID と PIN でログインします">LOGIN</button>
+                                <button id="btn-account-logout" class="small-tool-btn" type="button" title="ログアウトします">LOGOUT</button>
+                            </div>
+                            <div class="account-summary">
+                                <div class="account-summary-row account-summary-copy-row">
+                                    <span>PLAYER ID</span>
+                                    <div class="account-summary-value">
+                                        <strong id="account-player-id">--------</strong>
+                                        <button id="btn-copy-player-id" class="mini-tool-btn" type="button" title="PLAYER ID をコピー">COPY</button>
+                                    </div>
+                                </div>
+                                <div class="account-summary-row account-summary-copy-row">
+                                    <span>FRIEND CODE</span>
+                                    <div class="account-summary-value">
+                                        <strong id="account-friend-code">--- --- ---</strong>
+                                        <button id="btn-copy-friend-code" class="mini-tool-btn" type="button" title="FRIEND CODE をコピー">COPY</button>
+                                    </div>
+                                </div>
+                                <div class="account-summary-row"><span>LEVEL</span><strong id="account-level">LV -</strong></div>
+                                <div class="account-summary-row"><span>EXP</span><strong id="account-exp">0/100</strong></div>
+                                <div class="account-summary-row"><span>RATING</span><strong id="account-rating">-</strong></div>
+                            </div>
+                            <div id="account-status" class="account-status">REGISTER: USER NAME + 4桁PIN / LOGIN: PLAYER ID + 4桁PIN</div>
+                        </div>
+                    </details>
+
+                    <details class="config-group account-group">
+                        <summary>甲の能力詳細</summary>
+                        <div class="account-group-body">
+                            <div class="ability-detail-list">
+                                <div class="ability-detail-card">
+                                    <h4>千里眼</h4>
+                                    <p>発動型。1方向の直線全マスを表示する。</p>
+                                    <div class="ability-detail-meta"><span>行動範囲: 1方向の直線全マス</span><span>視界範囲: 選択方向の直線全マス</span></div>
+                                </div>
+                                <div class="ability-detail-card">
+                                    <h4>鼓舞</h4>
+                                    <p>発動型。周囲1マスの味方の視界と移動を+1する。</p>
+                                    <div class="ability-detail-meta"><span>行動範囲: 周囲1マス</span><span>視界範囲: 周囲1マスの味方に影響</span></div>
+                                </div>
+                                <div class="ability-detail-card">
+                                    <h4>足跡</h4>
+                                    <p>このコマの視界を2ターン前まで保存する。</p>
+                                    <div class="ability-detail-meta"><span>行動範囲: なし</span><span>視界範囲: 2ターン分を保存</span></div>
+                                </div>
+                                <div class="ability-detail-card">
+                                    <h4>歴戦王</h4>
+                                    <p>パッシブ型。敵撃破時、行動済みを解除する。行動済みを解除したとき、このコマの移動が自陣側を除く直線移動2に変更される。</p>
+                                    <div class="ability-detail-meta"><span>行動範囲: 再行動時は直線移動2</span><span>視界範囲: 甲の基本視界</span></div>
+                                </div>
+                                <div class="ability-detail-card">
+                                    <h4>戦姫</h4>
+                                    <p>パッシブ型。このコマが敵を4体撃破すると、自コマの丁を全て丙に変える。10体撃破すると、自コマの丙を全て乙に変える。</p>
+                                    <div class="ability-detail-meta"><span>行動範囲: なし</span><span>視界範囲: 甲の基本視界</span></div>
+                                </div>
+                                <div class="ability-detail-card">
+                                    <h4>爆破</h4>
+                                    <p>発動、パッシブ型。発動した、もしくは死亡時、周囲2マスの壁、敵味方ユニット、軍旗をすべて破壊する。</p>
+                                    <div class="ability-detail-meta"><span>行動範囲: 周囲2マス</span><span>視界範囲: 甲の基本視界</span></div>
+                                </div>
+                                <div class="ability-detail-card">
+                                    <h4>暗殺者</h4>
+                                    <p>パッシブ型。敵撃破時、進行方向から1マス戻る。</p>
+                                    <div class="ability-detail-meta"><span>行動範囲: 1マス戻る</span><span>視界範囲: 甲の基本視界</span></div>
+                                </div>
+                                <div class="ability-detail-card">
+                                    <h4>盲目</h4>
+                                    <p>視界1、移動5の盲目コマ。</p>
+                                    <div class="ability-detail-meta"><span>行動範囲: 移動5</span><span>視界範囲: 1</span></div>
+                                </div>
+                                <div class="ability-detail-card">
+                                    <h4>衛生兵</h4>
+                                    <p>パッシブ型。このコマが生存してるなら偵察兵の補給が5ターンに1回になり、偵察兵の上限が3になる。</p>
+                                    <div class="ability-detail-meta"><span>行動範囲: なし</span><span>視界範囲: 甲の基本視界</span></div>
+                                </div>
+                                <div class="ability-detail-card">
+                                    <h4>監視</h4>
+                                    <p>パッシブ型。敵コマがこのコマの視界内にいるなら、そのコマの移動-1</p>
+                                    <div class="ability-detail-meta"><span>行動範囲: なし</span><span>視界範囲: 甲の基本視界</span></div>
+                                </div>
+                                <div class="ability-detail-card">
+                                    <h4>迷彩</h4>
+                                    <p>発動型。スキル使用後、マンハッタン視界1になり、動かない限り敵の視界に表示されない。</p>
+                                    <div class="ability-detail-meta"><span>行動範囲: 静止で隠密維持</span><span>視界範囲: マンハッタン視界1</span></div>
+                                </div>
+                            </div>
+                        </div>
+                    </details>
+                </div>
             </section>
 
             <!-- CENTER COLUMN: THE BOARD -->
@@ -300,42 +401,6 @@
                         </div>
                         <div id="username-saved" class="username-saved">現在: Commander</div>
                     </div>
-
-                    <details class="config-group account-group" open>
-                        <summary>PLAYER ACCOUNT</summary>
-                        <div class="account-group-body">
-                            <div class="account-hint">新規作成は上の USER NAME を使い、PLAYER ID はログイン用のID、PIN は4桁の数字です。</div>
-                            <div class="account-credential-grid">
-                                <input id="account-player-id-input" class="neon-input" type="text" maxlength="16" placeholder="LOGIN ID" autocapitalize="characters" autocomplete="off" spellcheck="false" title="ログインに使う PLAYER ID を入力します" />
-                                <input id="account-pin-input" class="neon-input" type="password" maxlength="4" placeholder="4-DIGIT PIN" inputmode="numeric" autocomplete="new-password" title="4桁の数字PINを入力します" />
-                            </div>
-                            <div class="account-actions">
-                                <button id="btn-account-register" class="small-tool-btn" type="button" title="新しいアカウントを作成します">REGISTER</button>
-                                <button id="btn-account-login" class="small-tool-btn" type="button" title="PLAYER ID と PIN でログインします">LOGIN</button>
-                                <button id="btn-account-logout" class="small-tool-btn" type="button" title="ログアウトします">LOGOUT</button>
-                            </div>
-                            <div class="account-summary">
-                                <div class="account-summary-row account-summary-copy-row">
-                                    <span>PLAYER ID</span>
-                                    <div class="account-summary-value">
-                                        <strong id="account-player-id">--------</strong>
-                                        <button id="btn-copy-player-id" class="mini-tool-btn" type="button" title="PLAYER ID をコピー">COPY</button>
-                                    </div>
-                                </div>
-                                <div class="account-summary-row account-summary-copy-row">
-                                    <span>FRIEND CODE</span>
-                                    <div class="account-summary-value">
-                                        <strong id="account-friend-code">--- --- ---</strong>
-                                        <button id="btn-copy-friend-code" class="mini-tool-btn" type="button" title="FRIEND CODE をコピー">COPY</button>
-                                    </div>
-                                </div>
-                                <div class="account-summary-row"><span>LEVEL</span><strong id="account-level">LV -</strong></div>
-                                <div class="account-summary-row"><span>EXP</span><strong id="account-exp">0/100</strong></div>
-                                <div class="account-summary-row"><span>RATING</span><strong id="account-rating">-</strong></div>
-                            </div>
-                            <div id="account-status" class="account-status">REGISTER: USER NAME + 4桁PIN / LOGIN: PLAYER ID + 4桁PIN</div>
-                        </div>
-                    </details>
 
                     <details id="dev-tools-panel" class="config-group account-group hidden">
                         <summary>DEVELOPER TOOLS</summary>

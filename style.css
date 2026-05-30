@@ -85,6 +85,10 @@ header {
     display: none;
 }
 
+.audio-controls .small-tool-btn {
+    min-width: 68px;
+}
+
 .news-menu-panel {
     position: absolute;
     top: calc(100% + 0.4rem);
@@ -229,6 +233,42 @@ header {
 
 .account-group-body {
     margin-top: 0.75rem;
+}
+
+.ability-detail-list {
+    display: grid;
+    gap: 0.65rem;
+}
+
+.ability-detail-card {
+    padding: 0.75rem 0.8rem;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.ability-detail-card h4 {
+    font-family: var(--font-mono);
+    font-size: 0.9rem;
+    letter-spacing: 1px;
+    color: var(--neon-gold);
+}
+
+.ability-detail-card p {
+    margin-top: 0.45rem;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    color: rgba(226, 232, 240, 0.9);
+}
+
+.ability-detail-meta {
+    display: grid;
+    gap: 0.2rem;
+    margin-top: 0.45rem;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    letter-spacing: 0.5px;
 }
 
 .dev-query-row {
@@ -591,7 +631,8 @@ body.device-mobile {
     display: flex;
     flex-direction: column;
     padding: 1.2rem;
-    overflow: hidden;
+    overflow-y: auto;
+    overflow-x: hidden;
 }
 
 .panel-header {
@@ -614,6 +655,15 @@ body.device-mobile {
     flex-direction: column;
     gap: 1rem;
     padding-right: 0.4rem;
+}
+
+.menu-panel {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
 }
 
 /* Custom Scrollbar for sidebars */
@@ -1577,6 +1627,11 @@ details li {
     font-family: var(--font-mono);
     font-weight: 800;
     cursor: pointer;
+}
+
+.small-tool-btn.active {
+    background: rgba(0, 240, 255, 0.18);
+    box-shadow: 0 0 12px rgba(0, 240, 255, 0.18);
 }
 
 .small-tool-btn.danger {

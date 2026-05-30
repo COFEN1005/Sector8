@@ -1021,6 +1021,14 @@ function registerMapTabSequence(mapName) {
 function setupUIEventListeners() {
     document.addEventListener('pointerdown', initializeAudio, { once: true });
     document.getElementById('btn-start-game').addEventListener('click', () => startGame());
+    const menuToggle = document.getElementById('btn-toggle-menu');
+    const menuPanel = document.getElementById('menu-panel');
+    if (menuToggle && menuPanel) {
+        menuToggle.addEventListener('click', () => {
+            menuPanel.classList.toggle('hidden');
+            menuToggle.classList.toggle('active', !menuPanel.classList.contains('hidden'));
+        });
+    }
     document.getElementById('btn-opt-ai').addEventListener('click', () => setOpponent(true));
     document.getElementById('btn-opt-human').addEventListener('click', () => setOpponent(false));
     document.getElementById('btn-move').addEventListener('click', () => selectActionType('move'));
