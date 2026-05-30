@@ -34,6 +34,7 @@ const USERNAME_STORAGE_KEY = 'sector8_username';
 const ONLINE_SESSION_STORAGE_KEY = 'sector8_online_session';
 const AUTH_SESSION_STORAGE_KEY = 'sector8_auth_session';
 const LAST_PLAYER_ID_STORAGE_KEY = 'sector8_last_player_id';
+const UI_SETTINGS_STORAGE_KEY = 'sector8_ui_settings';
 
 function getPortalDestination(mapName, r, c) {
     if (!PORTAL_COLS.includes(c)) return null;
@@ -320,6 +321,32 @@ function loadSavedAuthSession() {
         if (authProfile?.name) {
             localUsername = sanitizeUsername(authProfile.name) || getDefaultUsername();
         }
+    } catch {}
+}
+
+function loadSavedUiSettings() {
+    try {
+        const raw = window.localStorage.getItem(UI_SETTINGS_STORAGE_KEY);
+        if (!raw) return;
+        const saved = JSON.parse(raw);
+        if (typeof saved.moveSfxEnabled === 'boolean') moveSfxEnabled = saved.moveSfxEnabled;
+        if (typeof saved.bgmEnabled === 'boolean') bgmEnabled = saved.bgmEnabled;
+        if (Number.isFinite(Number(saved.moveSfxVolume))) moveSfxVolume = Math.min(1, Math.max(0, Number(saved.moveSfxVolume)));
+        if (Number.isFinite(Number(saved.bgmVolume))) bgmVolume = Math.min(1, Math.max(0, Number(saved.bgmVolume)));
+        if (Number.isFinite(Number(saved.visionSaturation))) visionSaturation = Math.min(1.6, Math.max(0.2, Number(saved.visionSaturation)));
+    } catch {}
+    document.documentElement.style.setProperty('--vision-brightness', String(visionSaturation));
+}
+
+function saveUiSettings() {
+    try {
+        window.localStorage.setItem(UI_SETTINGS_STORAGE_KEY, JSON.stringify({
+            moveSfxEnabled,
+            bgmEnabled,
+            moveSfxVolume,
+            bgmVolume,
+            visionSaturation
+        }));
     } catch {}
 }
 
@@ -1051,6 +1078,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadSavedUsername();
     loadSavedAuthSession();
     loadSavedOnlineSession();
+    loadSavedUiSettings();
     syncAbilitySelectOptions();
     setupUIEventListeners();
     setupMapTabs();
@@ -1059,6 +1087,7 @@ document.addEventListener('DOMContentLoaded', () => {
     updateModeVisibility();
     updateUsernameUI();
     updateAccountUI();
+    updateAudioButtons();
     restoreAuthSession().catch(() => {});
     addConsoleLog("SYSTEM READY. SELECT CONFIGURATION AND PRESS 'SYSTEM INITIATE'.", 'system');
 });
@@ -2252,6 +2281,7 @@ function toggleMoveSfx() {
     if (lobbyBgmTrack) { lobbyBgmTrack.currentTime = 0; }
     moveSfxEnabled = !moveSfxEnabled;
     updateAudioButtons();
+    saveUiSettings();
 }
 
 function toggleBgm() {
@@ -2259,6 +2289,7 @@ function toggleBgm() {
     bgmEnabled = !bgmEnabled;
     syncBgmPlayback();
     updateAudioButtons();
+    saveUiSettings();
 }
 
 function handleSfxVolumeChange(event) {
@@ -2266,17 +2297,20 @@ function handleSfxVolumeChange(event) {
     if (moveSfx) moveSfx.volume = moveSfxVolume;
     if (uiSfx) uiSfx.volume = moveSfxVolume;
     if (turnSfx) turnSfx.volume = moveSfxVolume;
+    saveUiSettings();
 }
 
 function handleBgmVolumeChange(event) {
     bgmVolume = Number(event.target.value) / 100;
     if (bgmTrack) bgmTrack.volume = bgmVolume;
     if (lobbyBgmTrack) lobbyBgmTrack.volume = bgmVolume;
+    saveUiSettings();
 }
 
 function handleVisionSaturationChange(event) {
     visionSaturation = Number(event.target.value) / 100;
     document.documentElement.style.setProperty('--vision-brightness', String(visionSaturation));
+    saveUiSettings();
 }
 
 function playTurnSfx() {
