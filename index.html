@@ -217,7 +217,7 @@
                     </div>
                 </details>
                 <div id="menu-panel" class="menu-panel hidden">
-                    <details class="config-group account-group" open>
+                    <details class="config-group account-group">
                         <summary>PLAYER ACCOUNT</summary>
                         <div class="account-group-body">
                             <div class="account-hint">新規作成は上の USER NAME を使い、PLAYER ID はログイン用のID、PIN は4桁の数字です。</div>
@@ -632,7 +632,21 @@
             <div class="modal glass-panel">
                 <h1 id="game-over-title" class="glitch-text" data-text="VICTORY">VICTORY</h1>
                 <p id="game-over-subtitle">PLAYER 1 HAS DESTROYED THE ENEMY CORE.</p>
+                <div id="game-summary-panel" class="game-summary-panel hidden">
+                    <div id="summary-stats" class="summary-stats"></div>
+                    <div class="summary-capture-grid">
+                        <section class="summary-capture-card">
+                            <h3>P1 LOST</h3>
+                            <div id="summary-captured-p1" class="summary-capture-list"></div>
+                        </section>
+                        <section class="summary-capture-card">
+                            <h3>P2 LOST</h3>
+                            <div id="summary-captured-p2" class="summary-capture-list"></div>
+                        </section>
+                    </div>
+                </div>
                 <div class="modal-buttons">
+                    <button id="btn-replay-match" class="neon-btn secondary" type="button">REPLAY</button>
                     <button id="btn-restart" class="neon-btn">RELOAD SYSTEM</button>
                 </div>
             </div>

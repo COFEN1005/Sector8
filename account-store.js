@@ -618,7 +618,9 @@ function createSupabaseStore() {
       ended_time: endedTime,
       time_taken: Number(entry.timeTaken || Math.max(0, endedTime - startedTime)),
       surrender_by_player_id: entry.surrenderByPlayerId || null,
-      created_at: ts
+      created_at: ts,
+      summary_json: entry.summaryJson || null,
+      replay_json: entry.replayJson || null
     };
 
     if (payload.match_key) {
@@ -753,9 +755,14 @@ function createSqliteStore() {
       ended_time INTEGER NOT NULL,
       time_taken INTEGER NOT NULL,
       surrender_by_player_id INTEGER,
-      created_at INTEGER NOT NULL
+      created_at INTEGER NOT NULL,
+      summary_json TEXT,
+      replay_json TEXT
     );
   `);
+
+  try { db.exec('ALTER TABLE match_history ADD COLUMN summary_json TEXT;'); } catch {}
+  try { db.exec('ALTER TABLE match_history ADD COLUMN replay_json TEXT;'); } catch {}
 
   function withTransaction(fn) {
     db.exec('BEGIN IMMEDIATE;');
@@ -1123,7 +1130,9 @@ function createSqliteStore() {
       startedTime,
       endedTime,
       timeTaken: Number(entry.timeTaken || Math.max(0, endedTime - startedTime)),
-      surrenderByPlayerId: entry.surrenderByPlayerId || null
+      surrenderByPlayerId: entry.surrenderByPlayerId || null,
+      summaryJson: entry.summaryJson || null,
+      replayJson: entry.replayJson || null
     };
 
     if (payload.matchKey) {
@@ -1136,9 +1145,9 @@ function createSqliteStore() {
         match_key, player1_id, player2_id, player1_name, player2_name,
         winner, loser, result, player1_get_rating, player2_get_rating,
         player1_level, player2_level, started_time, ended_time, time_taken,
-        surrender_by_player_id, created_at
+        surrender_by_player_id, created_at, summary_json, replay_json
     ) VALUES (
-        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
       )
     `).run(
       payload.matchKey || null,
@@ -1157,7 +1166,9 @@ function createSqliteStore() {
       payload.endedTime,
       payload.timeTaken,
       payload.surrenderByPlayerId,
-      ts
+      ts,
+      payload.summaryJson ? JSON.stringify(payload.summaryJson) : null,
+      payload.replayJson ? JSON.stringify(payload.replayJson) : null
     );
     return info.lastInsertRowid;
   }

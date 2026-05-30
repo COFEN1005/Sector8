@@ -147,6 +147,14 @@ let afkTurnPopupShown = false;
 let lastTurnOwner = null;
 let currentMatchKey = null;
 let currentMatchStartedAt = 0;
+let currentMatchStartProfile = null;
+let currentMatchRecord = null;
+let currentMatchReplay = null;
+let activeMatchSummaryView = null;
+let replayPlaybackActive = false;
+let replayPlaybackTimer = null;
+let replayPlaybackRunId = 0;
+let replayPlaybackSource = null;
 
 let selectedUnit = null;
 let previewUnit = null;
@@ -348,6 +356,306 @@ function saveUiSettings() {
             visionSaturation
         }));
     } catch {}
+}
+
+function safeJsonParse(value, fallback = null) {
+    if (value === null || value === undefined || value === '') return fallback;
+    if (typeof value === 'object') return value;
+    try {
+        return JSON.parse(value);
+    } catch {
+        return fallback;
+    }
+}
+
+function formatReplayUnitName(unit) {
+    if (!unit) return 'UNKNOWN';
+    const baseName = unit.victimName || unit.name || unit.type || 'UNKNOWN';
+    const owner = unit.victimPlayer || unit.player;
+    return `${baseName}${owner ? ` (P${owner})` : ''}`;
+}
+
+function createMatchRecordBase() {
+    return {
+        matchKey: currentMatchKey,
+        startedTime: currentMatchStartedAt || Date.now(),
+        endedTime: null,
+        timeTaken: null,
+        matchType: getCurrentMatchType(),
+        config: {
+            p1Ability,
+            p2Ability,
+            seed: gameSeed
+        },
+        firstPlayer: currentPlayer,
+        startProfile: authProfile ? {
+            id: authProfile.id,
+            playerId: authProfile.playerId,
+            name: authProfile.name,
+            level: authProfile.level,
+            exp: authProfile.exp,
+            rating: authProfile.rating
+        } : null,
+        captures: [],
+        result: null,
+        winnerId: null,
+        loserId: null,
+        reason: null,
+        summary: null
+    };
+}
+
+function createMatchReplayBase() {
+    return {
+        matchKey: currentMatchKey,
+        startedTime: currentMatchStartedAt || Date.now(),
+        config: {
+            p1Ability,
+            p2Ability,
+            seed: gameSeed
+        },
+        events: []
+    };
+}
+
+function resetMatchRecording() {
+    currentMatchRecord = createMatchRecordBase();
+    currentMatchReplay = createMatchReplayBase();
+    activeMatchSummaryView = null;
+}
+
+function recordMatchReplayEvent(event) {
+    if (replayPlaybackActive) return;
+    if (!currentMatchReplay) currentMatchReplay = createMatchReplayBase();
+    currentMatchReplay.events.push({
+        ...event,
+        at: Date.now(),
+        turn: gameTurn,
+        player: currentPlayer
+    });
+}
+
+function recordMatchCapture(victim, attackerPlayer) {
+    if (replayPlaybackActive) return;
+    if (!currentMatchRecord) currentMatchRecord = createMatchRecordBase();
+    currentMatchRecord.captures.push({
+        victimName: victim?.name || 'UNKNOWN',
+        victimType: victim?.type || 'unknown',
+        victimPlayer: victim?.player || null,
+        attackerPlayer: attackerPlayer || null,
+        map: victim?.map || '',
+        row: Number(victim?.row || 0),
+        col: Number(victim?.col || 0),
+        turn: gameTurn
+    });
+}
+
+function buildMatchSummary(reason, winnerId) {
+    const endedTime = Date.now();
+    const matchType = getCurrentMatchType();
+    const startProfile = currentMatchRecord?.startProfile || null;
+    const endedProfile = authProfile || startProfile;
+    const opponentName = onlineMode
+        ? getOnlineDisplayName(localPlayer === 1 ? 2 : 1)
+        : (vsAI ? 'AI BOT' : 'PLAYER 2');
+    const viewerSide = onlineMode && localPlayer ? localPlayer : 1;
+    const viewerWon = winnerId === viewerSide;
+    const summary = {
+        matchKey: currentMatchKey,
+        matchType,
+        reason,
+        winnerId,
+        loserId: winnerId === 1 ? 2 : 1,
+        player1Name: currentMatchRecord?.startProfile?.name || authProfile?.name || 'PLAYER 1',
+        player2Name: opponentName,
+        winnerName: winnerId === 1 ? (currentMatchRecord?.player1Name || authProfile?.name || 'PLAYER 1') : opponentName,
+        loserName: winnerId === 1 ? opponentName : (currentMatchRecord?.player1Name || authProfile?.name || 'PLAYER 1'),
+        startedTime: currentMatchStartedAt || endedTime,
+        endedTime,
+        timeTaken: Math.max(0, endedTime - (currentMatchStartedAt || endedTime)),
+        firstPlayer: currentMatchRecord?.firstPlayer || currentPlayer,
+        p1: {
+            name: currentMatchRecord?.startProfile?.name || authProfile?.name || 'PLAYER 1',
+            playerId: currentMatchRecord?.startProfile?.playerId || null,
+            level: currentMatchRecord?.startProfile?.level ?? 1,
+            rating: currentMatchRecord?.startProfile?.rating ?? 0
+        },
+        p2: {
+            name: opponentName,
+            playerId: null,
+            level: 1,
+            rating: null
+        },
+        captures: [...(currentMatchRecord?.captures || [])],
+        capturedByPlayer1: (currentMatchRecord?.captures || []).filter(entry => Number(entry.victimPlayer) === 1),
+        capturedByPlayer2: (currentMatchRecord?.captures || []).filter(entry => Number(entry.victimPlayer) === 2),
+        resultText: viewerWon ? 'VICTORY' : 'DEFEAT',
+        viewerWon,
+        startProfile,
+        endProfile: endedProfile ? {
+            id: endedProfile.id,
+            playerId: endedProfile.playerId,
+            name: endedProfile.name,
+            level: endedProfile.level,
+            exp: endedProfile.exp,
+            rating: endedProfile.rating
+        } : null,
+        ratingDelta: null,
+        expDelta: null
+    };
+    if (startProfile && endedProfile && startProfile.id === endedProfile.id) {
+        summary.ratingDelta = Number(endedProfile.rating || 0) - Number(startProfile.rating || 0);
+        summary.expDelta = Number(endedProfile.exp || 0) - Number(startProfile.exp || 0);
+    }
+    if (currentMatchRecord) {
+        currentMatchRecord.endedTime = endedTime;
+        currentMatchRecord.timeTaken = summary.timeTaken;
+        currentMatchRecord.matchType = matchType;
+        currentMatchRecord.result = viewerWon ? 'win' : 'lose';
+        currentMatchRecord.winnerId = winnerId;
+        currentMatchRecord.loserId = summary.loserId;
+        currentMatchRecord.reason = reason;
+        currentMatchRecord.summary = summary;
+    }
+    return summary;
+}
+
+function formatCaptureList(captures = []) {
+    if (!captures.length) return '<div class="match-history-empty">なし</div>';
+    return captures.map(entry => `
+        <div class="match-summary-capture-row">
+            <span class="match-summary-capture-name">${formatReplayUnitName(entry)}</span>
+            <span class="match-summary-capture-meta">${entry.victimType || 'unit'} / ${entry.map || 'map'} / T${entry.turn}</span>
+        </div>
+    `).join('');
+}
+
+function renderGameOverSummary(summary = null) {
+    const summaryEl = document.getElementById('game-summary-panel');
+    const captureP1El = document.getElementById('summary-captured-p1');
+    const captureP2El = document.getElementById('summary-captured-p2');
+    const statsEl = document.getElementById('summary-stats');
+    const replayBtn = document.getElementById('btn-replay-match');
+    const restartBtn = document.getElementById('btn-restart');
+    if (!summaryEl || !captureP1El || !captureP2El || !statsEl) return;
+
+    if (!summary) {
+        summaryEl.classList.add('hidden');
+        if (replayBtn) replayBtn.disabled = true;
+        if (restartBtn) restartBtn.textContent = 'RELOAD SYSTEM';
+        return;
+    }
+
+    const capturedByP1 = summary.capturedByPlayer1 || [];
+    const capturedByP2 = summary.capturedByPlayer2 || [];
+    const timeTaken = Number(summary.timeTaken || 0);
+    summaryEl.classList.remove('hidden');
+    captureP1El.innerHTML = formatCaptureList(capturedByP1);
+    captureP2El.innerHTML = formatCaptureList(capturedByP2);
+    statsEl.innerHTML = `
+        <div class="summary-row"><span>MODE</span><strong>${String(summary.matchType || 'unknown').toUpperCase()}</strong></div>
+        <div class="summary-row"><span>TIME</span><strong>${Math.floor(timeTaken / 60000)}m ${String(Math.floor((timeTaken % 60000) / 1000)).padStart(2, '0')}s</strong></div>
+        <div class="summary-row"><span>WINNER</span><strong>${summary.winnerName || 'UNKNOWN'}</strong></div>
+        <div class="summary-row"><span>RATING Δ</span><strong>${summary.ratingDelta === null ? '-' : (summary.ratingDelta > 0 ? `+${summary.ratingDelta}` : String(summary.ratingDelta))}</strong></div>
+        <div class="summary-row"><span>EXP Δ</span><strong>${summary.expDelta === null ? '-' : (summary.expDelta > 0 ? `+${summary.expDelta}` : String(summary.expDelta))}</strong></div>
+    `;
+    if (replayBtn) replayBtn.disabled = !(summary.replay && summary.replay.events && summary.replay.events.length);
+    if (restartBtn) restartBtn.textContent = 'RELOAD SYSTEM';
+}
+
+function normalizeMatchHistoryEntry(entry) {
+    const summary = safeJsonParse(entry?.summary_json || entry?.summaryJson, null);
+    const replay = safeJsonParse(entry?.replay_json || entry?.replayJson, null);
+    return {
+        ...entry,
+        summary_json: summary || null,
+        replay_json: replay || null
+    };
+}
+
+function startReplayPlayback(matchEntry) {
+    const entry = normalizeMatchHistoryEntry(matchEntry);
+    const replay = entry.replay_json;
+    if (!replay?.events?.length) {
+        showStatusAlert('リプレイデータがありません。', 'warning', 2500);
+        return;
+    }
+    replayPlaybackActive = true;
+    replayPlaybackSource = entry;
+    const replaySummary = entry.summary_json || {};
+    activeMatchSummaryView = { ...replaySummary, replay };
+    document.getElementById('game-over-overlay')?.classList.add('hidden');
+    startGame(replay.config || {}, true);
+
+    window.clearTimeout(replayPlaybackTimer);
+    const runId = ++replayPlaybackRunId;
+    const events = [...replay.events];
+    let index = 0;
+
+    const step = () => {
+        if (runId !== replayPlaybackRunId) return;
+        if (index >= events.length) {
+            replayPlaybackActive = false;
+            window.clearTimeout(replayPlaybackTimer);
+            renderGameOverSummary(activeMatchSummaryView);
+            document.getElementById('game-over-overlay')?.classList.remove('hidden');
+            return;
+        }
+        const event = events[index++];
+        if (event.kind === 'action') {
+            applyRemoteAction(event.action);
+            replayPlaybackTimer = window.setTimeout(step, event.action?.type === 'skip' ? 220 : 520);
+            return;
+        }
+        if (event.kind === 'result' || event.kind === 'win' || event.kind === 'forfeit') {
+            replayPlaybackActive = false;
+            renderGameOverSummary(activeMatchSummaryView);
+            document.getElementById('game-over-overlay')?.classList.remove('hidden');
+            return;
+        }
+        replayPlaybackTimer = window.setTimeout(step, 100);
+    };
+
+    step();
+}
+
+function openMatchHistorySummary(matchEntry) {
+    const entry = normalizeMatchHistoryEntry(matchEntry);
+    const summary = entry.summary_json || {
+        matchKey: entry.match_key || entry.matchKey || null,
+        matchType: entry.match_type || 'unknown',
+        reason: entry.reason || 'history',
+        winnerId: entry.winner_id || null,
+        loserId: entry.loser_id || null,
+        player1Name: entry.player1_name || 'PLAYER 1',
+        player2Name: entry.player2_name || 'PLAYER 2',
+        winnerName: entry.winner || 'UNKNOWN',
+        loserName: entry.loser || 'UNKNOWN',
+        startedTime: entry.started_time || entry.startedTime || Date.now(),
+        endedTime: entry.ended_time || entry.endedTime || Date.now(),
+        timeTaken: entry.time_taken || entry.timeTaken || 0,
+        firstPlayer: entry.first_player || 1,
+        p1: { name: entry.player1_name || 'PLAYER 1', playerId: null, level: entry.player1_level || 1, rating: null },
+        p2: { name: entry.player2_name || 'PLAYER 2', playerId: null, level: entry.player2_level || 1, rating: null },
+        captures: [],
+        capturedByPlayer1: [],
+        capturedByPlayer2: [],
+        resultText: String(entry.result || '').toLowerCase() === 'lose' ? 'DEFEAT' : 'VICTORY',
+        viewerWon: String(entry.result || '').toLowerCase() !== 'lose',
+        ratingDelta: entry.player1_get_rating || 0,
+        expDelta: null
+    };
+    activeMatchSummaryView = summary;
+    activeMatchSummaryView.replay = entry.replay_json || null;
+    replayPlaybackSource = entry;
+    renderGameOverSummary(activeMatchSummaryView);
+    document.getElementById('game-over-title').textContent = summary.resultText || 'MATCH SUMMARY';
+    document.getElementById('game-over-subtitle').textContent = `${entry.player1_name || 'PLAYER 1'} VS ${entry.player2_name || 'PLAYER 2'}`;
+    document.getElementById('game-over-overlay')?.classList.remove('hidden');
+    const replayBtn = document.getElementById('btn-replay-match');
+    if (replayBtn) {
+        replayBtn.disabled = !(entry.replay_json?.events?.length);
+    }
 }
 
 function saveAuthSession() {
@@ -673,7 +981,7 @@ function renderMatchHistory(matches = [], state = {}) {
     }
 
     const profileId = Number(authProfile.id);
-    listEl.innerHTML = matches.map(entry => {
+    listEl.innerHTML = matches.map((entry, index) => {
         const resultText = String(entry.result || '').toLowerCase() === 'lose' ? 'LOSE' : 'WIN';
         const delta = getMatchHistoryDelta(entry);
         const deltaText = delta > 0 ? `+${delta}` : String(delta);
@@ -686,7 +994,7 @@ function renderMatchHistory(matches = [], state = {}) {
         const durationText = formatMatchHistoryDuration(entry.time_taken);
         const surrenderText = entry.surrender_by_player_id ? ' / SURRENDER' : '';
         return `
-            <article class="match-history-card">
+            <article class="match-history-card" data-match-index="${index}" title="クリックでサマリーを表示">
                 <div class="match-history-topline">
                     <span class="match-history-result ${resultText === 'WIN' ? 'win' : 'lose'}">${resultText}</span>
                     <strong class="match-history-opponent">VS ${opponentName}</strong>
@@ -697,6 +1005,7 @@ function renderMatchHistory(matches = [], state = {}) {
                     <span>${durationText}</span>
                     <span>${winnerName} / ${loserName}${surrenderText}</span>
                 </div>
+                <div class="match-history-footer">${entry.replay_json ? 'REPLAY AVAILABLE' : 'SUMMARY ONLY'}</div>
             </article>
         `;
     }).join('');
@@ -723,7 +1032,7 @@ async function loadMatchHistory({ force = false } = {}) {
     try {
         const result = await apiRequest('/api/matches?limit=10', { method: 'GET', auth: true });
         if (requestToken !== matchHistoryRequestToken) return;
-        matchHistoryCache = Array.isArray(result.matches) ? result.matches : [];
+        matchHistoryCache = Array.isArray(result.matches) ? result.matches.map(normalizeMatchHistoryEntry) : [];
         matchHistoryLoadedForPlayerId = profileId;
         renderMatchHistory(matchHistoryCache);
     } catch (error) {
@@ -825,19 +1134,34 @@ async function updateAccountName(nextName) {
 }
 
 function startMatchTracking() {
+    if (replayPlaybackActive) return;
     currentMatchStartedAt = Date.now();
     currentMatchKey = onlineMode
         ? `${matchRoomId || 'online'}:${gameSeed}`
         : `local:${gameSeed}:${Date.now()}`;
+    currentMatchStartProfile = authProfile ? {
+        id: authProfile.id,
+        playerId: authProfile.playerId,
+        name: authProfile.name,
+        level: authProfile.level,
+        exp: authProfile.exp,
+        rating: authProfile.rating
+    } : null;
+    resetMatchRecording();
 }
 
 async function submitMatchHistory(reason, winnerId) {
-    if (!authSession?.token || !authProfile) return;
+    if (!authSession?.token || !authProfile || replayPlaybackActive) return;
     const viewerSide = onlineMode && localPlayer ? localPlayer : 1;
     const viewerWon = winnerId === viewerSide;
     const opponentName = onlineMode
         ? getOnlineDisplayName(localPlayer === 1 ? 2 : 1)
         : (vsAI ? 'AI BOT' : 'PLAYER 2');
+    const summary = buildMatchSummary(reason, winnerId);
+    summary.winnerName = viewerWon ? authProfile.name : opponentName;
+    summary.loserName = viewerWon ? opponentName : authProfile.name;
+    summary.replay = currentMatchReplay;
+    activeMatchSummaryView = summary;
     const payload = {
         matchKey: currentMatchKey || `local:${Date.now()}`,
         player1Id: authProfile.id,
@@ -854,13 +1178,21 @@ async function submitMatchHistory(reason, winnerId) {
         timeTaken: Math.max(0, Date.now() - (currentMatchStartedAt || Date.now())),
         surrenderByPlayerId: !viewerWon && reason === 'forfeit' ? authProfile.id : null,
         winnerPlayerId: winnerId,
-        loserPlayerId: viewerWon ? null : authProfile.id
+        loserPlayerId: viewerWon ? null : authProfile.id,
+        summaryJson: summary,
+        replayJson: currentMatchReplay
     };
     try {
         const result = await apiRequest('/api/matches', { method: 'POST', body: payload, auth: true });
         if (result.player1) applyAuthProfile(result.player1, authSession.token);
         if (!document.getElementById('menu-panel')?.classList.contains('hidden')) {
             loadMatchHistory({ force: true }).catch(() => {});
+        }
+        if (activeMatchSummaryView) {
+            activeMatchSummaryView.ratingDelta = summary.ratingDelta;
+            activeMatchSummaryView.expDelta = summary.expDelta;
+            activeMatchSummaryView.replay = currentMatchReplay;
+            renderGameOverSummary(activeMatchSummaryView);
         }
     } catch (error) {
         console.warn('match history save failed', error);
@@ -1220,6 +1552,16 @@ function setupUIEventListeners() {
     document.getElementById('btn-skip-turn')?.addEventListener('click', skipTurn);
     document.getElementById('btn-forfeit').addEventListener('click', forfeitGame);
     document.getElementById('btn-restart').addEventListener('click', resetToSetup);
+    const replayMatchBtn = document.getElementById('btn-replay-match');
+    if (replayMatchBtn) replayMatchBtn.addEventListener('click', () => {
+        const source = replayPlaybackSource || activeMatchSummaryView;
+        const replay = source?.replay || source?.replay_json;
+        if (!replay?.events?.length) {
+            showStatusAlert('リプレイデータがありません。', 'warning', 2500);
+            return;
+        }
+        startReplayPlayback(source);
+    });
     document.getElementById('btn-cancel-dir').addEventListener('click', () => {
         document.getElementById('direction-overlay').classList.add('hidden');
     });
@@ -1309,6 +1651,16 @@ function setupUIEventListeners() {
     if (copyFriendCodeBtn) copyFriendCodeBtn.addEventListener('click', () => copyAccountIdentifier('friendCode'));
     const refreshMatchHistoryBtn = document.getElementById('btn-refresh-match-history');
     if (refreshMatchHistoryBtn) refreshMatchHistoryBtn.addEventListener('click', () => loadMatchHistory({ force: true }).catch(() => {}));
+    const matchHistoryList = document.getElementById('match-history-list');
+    if (matchHistoryList) {
+        matchHistoryList.addEventListener('click', (event) => {
+            const card = event.target.closest('.match-history-card');
+            if (!card) return;
+            const index = Number(card.dataset.matchIndex);
+            const entry = matchHistoryCache[index];
+            if (entry) openMatchHistorySummary(entry);
+        });
+    }
     const devLookupBtn = document.getElementById('btn-dev-lookup');
     if (devLookupBtn) devLookupBtn.addEventListener('click', () => lookupDevTarget().catch(() => {
         showStatusAlert('対象の取得に失敗しました。', 'warning', 3000);
@@ -2099,7 +2451,7 @@ function handleOnlineMessage(message) {
 }
 
 function sendOnlineMessage(message) {
-    if (!onlineMode || applyingRemoteAction || !onlineSocket || onlineSocket.readyState !== WebSocket.OPEN) return;
+    if (!onlineMode || replayPlaybackActive || applyingRemoteAction || !onlineSocket || onlineSocket.readyState !== WebSocket.OPEN) return;
     onlineSocket.send(JSON.stringify({ ...message, player: localPlayer }));
 }
 
@@ -2322,7 +2674,7 @@ function playTurnSfx() {
 function startAfkTurnReminder() {
     window.clearTimeout(afkTurnTimer);
     afkTurnPopupShown = false;
-    if (!canControlCurrentTurn() || isGameOver || activePhase !== 'battle') return;
+    if (replayPlaybackActive || !canControlCurrentTurn() || isGameOver || activePhase !== 'battle') return;
     afkTurnTimer = window.setTimeout(() => {
         if (canControlCurrentTurn() && !isGameOver && activePhase === 'battle') {
             afkTurnPopupShown = true;
@@ -2430,6 +2782,8 @@ function startGame(config = null, fromOnline = false) {
 
     const firstPlayer = createRng(gameSeed ^ 0x9E3779B9)() < 0.5 ? 1 : 2;
     currentPlayer = firstPlayer;
+    if (currentMatchRecord) currentMatchRecord.firstPlayer = firstPlayer;
+    if (currentMatchReplay) currentMatchReplay.firstPlayer = firstPlayer;
 
     // Hide setup panels, show game
     document.getElementById('setup-panel').classList.add('hidden');
@@ -2841,6 +3195,7 @@ function getVisibleFlagsOnCell(cell, viewerPlayer, activeVision) {
 }
 
 function captureUnit(victim, attackerPlayer) {
+    recordMatchCapture(victim, attackerPlayer);
     const victimMap = victim.map;
     const victimRow = victim.row;
     const victimCol = victim.col;
@@ -3673,6 +4028,7 @@ function executeMove(unit, destRow, destCol) {
             if (resolved.portalDest && unit.player === currentPlayer && shouldFocusMove) activeMap = finalMap;
             if (resolved.portalDest) unit.refreshActedAfterAction = true;
             maybeClearCamouflageAfterMove(unit);
+            recordMatchReplayEvent({ kind: 'action', action: { type: 'move', unitId: unit.id, row: destRow, col: destCol } });
             sendOnlineMessage({ kind: 'action', action: { type: 'move', unitId: unit.id, row: destRow, col: destCol } });
             completeUnitAction(unit);
             return;
@@ -3709,6 +4065,7 @@ function executeMove(unit, destRow, destCol) {
     }
     if (!shouldHideAiActionFeedback(unit.player)) playMoveSfx();
     maybeClearCamouflageAfterMove(unit);
+    recordMatchReplayEvent({ kind: 'action', action: { type: 'move', unitId: unit.id, row: destRow, col: destCol } });
     sendOnlineMessage({ kind: 'action', action: { type: 'move', unitId: unit.id, row: destRow, col: destCol } });
     completeUnitAction(unit);
 }
@@ -3724,6 +4081,7 @@ function executeAbility(unit, destRow, destCol) {
         tryPickupMilitaryFlag(unit);
         addConsoleLog(`Player ${unit.player}: 偵察兵が [${startCol},${startRow}] から [${destCol},${destRow}] へワープ転送。`, 'ability');
         if (!shouldHideAiActionFeedback(unit.player)) playMoveSfx();
+        recordMatchReplayEvent({ kind: 'action', action: { type: 'ability', unitId: unit.id, row: destRow, col: destCol } });
         sendOnlineMessage({ kind: 'action', action: { type: 'ability', unitId: unit.id, row: destRow, col: destCol } });
         completeUnitAction(unit);
         return;
@@ -3748,12 +4106,14 @@ function executeAbility(unit, destRow, destCol) {
                 }
             }
             addConsoleLog(`ABILITY: 甲の「鼓舞」発動！同マップ周囲 ${affectedCount} 体の味方の移動・視界+1。`, 'ability');
+            recordMatchReplayEvent({ kind: 'action', action: { type: 'ability', unitId: unit.id } });
             sendOnlineMessage({ kind: 'action', action: { type: 'ability', unitId: unit.id } });
             completeUnitAction(unit);
 
         } else if (abilityName === '迷彩') {
             unit.camouflaged = true;
             addConsoleLog(`ABILITY: 甲の「迷彩」発動。次の移動まで偵察兵以外から視認されません。`, 'ability');
+            recordMatchReplayEvent({ kind: 'action', action: { type: 'ability', unitId: unit.id } });
             sendOnlineMessage({ kind: 'action', action: { type: 'ability', unitId: unit.id } });
             completeUnitAction(unit);
 
@@ -3803,6 +4163,7 @@ function executeAbility(unit, destRow, destCol) {
 
             if (destroyedCoords.length > 0)
                 addConsoleLog(`SYSTEM: 爆破により消滅: ${destroyedCoords.join(', ')}`, 'destroy');
+            recordMatchReplayEvent({ kind: 'action', action: { type: 'ability', unitId: unit.id } });
             sendOnlineMessage({ kind: 'action', action: { type: 'ability', unitId: unit.id } });
             completeUnitAction(unit);
 
@@ -3830,6 +4191,7 @@ function executeClairvoyance(direction, unitOverride = selectedUnit) {
 
     const dirKanji = { up: 'UP', down: 'DOWN', left: 'LEFT', right: 'RIGHT' }[actualDirection];
     addConsoleLog(`ABILITY: 甲の「千里眼」起動。${unit.map} 内の ${dirKanji} 方向を可視化。`, 'ability');
+    recordMatchReplayEvent({ kind: 'action', action: { type: 'clairvoyance', unitId: unit.id, dir: actualDirection } });
     sendOnlineMessage({ kind: 'action', action: { type: 'clairvoyance', unitId: unit.id, dir: actualDirection } });
     completeUnitAction(unit);
 }
@@ -3880,7 +4242,7 @@ function completeUnitAction(unit) {
 
     addConsoleLog(`ACTION ${actionsThisTurn}/${ACTIONS_PER_TURN}: Player ${currentPlayer} は別のコマをもう1体行動できます。`, currentPlayer === 1 ? 'p1' : 'p2');
     if (!hideAiFeedback) showTurnBanner();
-    if (currentPlayer === 2 && vsAI) setTimeout(executeAITurn, 700);
+    if (currentPlayer === 2 && vsAI && !replayPlaybackActive) setTimeout(executeAITurn, 700);
 }
 
 function hasAvailableActionUnit(player) {
@@ -3939,7 +4301,7 @@ function endTurn() {
         return;
     }
 
-    if (currentPlayer === 2 && vsAI) {
+    if (currentPlayer === 2 && vsAI && !replayPlaybackActive) {
         setTimeout(executeAITurn, 1000);
     }
 }
@@ -4003,6 +4365,11 @@ function triggerWin(winnerId, fromOnline = false, reason = 'core') {
     const subtitleEl = document.getElementById('game-over-subtitle');
     const viewerPlayer = onlineMode && localPlayer ? localPlayer : 1;
     const viewerWon = winnerId === viewerPlayer;
+    const summary = replayPlaybackActive && activeMatchSummaryView
+        ? activeMatchSummaryView
+        : buildMatchSummary(reason, winnerId);
+    summary.replay = summary.replay || currentMatchReplay;
+    activeMatchSummaryView = summary;
 
     if (viewerWon) {
         titleEl.textContent = 'VICTORY';
@@ -4022,7 +4389,9 @@ function triggerWin(winnerId, fromOnline = false, reason = 'core') {
         addConsoleLog(`SYSTEM OVERRIDE: PLAYER ${winnerId} VICTORY. HOME CORE PURGED.`, 'system');
     }
 
+    renderGameOverSummary(summary);
     document.getElementById('game-over-overlay').classList.remove('hidden');
+    recordMatchReplayEvent({ kind: 'result', winner: winnerId, reason });
     submitMatchHistory(reason, winnerId);
     if (onlineMode && !fromOnline) sendOnlineMessage({ kind: 'win', winner: winnerId });
     if (onlineMode && activePhase !== 'battle' && !isRandomMatchRoom()) {
@@ -4048,6 +4417,7 @@ function forfeitGame() {
 function skipTurn() {
     if (isGameOver || !canControlCurrentTurn() || activePhase !== 'battle') return;
     addConsoleLog(`TURN SKIP: Player ${currentPlayer} が手動でターンを終了。`, 'system');
+    recordMatchReplayEvent({ kind: 'action', action: { type: 'skip' } });
     if (onlineMode) sendOnlineMessage({ kind: 'action', action: { type: 'skip' } });
     endTurn();
 }
@@ -4059,6 +4429,14 @@ function resetToSetup(fromOnline = false) {
     document.getElementById('online-prebattle-panel')?.classList.add('hidden');
     document.getElementById('setup-panel').classList.remove('hidden');
     onlineMatchPreviewActive = false;
+    replayPlaybackActive = false;
+    window.clearTimeout(replayPlaybackTimer);
+    replayPlaybackTimer = null;
+    replayPlaybackSource = null;
+    replayPlaybackRunId++;
+    currentMatchRecord = null;
+    currentMatchReplay = null;
+    activeMatchSummaryView = null;
 
     boards = { area1: [], area2: [], area3: [] };
     units = [];

@@ -72,9 +72,17 @@ create table if not exists match_history (
   ended_time bigint not null,
   time_taken bigint not null,
   surrender_by_player_id bigint references players(id) on delete set null,
-  created_at bigint not null
+  created_at bigint not null,
+  summary_json jsonb,
+  replay_json jsonb
 );
 
 create index if not exists match_history_player1_idx on match_history (player1_id);
 create index if not exists match_history_player2_idx on match_history (player2_id);
 create index if not exists match_history_started_time_idx on match_history (started_time desc);
+
+alter table if exists match_history
+  add column if not exists summary_json jsonb;
+
+alter table if exists match_history
+  add column if not exists replay_json jsonb;
