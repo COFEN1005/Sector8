@@ -12,7 +12,7 @@ Open `http://localhost:8787/`.
 
 ## Supabase backend
 
-Set these environment variables to move account data to Supabase instead of the local SQLite file:
+Set these values in `supabase.local.json` or environment variables to connect the app to Supabase:
 
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`

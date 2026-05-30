@@ -3,11 +3,11 @@ const fs = require('fs');
 const path = require('path');
 const https = require('node:https');
 const { URL } = require('node:url');
-const { DatabaseSync } = require('node:sqlite');
 
 const ROOT = __dirname;
 const DATA_DIR = path.join(ROOT, 'data');
 const DB_PATH = path.join(DATA_DIR, 'sector8.sqlite');
+const SUPABASE_CONFIG_PATH = path.join(ROOT, 'supabase.local.json');
 
 const SAFE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 const PLAYER_ID_LENGTH = 14;
@@ -94,9 +94,28 @@ function calculateRatingDelta(playerRating, opponentRating, didWin) {
   return didWin ? base + diff : -(base + Math.round((playerRating - opponentRating) / 100));
 }
 
+function loadSupabaseConfig() {
+  if (!fs.existsSync(SUPABASE_CONFIG_PATH)) return {};
+  try {
+    const raw = fs.readFileSync(SUPABASE_CONFIG_PATH, 'utf8');
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
 function createSupabaseClient() {
-  const supabaseUrl = String(process.env.SUPABASE_URL || '').trim();
-  const supabaseKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || '').trim();
+  const config = loadSupabaseConfig();
+  const supabaseUrl = String(process.env.SUPABASE_URL || config.SUPABASE_URL || config.supabaseUrl || '').trim();
+  const supabaseKey = String(
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_SERVICE_KEY ||
+    config.SUPABASE_SERVICE_ROLE_KEY ||
+    config.SUPABASE_SERVICE_KEY ||
+    config.supabaseServiceRoleKey ||
+    ''
+  ).trim();
   if (!supabaseUrl || !supabaseKey) return null;
 
   const origin = new URL(supabaseUrl).origin;
@@ -1197,10 +1216,11 @@ function createSqliteStore() {
 }
 
 function createStore() {
-  if (process.env.SUPABASE_URL && (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY)) {
-    return createSupabaseStore();
+  const supabaseStore = createSupabaseStore();
+  if (!supabaseStore) {
+    throw new Error('Supabase configuration is required. Set supabase.local.json or SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY.');
   }
-  return createSqliteStore();
+  return supabaseStore;
 }
 
 module.exports = {
