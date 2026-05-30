@@ -593,6 +593,7 @@ const server = http.createServer(async (req, res) => {
         res.end(data);
     });
     } catch (error) {
+        console.error('API request failed:', method, url.pathname, error?.message || error);
         sendJson(res, 500, { ok: false, error: error.message || 'server_error' });
     }
 });

@@ -426,7 +426,7 @@ function getAccountErrorMessage(error, fallback) {
         case 'invalid':
             return '保存されたログイン情報が見つかりません。';
         default:
-            return fallback || '処理に失敗しました。';
+            return code || fallback || '処理に失敗しました。';
     }
 }
 
