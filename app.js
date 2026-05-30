@@ -215,6 +215,8 @@ let onlineUsernames = { 1: null, 2: null };
 let onlineMatchTier = 'rank';
 let onlineMatchPreviewActive = false;
 let randomMatchAutoStarted = false;
+let privateMatchAutoStarted = false;
+let privateMatchAutoStartTimer = null;
 let randomQueuePending = false;
 let randomWaitingCount = 0;
 
@@ -233,6 +235,16 @@ function getOnlineMatchTier() {
 
 function isRankedMatch() {
     return onlineMode && getOnlineMatchTier() === 'rank';
+}
+
+function getCurrentMatchType() {
+    if (!onlineMode) {
+        return 'normal';
+    }
+    if (onlineMode && !isRandomMatchRoom() && (matchmakingRole === 'host' || matchmakingRole === 'guest')) {
+        return 'private';
+    }
+    return getOnlineMatchTier();
 }
 
 function detectDeviceProfile() {
@@ -396,6 +408,7 @@ function updateAccountUI() {
     if (loginBtn) loginBtn.disabled = !playerIdInput?.value || !document.getElementById('account-pin-input')?.value;
     if (registerBtn) registerBtn.disabled = !document.getElementById('account-pin-input')?.value;
     if (logoutBtn) logoutBtn.disabled = !loggedIn;
+    updateLobbyPlayerCard();
 }
 
 function clearAccountInputs() {
@@ -404,6 +417,26 @@ function clearAccountInputs() {
     if (playerIdInput) playerIdInput.value = '';
     if (pinInput) pinInput.value = '';
     updateAccountUI();
+}
+
+function updateLobbyPlayerCard() {
+    const card = document.getElementById('lobby-player-card');
+    const nameEl = document.getElementById('lobby-player-name');
+    const levelEl = document.getElementById('lobby-player-level');
+    const ratingEl = document.getElementById('lobby-player-rating');
+    if (!card) return;
+
+    const shouldShow = Boolean(onlineMode && activePhase !== 'battle');
+    card.classList.toggle('hidden', !shouldShow);
+    if (!shouldShow) return;
+
+    const profileName = authProfile?.name || localUsername || getDefaultUsername();
+    const levelValue = authProfile?.level ?? null;
+    const ratingValue = authProfile?.rating ?? null;
+
+    if (nameEl) nameEl.textContent = profileName;
+    if (levelEl) levelEl.textContent = levelValue === null ? '-' : String(levelValue);
+    if (ratingEl) ratingEl.textContent = ratingValue === null ? '-' : String(ratingValue);
 }
 
 function setAccountStatus(message, tone = 'system') {
@@ -666,7 +699,7 @@ async function submitMatchHistory(reason, winnerId) {
         winner: viewerWon ? authProfile.name : opponentName,
         loser: viewerWon ? opponentName : authProfile.name,
         result: viewerWon ? 'win' : 'lose',
-        matchType: isRankedMatch() ? 'rank' : 'normal',
+        matchType: getCurrentMatchType(),
         player1Level: authProfile.level,
         player2Level: 1,
         startedTime: currentMatchStartedAt || Date.now(),
@@ -1239,6 +1272,7 @@ function showMatchmakingPanel() {
     document.getElementById('setup-local-panel').classList.add('hidden');
     document.getElementById('game-info-panel').classList.add('hidden');
     document.getElementById('online-prebattle-panel')?.classList.add('hidden');
+    updateLobbyPlayerCard();
     onlineMatchPreviewActive = false;
     updateUsernameUI();
     updateMatchmakingPlayerSummary();
@@ -1254,6 +1288,7 @@ function showLocalPanel() {
     playUiSfx();
     document.getElementById('matchmaking-panel').classList.add('hidden');
     document.getElementById('setup-local-panel').classList.remove('hidden');
+    updateLobbyPlayerCard();
 }
 
 function resetOnlineMatchmakingState(keepPanel = true) {
@@ -1271,6 +1306,7 @@ function resetOnlineMatchmakingState(keepPanel = true) {
     onlineMatchPreviewActive = false;
     randomQueuePending = false;
     randomMatchAutoStarted = false;
+    resetOnlineAutoStartState();
     onlineAbilityChoices = { 1: null, 2: null };
     onlineReadyState = { 1: false, 2: false };
     onlineUsernames = { 1: null, 2: null };
@@ -1337,7 +1373,7 @@ function hostRoom() {
     onlineAbilityChoices = { 1: null, 2: null };
     onlineReadyState = { 1: false, 2: false };
     onlineUsernames = { 1: localUsername, 2: null };
-    randomMatchAutoStarted = false;
+    resetOnlineAutoStartState();
     onlineMatchPreviewActive = false;
     onlineMode = true;
     spectatorMode = false;
@@ -1361,7 +1397,7 @@ function joinRoom() {
     onlineAbilityChoices = { 1: null, 2: null };
     onlineReadyState = { 1: false, 2: false };
     onlineUsernames = { 1: null, 2: localUsername };
-    randomMatchAutoStarted = false;
+    resetOnlineAutoStartState();
     onlineMatchPreviewActive = false;
     onlineMode = true;
     spectatorMode = false;
@@ -1382,7 +1418,7 @@ function startRandomMatch() {
     onlineAbilityChoices = { 1: null, 2: null };
     onlineReadyState = { 1: false, 2: false };
     onlineUsernames = { 1: null, 2: null };
-    randomMatchAutoStarted = false;
+    resetOnlineAutoStartState();
     spectatorMode = false;
     onlineMatchPreviewActive = false;
     setGameMode('online');
@@ -1409,7 +1445,7 @@ function cancelMatchmaking() {
     onlineAbilityChoices = { 1: null, 2: null };
     onlineReadyState = { 1: false, 2: false };
     onlineUsernames = { 1: null, 2: null };
-    randomMatchAutoStarted = false;
+    resetOnlineAutoStartState();
     syncAbilitySelectOptions();
     setDevelopModeEnabled(developModeEnabled);
     document.getElementById('online-prebattle-panel')?.classList.add('hidden');
@@ -1527,11 +1563,38 @@ function updateRandomQueueCount(waiting = randomWaitingCount) {
     queueEl.textContent = `待機人数: ${randomWaitingCount}`;
 }
 
+function resetOnlineAutoStartState() {
+    randomMatchAutoStarted = false;
+    privateMatchAutoStarted = false;
+    window.clearTimeout(privateMatchAutoStartTimer);
+    privateMatchAutoStartTimer = null;
+}
+
 function maybeAutoStartRandomMatch() {
-    if (!onlineMode || !isRandomMatchRoom() || activePhase !== 'setup') return;
     const ready = Boolean(onlineAbilityChoices[1] && onlineAbilityChoices[2] && onlineReadyState[1] && onlineReadyState[2]);
-    if (!ready) return;
+    if (!onlineMode || activePhase !== 'setup') {
+        resetOnlineAutoStartState();
+        return;
+    }
+    if (!ready) {
+        resetOnlineAutoStartState();
+        return;
+    }
     updateMatchmakingPlayerSummary();
+    if (!isRandomMatchRoom()) {
+        if ((matchmakingRole === 'host' || localPlayer === 1) && onlineMatchPreviewActive && !privateMatchAutoStarted) {
+            privateMatchAutoStarted = true;
+            window.clearTimeout(privateMatchAutoStartTimer);
+            privateMatchAutoStartTimer = window.setTimeout(() => {
+                privateMatchAutoStartTimer = null;
+                if (onlineMode && !isRandomMatchRoom() && activePhase === 'setup' && onlineMatchPreviewActive && localPlayer === 1) {
+                    setMatchmakingStatus('両者準備完了。試合を開始します。', 'success');
+                    startOnlineBattle();
+                }
+            }, 900);
+        }
+        return;
+    }
     setMatchmakingStatus(`${getOnlineDisplayName(1)} と ${getOnlineDisplayName(2)} のマッチが成立しました。`, 'success');
     if (localPlayer === 1 && !randomMatchAutoStarted) {
         randomMatchAutoStarted = true;
@@ -1603,6 +1666,7 @@ function prepareOnlineMatchPreview(seed = null) {
     const previewSeed = Number.isFinite(seed) ? seed : hashStringToSeed(matchRoomId || onlineSession?.roomId || 'online');
     gameSeed = previewSeed;
     onlineMatchPreviewActive = true;
+    resetOnlineAutoStartState();
     onlineAbilityChoices = { 1: null, 2: null };
     onlineReadyState = { 1: false, 2: false };
     activePhase = 'setup';
@@ -1663,7 +1727,7 @@ function startOnlineBattle() {
         p1Ability: onlineAbilityChoices[1] || '足跡',
         p2Ability: onlineAbilityChoices[2] || '歴戦王',
         seed: gameSeed || hashStringToSeed(matchRoomId || onlineSession?.roomId || 'online'),
-        matchType: getOnlineMatchTier()
+        matchType: getCurrentMatchType()
     };
 
     if (onlineMode && (!onlineAbilityChoices[1] || !onlineAbilityChoices[2])) {
@@ -2130,6 +2194,7 @@ function startGame(config = null, fromOnline = false) {
     startMatchTracking();
 
     activePhase = 'battle';
+    resetOnlineAutoStartState();
     isGameOver = false;
     currentPlayer = 1;
     gameTurn = 1;
@@ -3762,6 +3827,16 @@ function triggerWin(winnerId, fromOnline = false, reason = 'core') {
     document.getElementById('game-over-overlay').classList.remove('hidden');
     submitMatchHistory(reason, winnerId);
     if (onlineMode && !fromOnline) sendOnlineMessage({ kind: 'win', winner: winnerId });
+    if (onlineMode && activePhase !== 'battle' && !isRandomMatchRoom()) {
+        resetOnlineMatchmakingState(true);
+        window.setTimeout(() => {
+            document.getElementById('game-over-overlay')?.classList.add('hidden');
+            showMatchmakingPanel();
+            setOnlineMatchTab('private');
+            setMatchmakingStatus('プライベートマッチを終了しました。', 'system');
+            updateLobbyPlayerCard();
+        }, 900);
+    }
 }
 
 function forfeitGame() {
@@ -3836,6 +3911,7 @@ function updateUI() {
     document.getElementById('p2-units-count').textContent = `${p2Count} / ${totalUnits}`;
     updateMapLabels();
     updateModeVisibility();
+    updateLobbyPlayerCard();
     document.body.classList.toggle('my-turn', !onlineMode || localPlayer === currentPlayer);
     document.body.classList.toggle('opponent-turn', onlineMode && localPlayer !== currentPlayer);
 }

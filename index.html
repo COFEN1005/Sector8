@@ -16,6 +16,14 @@
             <div class="logo">
                 <span class="glitch-text" data-text="SECTOR-8">SECTOR-8</span>
                 <span class="sub-logo">INFORMATION COLLAPSE</span>
+                <div id="lobby-player-card" class="lobby-player-card hidden">
+                    <div class="lobby-player-label">LOBBY PROFILE</div>
+                    <strong id="lobby-player-name" class="lobby-player-name">Commander</strong>
+                    <div class="lobby-player-meta">
+                        <span>LV <strong id="lobby-player-level">-</strong></span>
+                        <span>RATING <strong id="lobby-player-rating">-</strong></span>
+                    </div>
+                </div>
             </div>
             <div id="turn-indicator" class="glass-panel">
                 <div class="turn-label">TURN <span id="turn-count">1</span></div>
@@ -29,11 +37,12 @@
                     <summary class="small-tool-btn">NEWS</summary>
                     <div class="news-menu-panel">
                         <details class="news-item" open>
-                            <summary>PATCH 0.7.7</summary>
+                            <summary>PATCH 0.7.9</summary>
                             <ul class="news-list">
-                                <li>DEVELOPER TOOLS を追加</li>
-                                <li>PLAYER ID / 名前でアカウントの補正・削除ができるように変更</li>
-                                <li>最後に使った PLAYER ID を再入力しやすく調整</li>
+                                <li>レートを勝ち +10 / 負け -10 を基本に見直し、差分補正を追加</li>
+                                <li>ノーマルマッチとプライベートマッチではレートが変動しないように変更</li>
+                                <li>スマホでもランダム接続のノーマルマッチを触りやすく調整</li>
+                                <li>ロビー左上にプレイヤー名 / レベル / レートを表示するように変更</li>
                             </ul>
                         </details>
                         <details class="news-item" open>
@@ -542,7 +551,7 @@
         </div>
     </div>
 
-    <div class="patch-badge">PATCH ver.0.7.7</div>
+    <div class="patch-badge">PATCH ver.0.7.9</div>
     <script>
     // Mode tab switching helper (called from inline onclick)
     function setModeTab(mode) {

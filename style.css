@@ -379,6 +379,49 @@ header {
     flex-direction: column;
 }
 
+.lobby-player-card {
+    margin-top: 0.65rem;
+    padding: 0.6rem 0.75rem;
+    max-width: 18rem;
+    border: 1px solid rgba(0, 240, 255, 0.14);
+    border-radius: 14px;
+    background: linear-gradient(180deg, rgba(8, 12, 22, 0.92), rgba(12, 16, 26, 0.7));
+    box-shadow: inset 0 0 24px rgba(0, 240, 255, 0.04), 0 0 20px rgba(0, 0, 0, 0.18);
+}
+
+.lobby-player-label {
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.22em;
+    color: var(--text-muted);
+    margin-bottom: 0.28rem;
+}
+
+.lobby-player-name {
+    display: block;
+    font-family: var(--font-outfit);
+    font-size: 1.02rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: 0.04em;
+    margin-bottom: 0.35rem;
+}
+
+.lobby-player-meta {
+    display: flex;
+    gap: 0.8rem;
+    flex-wrap: wrap;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+    color: var(--text-muted);
+}
+
+.lobby-player-meta strong {
+    color: var(--neon-gold);
+    font-weight: 700;
+}
+
 .glitch-text {
     font-family: var(--font-mono);
     font-size: 2.2rem;
@@ -2320,6 +2363,7 @@ body.device-mobile #board-container {
 body.device-mobile #sidebar-right {
     order: 2;
     flex: none;
+    overflow: visible;
 }
 
 body.device-mobile #game-board-wrapper {
@@ -2342,6 +2386,40 @@ body.device-mobile .action-buttons {
 
 body.device-mobile .action-btn {
     min-height: 42px;
+}
+
+body.device-mobile #matchmaking-panel {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 1rem;
+}
+
+body.device-mobile .online-match-tabs {
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+body.device-mobile .online-match-tab {
+    width: 100%;
+    min-height: 44px;
+    padding: 0.7rem 0.5rem;
+}
+
+body.device-mobile .room-join-row {
+    flex-direction: column;
+    align-items: stretch;
+}
+
+body.device-mobile .room-join-row .join-btn {
+    width: 100%;
+}
+
+body.device-mobile #btn-random-match {
+    min-height: 48px;
+}
+
+body.device-mobile .matchmaking-section {
+    padding: 0.7rem;
 }
 
 body.device-mobile .unit.koh-ability::after {

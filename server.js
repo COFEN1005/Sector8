@@ -506,25 +506,22 @@ const server = http.createServer(async (req, res) => {
                 let player2Profile = player2Id ? await accountStore.getPlayerById(player2Id) : null;
                 let player1RatingDelta = 0;
                 let player2RatingDelta = 0;
+                const ratingBonus = (playerRating, opponentRating) => {
+                    const diff = Math.max(0, Number(opponentRating || 0) - Number(playerRating || 0));
+                    return Math.floor(diff / 100);
+                };
 
                 if (player1Profile && player2Profile) {
                     if (matchType === 'rank') {
-                        if (player1Won) {
-                            player1RatingDelta = calculateRatingDelta(player1Profile.rating, player2Profile.rating, true);
-                            player2RatingDelta = calculateRatingDelta(player2Profile.rating, player1Profile.rating, false);
-                        } else {
-                            player1RatingDelta = calculateRatingDelta(player1Profile.rating, player2Profile.rating, false);
-                            player2RatingDelta = calculateRatingDelta(player2Profile.rating, player1Profile.rating, true);
-                        }
+                        const bonus1 = ratingBonus(player1Profile.rating, player2Profile.rating);
+                        const bonus2 = ratingBonus(player2Profile.rating, player1Profile.rating);
+                        player1RatingDelta = (player1Won ? 10 : -10) + bonus1;
+                        player2RatingDelta = (player1Won ? -10 : 10) + bonus2;
                     }
                     player1Profile = await accountStore.updatePlayerProgress(player1Profile.id, player1RatingDelta, 50);
                     player2Profile = await accountStore.updatePlayerProgress(player2Profile.id, player2RatingDelta, 50);
                 } else if (matchType === 'rank' && player1Profile && !player2Profile) {
-                    if (player1Won) {
-                        player1RatingDelta = calculateRatingDelta(player1Profile.rating, 1500, true);
-                    } else {
-                        player1RatingDelta = calculateRatingDelta(player1Profile.rating, 1500, false);
-                    }
+                    player1RatingDelta = player1Won ? 10 : -10;
                     player1Profile = await accountStore.updatePlayerProgress(player1Profile.id, player1RatingDelta, 50);
                 }
 
