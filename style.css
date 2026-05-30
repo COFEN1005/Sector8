@@ -60,9 +60,17 @@ body {
 header {
     display: flex;
     justify-content: space-between;
-    align-items: center;
+    align-items: flex-start;
     margin-bottom: 1.5rem;
-    height: 70px;
+    height: auto;
+    gap: 1rem;
+}
+
+.header-brand {
+    display: flex;
+    align-items: flex-start;
+    gap: 1.4rem;
+    min-width: 0;
 }
 
 .audio-controls {
@@ -421,9 +429,9 @@ header {
 }
 
 .lobby-player-card {
-    margin-top: 0.65rem;
+    margin-top: 0.1rem;
     padding: 0.6rem 0.75rem;
-    max-width: 18rem;
+    width: 18rem;
     border: 1px solid rgba(0, 240, 255, 0.14);
     border-radius: 14px;
     background: linear-gradient(180deg, rgba(8, 12, 22, 0.92), rgba(12, 16, 26, 0.7));
@@ -2277,6 +2285,11 @@ body.opponent-turn #turn-indicator {
         max-width: 300px;
     }
 
+    .header-brand {
+        width: 100%;
+        gap: 1rem;
+    }
+
     .menu-panel {
         width: min(24rem, 90vw);
     }
@@ -2298,6 +2311,17 @@ body.opponent-turn #turn-indicator {
         margin-bottom: 0.5rem;
         flex-wrap: wrap;
         gap: 0.5rem;
+    }
+
+    .header-brand {
+        width: 100%;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+    }
+
+    .lobby-player-card {
+        width: 100%;
+        max-width: 18rem;
     }
 
     .audio-controls {
