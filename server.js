@@ -359,10 +359,10 @@ function trackRoomState(room, message, senderInfo) {
 
 const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, `http://${req.headers.host}`);
+    const method = req.method || 'GET';
 
     try {
         if (url.pathname.startsWith('/api/')) {
-            const method = req.method || 'GET';
             const body = method === 'GET' || method === 'HEAD' ? {} : await readJsonBody(req);
             const sessionToken = body.token || body.sessionToken || getBearerToken(req);
             const session = sessionToken ? await accountStore.getSession(sessionToken) : null;
