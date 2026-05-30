@@ -67,10 +67,13 @@ header {
 }
 
 .header-brand {
+    position: relative;
     display: flex;
     align-items: flex-start;
     gap: 1.4rem;
     min-width: 0;
+    flex: 1;
+    min-height: 6.2rem;
 }
 
 .audio-controls {
@@ -429,41 +432,44 @@ header {
 }
 
 .lobby-player-card {
-    margin-top: 0.1rem;
-    padding: 0.6rem 0.75rem;
-    width: 18rem;
-    border: 1px solid rgba(0, 240, 255, 0.14);
-    border-radius: 14px;
-    background: linear-gradient(180deg, rgba(8, 12, 22, 0.92), rgba(12, 16, 26, 0.7));
-    box-shadow: inset 0 0 24px rgba(0, 240, 255, 0.04), 0 0 20px rgba(0, 0, 0, 0.18);
+    position: absolute;
+    left: clamp(17rem, 18vw, 23rem);
+    top: 0.05rem;
+    margin-top: 0;
+    padding: 0.8rem 1rem 0.75rem;
+    width: clamp(18rem, 24vw, 24rem);
+    border: none;
+    border-radius: 0;
+    background: rgba(74, 79, 88, 0.95);
+    box-shadow: none;
 }
 
 .lobby-player-label {
     font-family: var(--font-mono);
     font-size: 0.62rem;
     letter-spacing: 0.22em;
-    color: var(--text-muted);
-    margin-bottom: 0.28rem;
+    color: rgba(255, 255, 255, 0.28);
+    margin-bottom: 0.35rem;
 }
 
 .lobby-player-name {
     display: block;
     font-family: var(--font-outfit);
-    font-size: 1.02rem;
+    font-size: 1.55rem;
     font-weight: 700;
-    color: var(--text-primary);
-    letter-spacing: 0.04em;
-    margin-bottom: 0.35rem;
+    color: #fff;
+    letter-spacing: 0.02em;
+    margin-bottom: 0.45rem;
 }
 
 .lobby-player-meta {
     display: flex;
-    gap: 0.8rem;
+    gap: 1rem;
     flex-wrap: wrap;
     font-family: var(--font-mono);
-    font-size: 0.72rem;
-    letter-spacing: 0.12em;
-    color: var(--text-muted);
+    font-size: 0.76rem;
+    letter-spacing: 0.14em;
+    color: rgba(255, 255, 255, 0.82);
 }
 
 .lobby-player-meta strong {
@@ -2288,6 +2294,7 @@ body.opponent-turn #turn-indicator {
     .header-brand {
         width: 100%;
         gap: 1rem;
+        min-height: 0;
     }
 
     .menu-panel {
@@ -2317,11 +2324,14 @@ body.opponent-turn #turn-indicator {
         width: 100%;
         flex-wrap: wrap;
         gap: 0.75rem;
+        min-height: 0;
     }
 
     .lobby-player-card {
+        position: static;
         width: 100%;
         max-width: 18rem;
+        border-radius: 14px;
     }
 
     .audio-controls {
