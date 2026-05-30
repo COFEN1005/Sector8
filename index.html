@@ -44,6 +44,7 @@
                             <ul class="news-list">
                                 <li>敵のエリア移動で視点が自動切り替えされないよう修正</li>
                                 <li>オンライン時のマップ追従を自分の操作時のみに限定</li>
+                                <li>引き分け申請ボタンを追加し、同ターンで両者が了承した場合は引き分け成立に変更</li>
                             </ul>
                         </details>
                         <details class="news-item">
@@ -654,7 +655,10 @@
                     </div>
 
                     <button id="btn-skip-turn" class="neon-btn skip-turn-btn" type="button">TURN SKIP</button>
-                    <button id="btn-forfeit" class="neon-btn danger">SYSTEM REBOOT (降伏)</button>
+                    <div class="game-end-actions">
+                        <button id="btn-draw" class="neon-btn secondary" type="button">引き分け申請</button>
+                        <button id="btn-forfeit" class="neon-btn danger" type="button">SYSTEM REBOOT (降伏)</button>
+                    </div>
                 </div>
             </section>
         </main>

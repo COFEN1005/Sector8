@@ -267,6 +267,11 @@ header {
     background: rgba(255, 138, 138, 0.08);
 }
 
+.match-history-result.draw {
+    color: var(--neon-gold);
+    background: rgba(255, 183, 0, 0.08);
+}
+
 .match-history-opponent {
     font-size: 0.86rem;
     color: var(--text-primary);
@@ -1816,6 +1821,20 @@ details li {
     box-shadow: 0 0 18px rgba(255,255,255,0.15);
 }
 
+.neon-btn.secondary.active {
+    border-color: var(--neon-gold);
+    color: var(--neon-gold);
+    text-shadow: 0 0 5px var(--neon-gold);
+    box-shadow: inset 0 0 10px rgba(255, 183, 0, 0.12);
+}
+
+.neon-btn.secondary.active:hover {
+    background: var(--neon-gold);
+    color: #000;
+    box-shadow: var(--shadow-gold);
+    text-shadow: none;
+}
+
 .neon-btn.skip-turn-btn {
     margin-top: 0.8rem;
     margin-bottom: 0.6rem;
@@ -1829,6 +1848,13 @@ details li {
     background: var(--neon-gold);
     color: #000;
     box-shadow: var(--shadow-gold);
+}
+
+.game-end-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.6rem;
+    margin-top: 0.15rem;
 }
 
 /* GAME INFO & LOG FEED */

@@ -99,6 +99,16 @@ function isMoveDestinationBlockedByFriendly(unit, destRow, destCol) {
     );
 }
 
+function isDiagonalCornerBlocked(map, fromRow, fromCol, toRow, toCol) {
+    const dr = toRow - fromRow;
+    const dc = toCol - fromCol;
+    if (Math.abs(dr) !== 1 || Math.abs(dc) !== 1) return false;
+
+    const adj1 = boards[map]?.[fromRow]?.[toCol];
+    const adj2 = boards[map]?.[toRow]?.[fromCol];
+    return Boolean(adj1?.isWall || adj2?.isWall);
+}
+
 function isOccupantVisibleToPlayer(occupant, viewerPlayer, mapName) {
     if (!occupant) return false;
     if (occupant.player === viewerPlayer) return true;
@@ -221,6 +231,7 @@ let onlineProfileDetails = { 1: null, 2: null };
 let matchIntroActive = false;
 let matchIntroTimer = null;
 let pendingMatchIntroCutIn = false;
+let drawRequestTurnByPlayer = { 1: null, 2: null };
 // Matchmaking state
 let matchmakingMode = false;
 let matchmakingRole = null; // 'host' or 'guest'
@@ -428,6 +439,69 @@ function resetMatchRecording() {
     currentMatchRecord = createMatchRecordBase();
     currentMatchReplay = createMatchReplayBase();
     activeMatchSummaryView = null;
+    resetDrawRequests();
+}
+
+function resetDrawRequests() {
+    drawRequestTurnByPlayer = { 1: null, 2: null };
+    updateDrawButtonState();
+}
+
+function hasActiveDrawRequest(player) {
+    return drawRequestTurnByPlayer[player] === gameTurn;
+}
+
+function isMutualDrawRequested() {
+    return hasActiveDrawRequest(1) && hasActiveDrawRequest(2);
+}
+
+function updateDrawButtonState() {
+    const drawBtn = document.getElementById('btn-draw');
+    if (!drawBtn) return;
+    const pending = hasActiveDrawRequest(1) || hasActiveDrawRequest(2);
+    drawBtn.textContent = pending ? '引き分け申請中' : '引き分け申請';
+    drawBtn.classList.toggle('active', pending);
+    drawBtn.disabled = isGameOver || activePhase !== 'battle' || spectatorMode;
+}
+
+function receiveDrawRequest(player, requestTurn) {
+    if (!player || isGameOver || activePhase !== 'battle') return;
+    if (requestTurn !== gameTurn) return;
+    drawRequestTurnByPlayer[player] = requestTurn;
+    addConsoleLog(`SYSTEM: Player ${player} が引き分けを申請しました。`, player === 1 ? 'p1' : 'p2');
+    updateDrawButtonState();
+    if (isMutualDrawRequested()) {
+        triggerDraw(true, 'mutual');
+    }
+}
+
+function requestDraw() {
+    if (isGameOver || activePhase !== 'battle') return;
+    const requester = onlineMode ? localPlayer : currentPlayer;
+    if (!requester) return;
+    if (drawRequestTurnByPlayer[requester] === gameTurn) {
+        addConsoleLog(`SYSTEM: Player ${requester} の引き分け申請は既に受理待ちです。`, requester === 1 ? 'p1' : 'p2');
+        updateDrawButtonState();
+        return;
+    }
+    drawRequestTurnByPlayer[requester] = gameTurn;
+    addConsoleLog(`SYSTEM: Player ${requester} が引き分けを申請しました。`, requester === 1 ? 'p1' : 'p2');
+    updateDrawButtonState();
+    if (onlineMode) sendOnlineMessage({ kind: 'draw_request', turn: gameTurn });
+    if (isMutualDrawRequested()) {
+        triggerDraw(false, 'mutual');
+    }
+}
+
+function setGameOverTitle(title, tone = 'gold') {
+    const titleEl = document.getElementById('game-over-title');
+    if (!titleEl) return;
+    titleEl.textContent = title;
+    titleEl.setAttribute('data-text', title);
+    titleEl.className = 'glitch-text';
+    if (tone === 'gold') titleEl.classList.add('text-gold');
+    else if (tone === 'cyan') titleEl.classList.add('text-cyan');
+    else if (tone === 'magenta') titleEl.classList.add('text-magenta');
 }
 
 function recordMatchReplayEvent(event) {
@@ -465,17 +539,18 @@ function buildMatchSummary(reason, winnerId) {
         ? getOnlineDisplayName(localPlayer === 1 ? 2 : 1)
         : (vsAI ? 'AI BOT' : 'PLAYER 2');
     const viewerSide = onlineMode && localPlayer ? localPlayer : 1;
-    const viewerWon = winnerId === viewerSide;
+    const isDraw = winnerId == null || reason === 'draw';
+    const viewerWon = isDraw ? null : winnerId === viewerSide;
     const summary = {
         matchKey: currentMatchKey,
         matchType,
         reason,
-        winnerId,
-        loserId: winnerId === 1 ? 2 : 1,
+        winnerId: isDraw ? null : winnerId,
+        loserId: isDraw ? null : (winnerId === 1 ? 2 : 1),
         player1Name: currentMatchRecord?.startProfile?.name || authProfile?.name || 'PLAYER 1',
         player2Name: opponentName,
-        winnerName: winnerId === 1 ? (currentMatchRecord?.player1Name || authProfile?.name || 'PLAYER 1') : opponentName,
-        loserName: winnerId === 1 ? opponentName : (currentMatchRecord?.player1Name || authProfile?.name || 'PLAYER 1'),
+        winnerName: isDraw ? 'DRAW' : (winnerId === 1 ? (currentMatchRecord?.player1Name || authProfile?.name || 'PLAYER 1') : opponentName),
+        loserName: isDraw ? 'DRAW' : (winnerId === 1 ? opponentName : (currentMatchRecord?.player1Name || authProfile?.name || 'PLAYER 1')),
         startedTime: currentMatchStartedAt || endedTime,
         endedTime,
         timeTaken: Math.max(0, endedTime - (currentMatchStartedAt || endedTime)),
@@ -495,10 +570,10 @@ function buildMatchSummary(reason, winnerId) {
         captures: [...(currentMatchRecord?.captures || [])],
         capturedByPlayer1: (currentMatchRecord?.captures || []).filter(entry => Number(entry.victimPlayer) === 1),
         capturedByPlayer2: (currentMatchRecord?.captures || []).filter(entry => Number(entry.victimPlayer) === 2),
-        resultText: viewerWon ? 'VICTORY' : 'DEFEAT',
+        resultText: isDraw ? 'DRAW' : (viewerWon ? 'VICTORY' : 'DEFEAT'),
         viewerWon,
-        winnerPlayerId: winnerId,
-        loserPlayerId: summary.loserId,
+        winnerPlayerId: isDraw ? null : winnerId,
+        loserPlayerId: isDraw ? null : (winnerId === 1 ? 2 : 1),
         startProfile,
         endProfile: endedProfile ? {
             id: endedProfile.id,
@@ -511,10 +586,13 @@ function buildMatchSummary(reason, winnerId) {
         player1StartRating: currentMatchRecord?.startProfile?.rating ?? null,
         player2StartRating: currentMatchRecord?.opponentStartProfile?.rating ?? null,
         opponentStartRating: currentMatchRecord?.opponentStartProfile?.rating ?? null,
-        ratingDelta: null,
-        expDelta: null
+        ratingDelta: isDraw ? 0 : null,
+        expDelta: isDraw ? 0 : null
     };
-    if (startProfile && endedProfile && startProfile.id === endedProfile.id) {
+    if (isDraw) {
+        summary.ratingDelta = 0;
+        summary.expDelta = 0;
+    } else if (startProfile && endedProfile && startProfile.id === endedProfile.id) {
         summary.ratingDelta = Number(endedProfile.rating || 0) - Number(startProfile.rating || 0);
         summary.expDelta = Number(endedProfile.exp || 0) - Number(startProfile.exp || 0);
     }
@@ -522,8 +600,8 @@ function buildMatchSummary(reason, winnerId) {
         currentMatchRecord.endedTime = endedTime;
         currentMatchRecord.timeTaken = summary.timeTaken;
         currentMatchRecord.matchType = matchType;
-        currentMatchRecord.result = viewerWon ? 'win' : 'lose';
-        currentMatchRecord.winnerId = winnerId;
+        currentMatchRecord.result = isDraw ? 'draw' : (viewerWon ? 'win' : 'lose');
+        currentMatchRecord.winnerId = isDraw ? null : winnerId;
         currentMatchRecord.loserId = summary.loserId;
         currentMatchRecord.reason = reason;
         currentMatchRecord.summary = summary;
@@ -560,13 +638,14 @@ function renderGameOverSummary(summary = null) {
     const capturedByP1 = summary.capturedByPlayer1 || [];
     const capturedByP2 = summary.capturedByPlayer2 || [];
     const timeTaken = Number(summary.timeTaken || 0);
+    const isDraw = String(summary.resultText || '').toUpperCase() === 'DRAW';
     summaryEl.classList.remove('hidden');
     captureP1El.innerHTML = formatCaptureList(capturedByP1);
     captureP2El.innerHTML = formatCaptureList(capturedByP2);
     statsEl.innerHTML = `
         <div class="summary-row"><span>MODE</span><strong>${String(summary.matchType || 'unknown').toUpperCase()}</strong></div>
         <div class="summary-row"><span>TIME</span><strong>${Math.floor(timeTaken / 60000)}m ${String(Math.floor((timeTaken % 60000) / 1000)).padStart(2, '0')}s</strong></div>
-        <div class="summary-row"><span>WINNER</span><strong>${summary.winnerName || 'UNKNOWN'}</strong></div>
+        <div class="summary-row"><span>${isDraw ? 'RESULT' : 'WINNER'}</span><strong>${summary.winnerName || 'UNKNOWN'}</strong></div>
         <div class="summary-row"><span>OPP START RATING</span><strong>${(summary.player2StartRating ?? summary.opponentStartRating) == null ? '-' : (summary.player2StartRating ?? summary.opponentStartRating)}</strong></div>
         <div class="summary-row"><span>RATING Δ</span><strong>${summary.ratingDelta === null ? '-' : (summary.ratingDelta > 0 ? `+${summary.ratingDelta}` : String(summary.ratingDelta))}</strong></div>
         <div class="summary-row"><span>EXP Δ</span><strong>${summary.expDelta === null ? '-' : (summary.expDelta > 0 ? `+${summary.expDelta}` : String(summary.expDelta))}</strong></div>
@@ -633,6 +712,7 @@ function startReplayPlayback(matchEntry) {
 
 function openMatchHistorySummary(matchEntry) {
     const entry = normalizeMatchHistoryEntry(matchEntry);
+    const outcome = getMatchHistoryOutcome(entry);
     const summary = entry.summary_json || {
         matchKey: entry.match_key || entry.matchKey || null,
         matchType: entry.match_type || 'unknown',
@@ -641,8 +721,8 @@ function openMatchHistorySummary(matchEntry) {
         loserId: entry.loser_id || null,
         player1Name: entry.player1_name || 'PLAYER 1',
         player2Name: entry.player2_name || 'PLAYER 2',
-        winnerName: entry.winner || 'UNKNOWN',
-        loserName: entry.loser || 'UNKNOWN',
+        winnerName: outcome === 'DRAW' ? 'DRAW' : (entry.winner || 'UNKNOWN'),
+        loserName: outcome === 'DRAW' ? 'DRAW' : (entry.loser || 'UNKNOWN'),
         startedTime: entry.started_time || entry.startedTime || Date.now(),
         endedTime: entry.ended_time || entry.endedTime || Date.now(),
         timeTaken: entry.time_taken || entry.timeTaken || 0,
@@ -652,8 +732,8 @@ function openMatchHistorySummary(matchEntry) {
         captures: [],
         capturedByPlayer1: [],
         capturedByPlayer2: [],
-        resultText: getMatchHistoryOutcome(entry) === 'LOSE' ? 'DEFEAT' : 'VICTORY',
-        viewerWon: getMatchHistoryOutcome(entry) !== 'LOSE',
+        resultText: outcome === 'LOSE' ? 'DEFEAT' : (outcome === 'DRAW' ? 'DRAW' : 'VICTORY'),
+        viewerWon: outcome === 'LOSE' ? false : (outcome === 'DRAW' ? null : true),
         ratingDelta: entry.player1_get_rating || 0,
         expDelta: null,
         player2StartRating: entry.player2_start_rating ?? entry.summary_json?.player2StartRating ?? null
@@ -662,8 +742,10 @@ function openMatchHistorySummary(matchEntry) {
     activeMatchSummaryView.replay = entry.replay_json || null;
     replayPlaybackSource = entry;
     renderGameOverSummary(activeMatchSummaryView);
-    document.getElementById('game-over-title').textContent = summary.resultText || 'MATCH SUMMARY';
-    document.getElementById('game-over-subtitle').textContent = `${entry.player1_name || 'PLAYER 1'} VS ${entry.player2_name || 'PLAYER 2'}`;
+    setGameOverTitle(summary.resultText || 'MATCH SUMMARY', summary.resultText === 'VICTORY' ? 'cyan' : (summary.resultText === 'DEFEAT' ? 'magenta' : 'gold'));
+    document.getElementById('game-over-subtitle').textContent = summary.resultText === 'DRAW'
+        ? '双方が同意した引き分けです。'
+        : `${entry.player1_name || 'PLAYER 1'} VS ${entry.player2_name || 'PLAYER 2'}`;
     document.getElementById('game-over-overlay')?.classList.remove('hidden');
     const replayBtn = document.getElementById('btn-replay-match');
     if (replayBtn) {
@@ -952,6 +1034,7 @@ function getMatchHistoryDelta(entry) {
 
 function getMatchHistoryOutcome(entry) {
     const playerId = Number(authProfile?.id || 0);
+    if (String(entry?.result || '').toLowerCase() === 'draw') return 'DRAW';
     const winnerId = Number(entry?.winner_player_id || 0);
     const loserId = Number(entry?.loser_player_id || 0);
     if (playerId && winnerId && playerId === winnerId) return 'WIN';
@@ -1053,13 +1136,16 @@ function renderMatchHistory(matches = [], state = {}) {
                         : (entry.player1_name || 'UNKNOWN');
                     const winnerName = entry.winner || 'UNKNOWN';
                     const loserName = entry.loser || 'UNKNOWN';
+                    const outcomeLine = resultText === 'DRAW'
+                        ? 'DRAW'
+                        : `${winnerName} / ${loserName}`;
                     const timeText = formatMatchHistoryTimestamp(entry.started_time || entry.created_at);
                     const durationText = formatMatchHistoryDuration(entry.time_taken);
                     const surrenderText = entry.surrender_by_player_id ? ' / SURRENDER' : '';
                     return `
                         <article class="match-history-card" data-match-index="${index}" title="クリックでサマリーを表示">
                             <div class="match-history-topline">
-                                <span class="match-history-result ${resultText === 'WIN' ? 'win' : 'lose'}">${resultText}</span>
+                                <span class="match-history-result ${resultText === 'WIN' ? 'win' : resultText === 'DRAW' ? 'draw' : 'lose'}">${resultText}</span>
                                 <strong class="match-history-opponent">VS ${opponentName}</strong>
                                 <span class="match-history-rating ${delta >= 0 ? 'positive' : 'negative'}">RATING ${deltaText}</span>
                                 <span class="match-history-start-rating">OPP START ${opponentStartRating == null ? '-' : opponentStartRating}</span>
@@ -1067,7 +1153,7 @@ function renderMatchHistory(matches = [], state = {}) {
                             <div class="match-history-meta">
                                 <span>${timeText}</span>
                                 <span>${durationText}</span>
-                                <span>${winnerName} / ${loserName}${surrenderText}</span>
+                                <span>${outcomeLine}${surrenderText}</span>
                             </div>
                             <div class="match-history-footer">${entry.replay_json ? 'REPLAY AVAILABLE' : 'SUMMARY ONLY'}</div>
                         </article>
@@ -1221,13 +1307,14 @@ function startMatchTracking() {
 async function submitMatchHistory(reason, winnerId) {
     if (!authSession?.token || !authProfile || replayPlaybackActive) return;
     const viewerSide = onlineMode && localPlayer ? localPlayer : 1;
-    const viewerWon = winnerId === viewerSide;
+    const isDraw = winnerId == null || reason === 'draw';
+    const viewerWon = isDraw ? null : winnerId === viewerSide;
     const opponentName = onlineMode
         ? getOnlineDisplayName(localPlayer === 1 ? 2 : 1)
         : (vsAI ? 'AI BOT' : 'PLAYER 2');
-    const summary = buildMatchSummary(reason, winnerId);
-    summary.winnerName = viewerWon ? authProfile.name : opponentName;
-    summary.loserName = viewerWon ? opponentName : authProfile.name;
+    const summary = buildMatchSummary(isDraw ? 'draw' : reason, isDraw ? null : winnerId);
+    summary.winnerName = isDraw ? 'DRAW' : (viewerWon ? authProfile.name : opponentName);
+    summary.loserName = isDraw ? 'DRAW' : (viewerWon ? opponentName : authProfile.name);
     summary.replay = currentMatchReplay;
     activeMatchSummaryView = summary;
     const payload = {
@@ -1235,9 +1322,9 @@ async function submitMatchHistory(reason, winnerId) {
         player1Id: authProfile.id,
         player1Name: authProfile.name,
         player2Name: opponentName,
-        winner: viewerWon ? authProfile.name : opponentName,
-        loser: viewerWon ? opponentName : authProfile.name,
-        result: viewerWon ? 'win' : 'lose',
+        winner: isDraw ? 'DRAW' : (viewerWon ? authProfile.name : opponentName),
+        loser: isDraw ? 'DRAW' : (viewerWon ? opponentName : authProfile.name),
+        result: isDraw ? 'draw' : (viewerWon ? 'win' : 'lose'),
         matchType: getCurrentMatchType(),
         player1Level: authProfile.level,
         player2Level: 1,
@@ -1246,9 +1333,9 @@ async function submitMatchHistory(reason, winnerId) {
         startedTime: currentMatchStartedAt || Date.now(),
         endedTime: Date.now(),
         timeTaken: Math.max(0, Date.now() - (currentMatchStartedAt || Date.now())),
-        surrenderByPlayerId: !viewerWon && reason === 'forfeit' ? authProfile.id : null,
-        winnerPlayerId: winnerId,
-        loserPlayerId: viewerWon ? null : authProfile.id,
+        surrenderByPlayerId: !isDraw && !viewerWon && reason === 'forfeit' ? authProfile.id : null,
+        winnerPlayerId: isDraw ? null : winnerId,
+        loserPlayerId: isDraw ? null : (viewerWon ? null : authProfile.id),
         summaryJson: summary,
         replayJson: currentMatchReplay
     };
@@ -1718,6 +1805,7 @@ function setupUIEventListeners() {
     document.getElementById('btn-ability').addEventListener('click', () => selectActionType('ability'));
     document.getElementById('btn-cancel').addEventListener('click', cancelSelection);
     document.getElementById('btn-skip-turn')?.addEventListener('click', skipTurn);
+    document.getElementById('btn-draw')?.addEventListener('click', requestDraw);
     document.getElementById('btn-forfeit').addEventListener('click', forfeitGame);
     document.getElementById('btn-restart').addEventListener('click', resetToSetup);
     const replayMatchBtn = document.getElementById('btn-replay-match');
@@ -2512,6 +2600,10 @@ function handleOnlineMessage(message) {
                     if (entry.kind === 'action') applyRemoteAction(entry.action);
                     else if (entry.kind === 'forfeit' || entry.kind === 'win') {
                         triggerWin(entry.winner, true, entry.kind === 'forfeit' ? 'forfeit' : 'core');
+                    } else if (entry.kind === 'draw_request') {
+                        receiveDrawRequest(entry.player, Number(entry.turn || gameTurn));
+                    } else if (entry.kind === 'draw') {
+                        triggerDraw(true, entry.reason || 'mutual');
                     }
                 });
             } finally {
@@ -2531,6 +2623,16 @@ function handleOnlineMessage(message) {
         }
         updateMatchmakingPlayerSummary();
         updateLobbyPlayerCard();
+        return;
+    }
+
+    if (message.kind === 'draw_request') {
+        receiveDrawRequest(message.player, Number(message.turn || gameTurn));
+        return;
+    }
+
+    if (message.kind === 'draw') {
+        triggerDraw(true, message.reason || 'mutual');
         return;
     }
 
@@ -2955,6 +3057,7 @@ function startGame(config = null, fromOnline = false) {
     p2ClairvoyanceDir = null;
     p1ClairvoyanceAge = 0;
     p2ClairvoyanceAge = 0;
+    resetDrawRequests();
 
     p1LastVision = { area1: new Set(), area2: new Set(), area3: new Set() };
     p2LastVision = { area1: new Set(), area2: new Set(), area3: new Set() };
@@ -3878,6 +3981,7 @@ function getValidMoves(unit, options = {}) {
 
                     if (nextR < 0 || nextR >= size.rows || nextC < 0 || nextC >= size.cols) return;
                     if (boards[map][nextR][nextC].isWall) return;
+                    if (effectiveMoveType === 'square' && isDiagonalCornerBlocked(map, curr.row, curr.col, nextR, nextC)) return;
                     if (unit.type === 'scout' && map !== 'area2') return;
                     if (isMoveDestinationBlockedByFriendly(unit, nextR, nextC)) return;
 
@@ -4478,6 +4582,7 @@ function endTurn() {
     if (currentPlayer === 1) {
         gameTurn++;
         reinforceScouts();
+        resetDrawRequests();
     }
 
     calculateVisibility();
@@ -4560,7 +4665,7 @@ function getScoutReinforceInterval(player) {
 // --- WIN / LOSE ---
 function triggerWin(winnerId, fromOnline = false, reason = 'core') {
     isGameOver = true;
-    const titleEl = document.getElementById('game-over-title');
+    resetDrawRequests();
     const subtitleEl = document.getElementById('game-over-subtitle');
     const viewerPlayer = onlineMode && localPlayer ? localPlayer : 1;
     const viewerWon = winnerId === viewerPlayer;
@@ -4571,15 +4676,13 @@ function triggerWin(winnerId, fromOnline = false, reason = 'core') {
     activeMatchSummaryView = summary;
 
     if (viewerWon) {
-        titleEl.textContent = 'VICTORY';
-        titleEl.className = `glitch-text ${winnerId === 1 ? 'text-cyan' : 'text-magenta'}`;
+        setGameOverTitle('VICTORY', winnerId === 1 ? 'cyan' : 'magenta');
         subtitleEl.textContent = reason === 'forfeit'
             ? '対戦相手のコアが自壊しました。'
             : `PLAYER ${winnerId} が敵のコア領域を完全破壊し、勝利を収めました。`;
         addConsoleLog(`SYSTEM OVERRIDE: PLAYER ${winnerId} VICTORY. ENEMY CORE PURGED.`, 'system');
     } else {
-        titleEl.textContent = 'DEFEAT';
-        titleEl.className = `glitch-text ${winnerId === 1 ? 'text-cyan' : 'text-magenta'}`;
+        setGameOverTitle('DEFEAT', winnerId === 1 ? 'cyan' : 'magenta');
         subtitleEl.textContent = reason === 'forfeit'
             ? '自身のコアを自壊しました。'
             : (vsAI
@@ -4593,6 +4696,41 @@ function triggerWin(winnerId, fromOnline = false, reason = 'core') {
     recordMatchReplayEvent({ kind: 'result', winner: winnerId, reason });
     submitMatchHistory(reason, winnerId);
     if (onlineMode && !fromOnline) sendOnlineMessage({ kind: 'win', winner: winnerId });
+    if (onlineMode && activePhase !== 'battle' && !isRandomMatchRoom()) {
+        resetOnlineMatchmakingState(true);
+        window.setTimeout(() => {
+            document.getElementById('game-over-overlay')?.classList.add('hidden');
+            showMatchmakingPanel();
+            setOnlineMatchTab('private');
+            setMatchmakingStatus('プライベートマッチを終了しました。', 'system');
+            updateLobbyPlayerCard();
+        }, 900);
+    }
+}
+
+function triggerDraw(fromOnline = false, reason = 'mutual') {
+    if (isGameOver) return;
+    isGameOver = true;
+    resetDrawRequests();
+
+    const subtitleEl = document.getElementById('game-over-subtitle');
+    const summary = replayPlaybackActive && activeMatchSummaryView
+        ? activeMatchSummaryView
+        : buildMatchSummary('draw', null);
+    summary.replay = summary.replay || currentMatchReplay;
+    activeMatchSummaryView = summary;
+
+    setGameOverTitle('DRAW', 'gold');
+    subtitleEl.textContent = reason === 'mutual'
+        ? '双方が同ターンで引き分けを了承しました。'
+        : '引き分けが成立しました。';
+    addConsoleLog('SYSTEM OVERRIDE: MATCH ENDED IN DRAW.', 'system');
+
+    renderGameOverSummary(summary);
+    document.getElementById('game-over-overlay').classList.remove('hidden');
+    recordMatchReplayEvent({ kind: 'result', result: 'draw', reason });
+    submitMatchHistory('draw', null);
+    if (onlineMode && !fromOnline) sendOnlineMessage({ kind: 'draw', reason });
     if (onlineMode && activePhase !== 'battle' && !isRandomMatchRoom()) {
         resetOnlineMatchmakingState(true);
         window.setTimeout(() => {
@@ -4641,6 +4779,7 @@ function resetToSetup(fromOnline = false) {
     currentMatchReplay = null;
     activeMatchSummaryView = null;
     currentMatchOpponentStartProfile = null;
+    resetDrawRequests();
 
     boards = { area1: [], area2: [], area3: [] };
     units = [];
@@ -4692,6 +4831,7 @@ function updateUI() {
     updateMapLabels();
     updateModeVisibility();
     updateLobbyPlayerCard();
+    updateDrawButtonState();
     document.body.classList.toggle('my-turn', !onlineMode || localPlayer === currentPlayer);
     document.body.classList.toggle('opponent-turn', onlineMode && localPlayer !== currentPlayer);
 }
