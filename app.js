@@ -719,7 +719,8 @@ function renderReplaySnapshot(index = 0) {
             mapName: snapshot.activeMap || activeMap,
             viewerPlayerOverride: snapshot.viewerPlayer || 1,
             updateLinkedPanels: false,
-            interactive: false
+            interactive: false,
+            revealAll: true
         });
     });
 }
@@ -1467,7 +1468,11 @@ function refreshMatchIntroCutIn() {
     const ratingEl = document.getElementById('match-intro-opponent-rating');
     if (!matchIntroActive || !nameEl || !levelEl || !ratingEl) return;
     const opponent = getMatchIntroOpponentPlayer();
-    const profile = getOnlineProfileData(opponent);
+    const profile = onlineMode ? getOnlineProfileData(opponent) : {
+        name: vsAI ? 'AI BOT' : 'PLAYER 2',
+        level: 1,
+        rating: null
+    };
     levelEl.textContent = profile.level == null ? 'LV ?' : `LV ${profile.level}`;
     ratingEl.textContent = profile.rating == null ? 'RATING ?' : `RATING ${profile.rating}`;
     nameEl.textContent = profile.name || `P${opponent}`;
@@ -3344,6 +3349,8 @@ function startGame(config = null, fromOnline = false) {
     matchIntroTimer = null;
     if (onlineMode && fromOnline && !replayPlaybackActive && !reusePreview) {
         queueMatchIntroCutIn();
+    } else if (!onlineMode && vsAI && !replayPlaybackActive) {
+        queueMatchIntroCutIn();
     } else {
         matchIntroActive = false;
         document.getElementById('match-intro-overlay')?.classList.add('hidden');
@@ -4002,7 +4009,8 @@ function renderBoard(options = {}) {
         mapName = activeMap,
         viewerPlayerOverride = null,
         updateLinkedPanels = true,
-        interactive = true
+        interactive = true,
+        revealAll = false
     } = options;
     const boardEl = document.getElementById(boardId);
     if (!boardEl) return;
@@ -4034,10 +4042,12 @@ function renderBoard(options = {}) {
             if (cellData.isTeleport) cellEl.classList.add('teleport');
             if (cellData.isWall) cellEl.classList.add('wall');
             if (cellData.isCoreTile) cellEl.classList.add('core-tile');
-            const visibleFlags = getVisibleFlagsOnCell(cellData, viewerPlayer, activeVision);
+            const visibleFlags = revealAll
+                ? (cellData.flags?.length ? cellData.flags : (cellData.flag ? [cellData.flag] : []))
+                : getVisibleFlagsOnCell(cellData, viewerPlayer, activeVision);
             if (visibleFlags.length) cellEl.classList.add('has-flag');
 
-            if (!activeVision.has(coordStr)) cellEl.classList.add('fog-grey');
+            if (!revealAll && !activeVision.has(coordStr)) cellEl.classList.add('fog-grey');
 
             visibleFlags.forEach((flag, index) => {
                 const flagEl = document.createElement('div');
@@ -4050,7 +4060,7 @@ function renderBoard(options = {}) {
 
             if (cellData.unit) {
                 const u = cellData.unit;
-                const isHiddenByFog = !isUnitVisibleToViewer(u, viewerPlayer, activeVision);
+                const isHiddenByFog = !revealAll && !isUnitVisibleToViewer(u, viewerPlayer, activeVision);
 
                 if (!isHiddenByFog) {
                     const unitEl = document.createElement('div');
