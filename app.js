@@ -166,6 +166,10 @@ let replayPlaybackActive = false;
 let replayPlaybackTimer = null;
 let replayPlaybackRunId = 0;
 let replayPlaybackSource = null;
+let replayViewerSnapshots = [];
+let replayViewerIndex = 0;
+let replayViewerEntry = null;
+let replayViewerOpen = false;
 
 let selectedUnit = null;
 let previewUnit = null;
@@ -431,7 +435,8 @@ function createMatchReplayBase() {
             p2Ability,
             seed: gameSeed
         },
-        events: []
+        events: [],
+        snapshots: []
     };
 }
 
@@ -650,7 +655,7 @@ function renderGameOverSummary(summary = null) {
         <div class="summary-row"><span>RATING Δ</span><strong>${summary.ratingDelta === null ? '-' : (summary.ratingDelta > 0 ? `+${summary.ratingDelta}` : String(summary.ratingDelta))}</strong></div>
         <div class="summary-row"><span>EXP Δ</span><strong>${summary.expDelta === null ? '-' : (summary.expDelta > 0 ? `+${summary.expDelta}` : String(summary.expDelta))}</strong></div>
     `;
-    if (replayBtn) replayBtn.disabled = !(summary.replay && summary.replay.events && summary.replay.events.length);
+    if (replayBtn) replayBtn.disabled = !(summary.replay && summary.replay.snapshots && summary.replay.snapshots.length);
     if (restartBtn) restartBtn.textContent = 'RELOAD SYSTEM';
 }
 
@@ -667,47 +672,68 @@ function normalizeMatchHistoryEntry(entry) {
 function startReplayPlayback(matchEntry) {
     const entry = normalizeMatchHistoryEntry(matchEntry);
     const replay = entry.replay_json;
-    if (!replay?.events?.length) {
+    const snapshots = Array.isArray(replay?.snapshots) ? replay.snapshots : [];
+    if (!snapshots.length) {
         showStatusAlert('リプレイデータがありません。', 'warning', 2500);
         return;
     }
-    replayPlaybackActive = true;
     replayPlaybackSource = entry;
+    replayViewerEntry = entry;
+    replayViewerSnapshots = snapshots.map(hydrateReplaySnapshot);
+    replayViewerIndex = 0;
+    replayPlaybackActive = true;
+    replayViewerOpen = true;
     const replaySummary = entry.summary_json || {};
     activeMatchSummaryView = { ...replaySummary, replay };
-    document.getElementById('game-over-overlay')?.classList.add('hidden');
-    startGame(replay.config || {}, true);
+    document.getElementById('game-summary-panel')?.classList.add('hidden');
+    document.getElementById('replay-viewer')?.classList.remove('hidden');
+    document.getElementById('btn-replay-match')?.classList.add('hidden');
+    document.getElementById('btn-replay-close')?.classList.remove('hidden');
+    document.getElementById('replay-slider').max = String(Math.max(0, replayViewerSnapshots.length - 1));
+    renderReplaySnapshot(0);
+}
 
-    window.clearTimeout(replayPlaybackTimer);
-    const runId = ++replayPlaybackRunId;
-    const events = [...replay.events];
-    let index = 0;
+function renderReplaySnapshot(index = 0) {
+    if (!replayViewerSnapshots.length) return;
+    const safeIndex = Math.min(Math.max(0, Number(index) || 0), replayViewerSnapshots.length - 1);
+    replayViewerIndex = safeIndex;
+    const snapshot = replayViewerSnapshots[safeIndex];
+    const slider = document.getElementById('replay-slider');
+    const turnLabel = document.getElementById('replay-turn-label');
+    const snapshotLabel = document.getElementById('replay-snapshot-label');
+    const snapshotCount = document.getElementById('replay-snapshot-count');
+    if (slider) slider.value = String(safeIndex);
+    if (turnLabel) {
+        turnLabel.textContent = `TURN ${snapshot.turn || safeIndex + 1} / PLAYER ${snapshot.currentPlayer || 1}`;
+    }
+    if (snapshotLabel) {
+        snapshotLabel.textContent = snapshot.label || `TURN ${snapshot.turn || safeIndex + 1}`;
+    }
+    if (snapshotCount) {
+        snapshotCount.textContent = `${safeIndex + 1} / ${replayViewerSnapshots.length}`;
+    }
 
-    const step = () => {
-        if (runId !== replayPlaybackRunId) return;
-        if (index >= events.length) {
-            replayPlaybackActive = false;
-            window.clearTimeout(replayPlaybackTimer);
-            renderGameOverSummary(activeMatchSummaryView);
-            document.getElementById('game-over-overlay')?.classList.remove('hidden');
-            return;
-        }
-        const event = events[index++];
-        if (event.kind === 'action') {
-            applyRemoteAction(event.action);
-            replayPlaybackTimer = window.setTimeout(step, event.action?.type === 'skip' ? 220 : 520);
-            return;
-        }
-        if (event.kind === 'result' || event.kind === 'win' || event.kind === 'forfeit') {
-            replayPlaybackActive = false;
-            renderGameOverSummary(activeMatchSummaryView);
-            document.getElementById('game-over-overlay')?.classList.remove('hidden');
-            return;
-        }
-        replayPlaybackTimer = window.setTimeout(step, 100);
-    };
+    withReplayRenderState(snapshot, () => {
+        renderBoard({
+            boardId: 'replay-board',
+            mapName: snapshot.activeMap || activeMap,
+            viewerPlayerOverride: snapshot.viewerPlayer || 1,
+            updateLinkedPanels: false,
+            interactive: false
+        });
+    });
+}
 
-    step();
+function closeReplayViewer() {
+    replayPlaybackActive = false;
+    replayViewerOpen = false;
+    replayViewerEntry = null;
+    replayViewerSnapshots = [];
+    replayViewerIndex = 0;
+    document.getElementById('replay-viewer')?.classList.add('hidden');
+    document.getElementById('game-summary-panel')?.classList.remove('hidden');
+    document.getElementById('btn-replay-match')?.classList.remove('hidden');
+    document.getElementById('btn-replay-close')?.classList.add('hidden');
 }
 
 function openMatchHistorySummary(matchEntry) {
@@ -741,6 +767,14 @@ function openMatchHistorySummary(matchEntry) {
     activeMatchSummaryView = summary;
     activeMatchSummaryView.replay = entry.replay_json || null;
     replayPlaybackSource = entry;
+    replayViewerEntry = entry;
+    replayViewerSnapshots = Array.isArray(entry.replay_json?.snapshots) ? entry.replay_json.snapshots.map(hydrateReplaySnapshot) : [];
+    replayViewerIndex = 0;
+    replayPlaybackActive = false;
+    document.getElementById('replay-viewer')?.classList.add('hidden');
+    document.getElementById('game-summary-panel')?.classList.remove('hidden');
+    document.getElementById('btn-replay-match')?.classList.remove('hidden');
+    document.getElementById('btn-replay-close')?.classList.add('hidden');
     renderGameOverSummary(activeMatchSummaryView);
     setGameOverTitle(summary.resultText || 'MATCH SUMMARY', summary.resultText === 'VICTORY' ? 'cyan' : (summary.resultText === 'DEFEAT' ? 'magenta' : 'gold'));
     document.getElementById('game-over-subtitle').textContent = summary.resultText === 'DRAW'
@@ -749,7 +783,7 @@ function openMatchHistorySummary(matchEntry) {
     document.getElementById('game-over-overlay')?.classList.remove('hidden');
     const replayBtn = document.getElementById('btn-replay-match');
     if (replayBtn) {
-        replayBtn.disabled = !(entry.replay_json?.events?.length);
+        replayBtn.disabled = !(entry.replay_json?.snapshots?.length);
     }
 }
 
@@ -1155,7 +1189,7 @@ function renderMatchHistory(matches = [], state = {}) {
                                 <span>${durationText}</span>
                                 <span>${outcomeLine}${surrenderText}</span>
                             </div>
-                            <div class="match-history-footer">${entry.replay_json ? 'REPLAY AVAILABLE' : 'SUMMARY ONLY'}</div>
+                            <div class="match-history-footer">${entry.replay_json?.snapshots?.length ? 'REPLAY AVAILABLE' : 'SUMMARY ONLY'}</div>
                         </article>
                     `;
                 }).join('')}
@@ -1735,6 +1769,219 @@ function syncAbilitySelectOptions() {
     });
 }
 
+function serializeReplayFlag(flag) {
+    if (!flag) return null;
+    return {
+        id: flag.id,
+        player: flag.player,
+        map: flag.map,
+        row: flag.row,
+        col: flag.col,
+        ability: flag.ability
+    };
+}
+
+function serializeReplayCell(cell) {
+    return {
+        isWall: Boolean(cell?.isWall),
+        isTeleport: Boolean(cell?.isTeleport),
+        isCoreTile: Boolean(cell?.isCoreTile),
+        unitId: cell?.unit?.id || null,
+        flag: serializeReplayFlag(cell?.flag),
+        flags: Array.isArray(cell?.flags) ? cell.flags.map(serializeReplayFlag).filter(Boolean) : []
+    };
+}
+
+function serializeReplayUnit(unit) {
+    if (!unit) return null;
+    return {
+        id: unit.id,
+        type: unit.type,
+        player: unit.player,
+        map: unit.map,
+        row: unit.row,
+        col: unit.col,
+        isFrontline: Boolean(unit.isFrontline),
+        inspirationTurns: unit.inspirationTurns || 0,
+        warPrincessKills: unit.warPrincessKills || 0,
+        warPrincessTeiPromoted: Boolean(unit.warPrincessTeiPromoted),
+        warPrincessHeiPromoted: Boolean(unit.warPrincessHeiPromoted),
+        camouflaged: Boolean(unit.camouflaged),
+        veteranMomentumPenalty: Boolean(unit.veteranMomentumPenalty),
+        carryingFlagPlayer: unit.carryingFlagPlayer || null,
+        carryingFlagAbility: unit.carryingFlagAbility || null,
+        flagSurvivalTurns: unit.flagSurvivalTurns || 0
+    };
+}
+
+function serializeReplayVision(vision = {}) {
+    return {
+        area1: Array.from(vision.area1 || []),
+        area2: Array.from(vision.area2 || []),
+        area3: Array.from(vision.area3 || [])
+    };
+}
+
+function serializeReplaySnapshot(label = null) {
+    return {
+        label: label || `TURN ${gameTurn}`,
+        turn: gameTurn,
+        currentPlayer,
+        actionsThisTurn,
+        activeMap,
+        viewerPlayer: getViewerPlayer(),
+        gameMode,
+        p1Ability,
+        p2Ability,
+        p1Vision: serializeReplayVision(p1Vision),
+        p2Vision: serializeReplayVision(p2Vision),
+        actedUnitIds: Array.from(actedUnitIds || []),
+        boards: Object.fromEntries(Object.entries(boards).map(([mapName, rows]) => [
+            mapName,
+            rows.map(row => row.map(cell => serializeReplayCell(cell)))
+        ])),
+        units: units.map(serializeReplayUnit).filter(Boolean)
+    };
+}
+
+function hydrateReplayFlag(flag) {
+    if (!flag) return null;
+    return {
+        id: flag.id,
+        player: flag.player,
+        map: flag.map,
+        row: flag.row,
+        col: flag.col,
+        ability: flag.ability
+    };
+}
+
+function hydrateReplayVision(vision = {}) {
+    return {
+        area1: new Set(vision.area1 || []),
+        area2: new Set(vision.area2 || []),
+        area3: new Set(vision.area3 || [])
+    };
+}
+
+function hydrateReplayUnit(raw) {
+    if (!raw) return null;
+    const unit = new Unit(raw.id, raw.type, raw.player, raw.map, raw.row, raw.col, raw.isFrontline);
+    Object.assign(unit, raw);
+    return unit;
+}
+
+function hydrateReplaySnapshot(snapshot = {}) {
+    const unitsList = (snapshot.units || []).map(hydrateReplayUnit).filter(Boolean);
+    const unitsById = new Map(unitsList.map(unit => [unit.id, unit]));
+    const boardState = {};
+    Object.keys(MAP_SIZES).forEach(mapName => {
+        const sourceRows = snapshot.boards?.[mapName] || [];
+        if (!sourceRows.length) {
+            const size = MAP_SIZES[mapName];
+            boardState[mapName] = Array.from({ length: size.rows }, (_, rowIndex) => (
+                Array.from({ length: size.cols }, (_, colIndex) => ({
+                    row: rowIndex,
+                    col: colIndex,
+                    isWall: false,
+                    isTeleport: false,
+                    isCoreTile: false,
+                    unit: null,
+                    flag: null,
+                    flags: []
+                }))
+            ));
+            return;
+        }
+        boardState[mapName] = sourceRows.map((row, rowIndex) => row.map((cell, colIndex) => {
+            const flags = Array.isArray(cell.flags) ? cell.flags.map(hydrateReplayFlag).filter(Boolean) : [];
+            const fallbackFlag = cell.flag ? hydrateReplayFlag(cell.flag) : null;
+            const combinedFlags = flags.length ? flags : (fallbackFlag ? [fallbackFlag] : []);
+            return {
+                row: rowIndex,
+                col: colIndex,
+                isWall: Boolean(cell.isWall),
+                isTeleport: Boolean(cell.isTeleport),
+                isCoreTile: Boolean(cell.isCoreTile),
+                unit: cell.unitId ? (unitsById.get(cell.unitId) || null) : null,
+                flag: combinedFlags[combinedFlags.length - 1] || null,
+                flags: combinedFlags
+            };
+        }));
+    });
+
+    return {
+        ...snapshot,
+        activeMap: snapshot.activeMap || 'area1',
+        viewerPlayer: Number(snapshot.viewerPlayer) === 2 ? 2 : 1,
+        gameMode: snapshot.gameMode || 'debug',
+        boards: boardState,
+        units: unitsList,
+        p1Vision: hydrateReplayVision(snapshot.p1Vision),
+        p2Vision: hydrateReplayVision(snapshot.p2Vision),
+        actedUnitIds: new Set(snapshot.actedUnitIds || [])
+    };
+}
+
+function withReplayRenderState(snapshotState, callback) {
+    const saved = {
+        boards,
+        units,
+        activeMap,
+        currentPlayer,
+        gameTurn,
+        actionsThisTurn,
+        actedUnitIds,
+        p1Vision,
+        p2Vision,
+        p1Ability,
+        p2Ability,
+        gameMode
+    };
+
+    boards = snapshotState.boards;
+    units = snapshotState.units;
+    activeMap = snapshotState.activeMap;
+    currentPlayer = snapshotState.currentPlayer;
+    gameTurn = snapshotState.turn || snapshotState.gameTurn || gameTurn;
+    actionsThisTurn = Number(snapshotState.actionsThisTurn || 0);
+    actedUnitIds = snapshotState.actedUnitIds instanceof Set ? new Set(snapshotState.actedUnitIds) : new Set(snapshotState.actedUnitIds || []);
+    p1Vision = snapshotState.p1Vision;
+    p2Vision = snapshotState.p2Vision;
+    p1Ability = snapshotState.p1Ability || p1Ability;
+    p2Ability = snapshotState.p2Ability || p2Ability;
+    gameMode = snapshotState.gameMode || gameMode;
+
+    try {
+        callback();
+    } finally {
+        boards = saved.boards;
+        units = saved.units;
+        activeMap = saved.activeMap;
+        currentPlayer = saved.currentPlayer;
+        gameTurn = saved.gameTurn;
+        actionsThisTurn = saved.actionsThisTurn;
+        actedUnitIds = saved.actedUnitIds;
+        p1Vision = saved.p1Vision;
+        p2Vision = saved.p2Vision;
+        p1Ability = saved.p1Ability;
+        p2Ability = saved.p2Ability;
+        gameMode = saved.gameMode;
+    }
+}
+
+function recordMatchReplaySnapshot(label = null) {
+    if (replayPlaybackActive) return;
+    if (!currentMatchReplay) currentMatchReplay = createMatchReplayBase();
+    currentMatchReplay.snapshots = currentMatchReplay.snapshots || [];
+    currentMatchReplay.snapshots.push(serializeReplaySnapshot(label));
+}
+
+function getReplayEntrySnapshots(entry) {
+    const replay = entry?.replay_json || entry?.replayJson || null;
+    return Array.isArray(replay?.snapshots) ? replay.snapshots : [];
+}
+
 function setDevelopModeEnabled(enabled) {
     developModeEnabled = enabled;
     syncAbilitySelectOptions();
@@ -1812,11 +2059,17 @@ function setupUIEventListeners() {
     if (replayMatchBtn) replayMatchBtn.addEventListener('click', () => {
         const source = replayPlaybackSource || activeMatchSummaryView;
         const replay = source?.replay || source?.replay_json;
-        if (!replay?.events?.length) {
+        if (!replay?.snapshots?.length) {
             showStatusAlert('リプレイデータがありません。', 'warning', 2500);
             return;
         }
         startReplayPlayback(source);
+    });
+    const replayCloseBtn = document.getElementById('btn-replay-close');
+    if (replayCloseBtn) replayCloseBtn.addEventListener('click', closeReplayViewer);
+    const replaySlider = document.getElementById('replay-slider');
+    if (replaySlider) replaySlider.addEventListener('input', (event) => {
+        renderReplaySnapshot(Number(event.target.value || 0));
     });
     document.getElementById('btn-cancel-dir').addEventListener('click', () => {
         document.getElementById('direction-overlay').classList.add('hidden');
@@ -3086,6 +3339,7 @@ function startGame(config = null, fromOnline = false) {
     switchActiveMap(getViewerPlayer() === 2 ? 'area3' : 'area1');
     renderBoard();
     updateUI();
+    recordMatchReplaySnapshot('TURN START');
     window.clearTimeout(matchIntroTimer);
     matchIntroTimer = null;
     if (onlineMode && fromOnline && !replayPlaybackActive && !reusePreview) {
@@ -3742,22 +3996,33 @@ function saveTurnVision() {
 }
 
 // --- BOARD RENDERER ---
-function renderBoard() {
-    const boardEl = document.getElementById('board');
+function renderBoard(options = {}) {
+    const {
+        boardId = 'board',
+        mapName = activeMap,
+        viewerPlayerOverride = null,
+        updateLinkedPanels = true,
+        interactive = true
+    } = options;
+    const boardEl = document.getElementById(boardId);
+    if (!boardEl) return;
     boardEl.innerHTML = '';
-    const viewerPlayer = getViewerPlayer();
-    boardEl.className = `board-map-${activeMap} viewer-player-${viewerPlayer}`;
+    const viewerPlayer = viewerPlayerOverride || getViewerPlayer();
+    boardEl.className = `board-map-${mapName} viewer-player-${viewerPlayer}`;
 
-    const size = MAP_SIZES[activeMap];
+    const size = MAP_SIZES[mapName];
     boardEl.style.gridTemplateColumns = `repeat(${size.cols}, 1fr)`;
     boardEl.style.gridTemplateRows = `repeat(${size.rows}, 1fr)`;
-    document.getElementById('game-board-wrapper').style.aspectRatio = `${size.cols} / ${size.rows}`;
+    const wrapper = boardId === 'board'
+        ? document.getElementById('game-board-wrapper')
+        : document.getElementById('replay-board-wrapper');
+    if (wrapper) wrapper.style.aspectRatio = `${size.cols} / ${size.rows}`;
 
-    const activeVision = viewerPlayer === 1 ? p1Vision[activeMap] : p2Vision[activeMap];
+    const activeVision = viewerPlayer === 1 ? p1Vision[mapName] : p2Vision[mapName];
 
     for (let r = 0; r < size.rows; r++) {
         for (let c = 0; c < size.cols; c++) {
-            const cellData = boards[activeMap][r][c];
+            const cellData = boards[mapName][r][c];
             const coordStr = `${r},${c}`;
 
             const cellEl = document.createElement('div');
@@ -3815,13 +4080,17 @@ function renderBoard() {
                 }
             }
 
-            cellEl.addEventListener('click', () => handleCellClick(r, c));
+            if (interactive) {
+                cellEl.addEventListener('click', () => handleCellClick(r, c));
+            }
             boardEl.appendChild(cellEl);
         }
     }
 
-    updateTabIndicators();
-    renderMinimaps();
+    if (updateLinkedPanels && boardId === 'board') {
+        updateTabIndicators();
+        renderMinimaps();
+    }
 }
 
 function updateTabIndicators() {
@@ -4588,6 +4857,7 @@ function endTurn() {
     calculateVisibility();
     renderBoard();
     updateUI();
+    recordMatchReplaySnapshot(`TURN ${gameTurn}`);
 
     const playerName = currentPlayer === 1 ? "PLAYER 1" : "PLAYER 2";
     const logColor = currentPlayer === 1 ? 'p1' : 'p2';
@@ -4674,6 +4944,7 @@ function triggerWin(winnerId, fromOnline = false, reason = 'core') {
         : buildMatchSummary(reason, winnerId);
     summary.replay = summary.replay || currentMatchReplay;
     activeMatchSummaryView = summary;
+    recordMatchReplaySnapshot('MATCH END');
 
     if (viewerWon) {
         setGameOverTitle('VICTORY', winnerId === 1 ? 'cyan' : 'magenta');
@@ -4719,6 +4990,7 @@ function triggerDraw(fromOnline = false, reason = 'mutual') {
         : buildMatchSummary('draw', null);
     summary.replay = summary.replay || currentMatchReplay;
     activeMatchSummaryView = summary;
+    recordMatchReplaySnapshot('MATCH DRAW');
 
     setGameOverTitle('DRAW', 'gold');
     subtitleEl.textContent = reason === 'mutual'
@@ -4772,6 +5044,10 @@ function resetToSetup(fromOnline = false) {
     replayPlaybackTimer = null;
     replayPlaybackSource = null;
     replayPlaybackRunId++;
+    replayViewerSnapshots = [];
+    replayViewerIndex = 0;
+    replayViewerEntry = null;
+    replayViewerOpen = false;
     window.clearTimeout(matchIntroTimer);
     matchIntroTimer = null;
     document.getElementById('match-intro-overlay')?.classList.add('hidden');

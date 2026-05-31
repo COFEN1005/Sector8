@@ -681,8 +681,25 @@
                         </section>
                     </div>
                 </div>
+                <div id="replay-viewer" class="replay-viewer hidden">
+                    <div class="replay-viewer-header">
+                        <div class="replay-viewer-tag">REPLAY MODE</div>
+                        <div id="replay-turn-label" class="replay-viewer-turn">TURN 1 / PLAYER 1</div>
+                    </div>
+                    <div id="replay-board-wrapper" class="replay-board-wrapper">
+                        <div id="replay-board" class="board replay-board"></div>
+                    </div>
+                    <div class="replay-controls">
+                        <input id="replay-slider" class="replay-slider" type="range" min="0" max="0" value="0" step="1" />
+                        <div class="replay-meta-row">
+                            <span id="replay-snapshot-label">TURN 1</span>
+                            <span id="replay-snapshot-count">1 / 1</span>
+                        </div>
+                    </div>
+                </div>
                 <div class="modal-buttons">
                     <button id="btn-replay-match" class="neon-btn secondary" type="button">REPLAY</button>
+                    <button id="btn-replay-close" class="neon-btn secondary hidden" type="button">SUMMARY</button>
                     <button id="btn-restart" class="neon-btn">RELOAD SYSTEM</button>
                 </div>
             </div>
