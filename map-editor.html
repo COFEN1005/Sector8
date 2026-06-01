@@ -15,7 +15,7 @@
             <div class="editor-header-copy">
                 <div class="editor-kicker">SECTOR-8 / MAP LAB</div>
                 <h1>固定マップエディタ</h1>
-                <p>固定マップ用の編集画面です。壁・テレポート・コアに加えて、高低差もここで見える化して書き出せます。ランダム生成は使わず、固定マップだけを作る前提で組んでいます。</p>
+                <p>3つのエリアを縦に並べて編集する固定マップ専用の画面です。高低差は 0 / 1 の2段階、テレポートは自動採番の2点1組で管理し、エリアをまたぐ接続も線で見えるようにしています。</p>
             </div>
             <div class="editor-header-actions">
                 <button id="btn-new-preset" class="editor-btn secondary" type="button">NEW</button>
@@ -29,12 +29,13 @@
         <main class="editor-layout">
             <aside class="editor-panel glass-panel">
                 <section class="editor-block">
-                    <h2>MAP</h2>
+                    <h2>AREA FOCUS</h2>
                     <div class="tab-row">
-                        <button class="map-tab active" data-map="area1" type="button">AREA 1</button>
-                        <button class="map-tab" data-map="area2" type="button">AREA 2</button>
-                        <button class="map-tab" data-map="area3" type="button">AREA 3</button>
+                        <button class="map-tab active" data-focus-map="area1" type="button">AREA 1</button>
+                        <button class="map-tab" data-focus-map="area2" type="button">AREA 2</button>
+                        <button class="map-tab" data-focus-map="area3" type="button">AREA 3</button>
                     </div>
+                    <p class="help-text">縦に並んだ3エリアをそのまま編集できます。ボードを押すとその場所がフォーカスされます。</p>
                 </section>
 
                 <section class="editor-block">
@@ -45,29 +46,23 @@
                         <button class="tool-btn" data-tool="core" type="button">CORE</button>
                         <button class="tool-btn" data-tool="erase" type="button">ERASE</button>
                     </div>
-                    <p class="help-text">地形を置くときのブラシです。高低差とは独立して編集できます。</p>
+                    <p class="help-text">壁・テレポート・コアを置くためのブラシです。テレポートは 2 点1組で自動採番されます。</p>
                 </section>
 
                 <section class="editor-block">
-                    <h2>TELEPORT SYNC</h2>
-                    <div class="teleport-grid">
-                        <button class="teleport-btn active" data-teleport-group="1" type="button">T1</button>
-                        <button class="teleport-btn" data-teleport-group="2" type="button">T2</button>
-                        <button class="teleport-btn" data-teleport-group="3" type="button">T3</button>
-                        <button class="teleport-btn" data-teleport-group="4" type="button">T4</button>
-                        <button class="teleport-btn" data-teleport-group="5" type="button">T5</button>
-                        <button class="teleport-btn" data-teleport-group="6" type="button">T6</button>
-                        <button class="teleport-btn" data-teleport-group="7" type="button">T7</button>
-                        <button class="teleport-btn" data-teleport-group="8" type="button">T8</button>
+                    <h2>TELEPORT</h2>
+                    <div class="teleport-info">
+                        <div><span>PAIR</span><strong id="teleport-pair-label">T1</strong></div>
+                        <div><span>NEXT</span><strong id="teleport-next-label">T1</strong></div>
                     </div>
-                    <p class="help-text">テレポートは 2 点 1 組です。置いた順に自動で番号が振られ、盤面では番号と線で見えるようにしています。</p>
+                    <p class="help-text">同じ番号の2点がひと組です。片方を消すと、同じ番号の相方もまとめて消えます。</p>
                 </section>
 
                 <section class="editor-block">
                     <h2>HEIGHT</h2>
                     <div class="height-grid">
                         <button class="height-btn active" data-height="0" type="button">H0 FLAT</button>
-                        <button class="height-btn" data-height="1" type="button">H1 LOW</button>
+                        <button class="height-btn" data-height="1" type="button">H1 HIGH</button>
                     </div>
                     <div class="height-legend">
                         <span><i class="legend-swatch h0"></i>FLAT</span>
@@ -82,7 +77,7 @@
                         <button class="target-btn active" data-apply-mode="both" type="button">BOTH</button>
                         <button class="target-btn" data-apply-mode="height" type="button">HEIGHT</button>
                     </div>
-                    <p class="help-text">`BOTH` なら地形と高さを同時に塗ります。`HEIGHT` だけにすると地形を残して高低差だけ調整できます。</p>
+                    <p class="help-text">`BOTH` なら地形と高さを同時に塗ります。`HEIGHT` だけなら地形を残して段差だけ変えられます。</p>
                 </section>
 
                 <section class="editor-block stats-grid">
@@ -111,18 +106,51 @@
 
             <section class="editor-stage glass-panel">
                 <div class="stage-head">
-                    <div id="active-map-label" class="stage-label">AREA 1</div>
-                    <div id="status-line" class="status-line">固定マップを編集できます</div>
+                    <div>
+                        <div class="stage-label">VERTICAL MAP STACK</div>
+                        <div id="status-line" class="status-line">3つのエリアを上下に並べて編集できます</div>
+                    </div>
+                    <div class="height-summary">
+                        <span><i class="summary-swatch h0"></i>H0</span>
+                        <span><i class="summary-swatch h1"></i>H1</span>
+                    </div>
                 </div>
 
-                <div class="height-summary">
-                    <span><i class="summary-swatch h0"></i>H0</span>
-                    <span><i class="summary-swatch h1"></i>H1</span>
-                </div>
-
-                <div id="board-wrap" class="board-wrap">
+                <div id="map-stack" class="map-stack">
                     <svg id="teleport-link-layer" class="teleport-link-layer" aria-hidden="true"></svg>
-                    <div id="board" class="editor-board" aria-label="map editor board"></div>
+
+                    <section class="map-card active" data-map-card="area1">
+                        <div class="map-card-head">
+                            <div>
+                                <div class="map-card-kicker">AREA 1</div>
+                                <div class="map-card-sub">AREA 2 の下側ポータルにつながる上層エリア</div>
+                            </div>
+                            <button class="map-focus-btn" data-focus-map="area1" type="button">FOCUS</button>
+                        </div>
+                        <div id="board-area1" class="editor-board map-board" data-map-board="area1" aria-label="area1 map board"></div>
+                    </section>
+
+                    <section class="map-card" data-map-card="area2">
+                        <div class="map-card-head">
+                            <div>
+                                <div class="map-card-kicker">AREA 2</div>
+                                <div class="map-card-sub">上側と下側の両方に接続を持つ中継エリア</div>
+                            </div>
+                            <button class="map-focus-btn" data-focus-map="area2" type="button">FOCUS</button>
+                        </div>
+                        <div id="board-area2" class="editor-board map-board" data-map-board="area2" aria-label="area2 map board"></div>
+                    </section>
+
+                    <section class="map-card" data-map-card="area3">
+                        <div class="map-card-head">
+                            <div>
+                                <div class="map-card-kicker">AREA 3</div>
+                                <div class="map-card-sub">AREA 2 の上側ポータルにつながる終端エリア</div>
+                            </div>
+                            <button class="map-focus-btn" data-focus-map="area3" type="button">FOCUS</button>
+                        </div>
+                        <div id="board-area3" class="editor-board map-board" data-map-board="area3" aria-label="area3 map board"></div>
+                    </section>
                 </div>
 
                 <div class="hint-row">
@@ -130,7 +158,7 @@
                     <span>2: TELEPORT</span>
                     <span>3: CORE</span>
                     <span>4: ERASE</span>
-                    <span>5-8: H0-H3</span>
+                    <span>5-6: H0 / H1</span>
                     <span>CTRL+Z / CTRL+Y</span>
                 </div>
             </section>

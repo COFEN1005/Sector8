@@ -3896,11 +3896,9 @@ function getMonitorPenalty(unit) {
 }
 
 function canScoutRevealCamouflage(viewerPlayer, mapName, row, col) {
-    return units.some(unit =>
-        unit.player === viewerPlayer &&
-        unit.type === 'scout' &&
-        isCellWithinUnitVision(unit, mapName, row, col)
-    );
+    // 迷彩は通常の視界では偵察兵にも見せない。
+    // ワープ候補の特別表示は getScoutWarpTargets 側で行う。
+    return false;
 }
 
 function isUnitVisibleToViewer(unit, viewerPlayer, activeVisionSet) {
@@ -3909,7 +3907,7 @@ function isUnitVisibleToViewer(unit, viewerPlayer, activeVisionSet) {
     if (unit.player === viewerPlayer) return true;
     if (!activeVisionSet.has(`${unit.row},${unit.col}`)) return false;
     if (!unit.camouflaged) return true;
-    return canScoutRevealCamouflage(viewerPlayer, unit.map, unit.row, unit.col);
+    return false;
 }
 
 function maybeClearCamouflageAfterMove(unit) {
@@ -4345,8 +4343,17 @@ function getScoutWarpTargets(scout) {
 
     for (let r = 0; r < size.rows; r++) {
         for (let c = 0; c < size.cols; c++) {
-            if (boards[map][r][c].isWall) continue;
-            if (boards[map][r][c].unit) continue;
+            const cell = boards[map][r][c];
+            const occupant = cell.unit;
+            if (cell.isWall) continue;
+
+            if (occupant) {
+                if (occupant.player !== scout.player && occupant.camouflaged && activeVision.has(`${r},${c}`)) {
+                    valid.push({ row: r, col: c, type: 'ability', camouflagedTarget: true });
+                }
+                continue;
+            }
+
             if (activeVision.has(`${r},${c}`)) {
                 valid.push({ row: r, col: c, type: 'ability' });
             }
@@ -4498,7 +4505,10 @@ function selectActionType(type) {
             const warps = getScoutWarpTargets(selectedUnit);
             warps.forEach(w => {
                 const el = document.querySelector(`.cell[data-row="${w.row}"][data-col="${w.col}"]`);
-                if (el) el.classList.add('highlight-ability');
+                if (el) {
+                    el.classList.add('highlight-ability');
+                    if (w.camouflagedTarget) el.classList.add('camouflage-target');
+                }
             });
         } else if (selectedUnit.type === 'koh') {
             const abilityName = currentPlayer === 1 ? p1Ability : p2Ability;
@@ -4665,6 +4675,25 @@ function executeAbility(unit, destRow, destCol) {
 
     if (unit.type === 'scout') {
         const startRow = unit.row, startCol = unit.col;
+        const targetCell = boards[map][destRow][destCol];
+        const targetOccupant = targetCell.unit;
+
+        if (targetOccupant) {
+            if (targetOccupant.player === unit.player) {
+                addConsoleLog(`ERROR: ワープ先に味方ユニットがいるため移動できません。`, 'error');
+                return;
+            }
+
+            if (!targetOccupant.camouflaged) {
+                addConsoleLog(`ERROR: ワープ先にユニットがいるため移動できません。`, 'error');
+                return;
+            }
+
+            addConsoleLog(`ABILITY: 偵察兵のワープ先に潜んでいた ${targetOccupant.name} を撃破！`, 'destroy');
+            captureUnit(targetOccupant, unit.player);
+            if (isGameOver) return;
+        }
+
         boards[map][startRow][startCol].unit = null;
         boards[map][destRow][destCol].unit = unit;
         unit.row = destRow; unit.col = destCol;
