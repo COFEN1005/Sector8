@@ -166,14 +166,60 @@ function normalizeGrid(source) {
                 grid[row][col] = normalizeCell(sourceRow[col]);
             }
         }
-        return grid;
-    }
-
-    if (source && typeof source === 'object' && Array.isArray(source.cells)) {
+    } else if (source && typeof source === 'object' && Array.isArray(source.cells)) {
         return normalizeGrid(source.cells);
     }
 
+    if (hasInvalidTeleportGrouping(grid)) {
+        rebalanceTeleportPairs(grid);
+    }
+
     return grid;
+}
+
+function hasInvalidTeleportGrouping(grid) {
+    const counts = new Map();
+    let hasTeleport = false;
+    let hasMissingGroup = false;
+
+    for (const row of grid) {
+        for (const cell of row) {
+            if (cell.terrain !== 'teleport') continue;
+            hasTeleport = true;
+            if (!cell.teleportGroup) {
+                hasMissingGroup = true;
+            }
+            const group = cell.teleportGroup || 0;
+            counts.set(group, (counts.get(group) || 0) + 1);
+        }
+    }
+
+    if (!hasTeleport) return false;
+    if (hasMissingGroup) return true;
+    for (const [group, count] of counts.entries()) {
+        if (!group || count > 2) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function rebalanceTeleportPairs(grid) {
+    let nextGroup = 1;
+    let slot = 0;
+
+    for (let row = 0; row < grid.length; row += 1) {
+        for (let col = 0; col < grid[row].length; col += 1) {
+            const cell = grid[row][col];
+            if (cell.terrain !== 'teleport') continue;
+            cell.teleportGroup = nextGroup;
+            slot += 1;
+            if (slot >= 2) {
+                slot = 0;
+                nextGroup += 1;
+            }
+        }
+    }
 }
 
 function loadState() {
@@ -206,7 +252,7 @@ function normalizeState(raw) {
     }
 
     if (Number.isFinite(Number(raw.activeTeleportGroup))) {
-        next.activeTeleportGroup = clamp(Math.trunc(Number(raw.activeTeleportGroup)), 1, 8);
+        next.activeTeleportGroup = Math.max(1, Math.trunc(Number(raw.activeTeleportGroup)));
     }
 
     if (VALID_APPLY_MODES.has(raw.applyMode)) {
@@ -251,6 +297,41 @@ function saveState() {
 
 function getCell(mapName, row, col) {
     return state.maps[mapName]?.[row]?.[col] || null;
+}
+
+function getTeleportGroupCounts(mapName) {
+    const counts = new Map();
+    const map = state.maps[mapName];
+    if (!map) return counts;
+
+    for (const row of map) {
+        for (const cell of row) {
+            if (cell.terrain !== 'teleport') continue;
+            const group = Number(cell.teleportGroup) || 0;
+            counts.set(group, (counts.get(group) || 0) + 1);
+        }
+    }
+
+    return counts;
+}
+
+function allocateTeleportGroup(mapName, preferredGroup) {
+    const counts = getTeleportGroupCounts(mapName);
+    const preferred = Number(preferredGroup) || 1;
+    if ((counts.get(preferred) || 0) < 2) {
+        return preferred;
+    }
+
+    let candidate = 1;
+    const maxExisting = Math.max(0, ...Array.from(counts.keys()).filter(Boolean));
+    const upperBound = Math.max(maxExisting, preferred) + 1;
+    for (; candidate <= upperBound; candidate += 1) {
+        if ((counts.get(candidate) || 0) < 2) {
+            return candidate;
+        }
+    }
+
+    return upperBound;
 }
 
 function isTeleportSlot(mapName, row, col) {
@@ -317,7 +398,7 @@ function getMapStats(mapName) {
     }
 
     teleportGroups.forEach((count, group) => {
-        if (!group || count > 2) {
+        if (!group || count !== 2) {
             stats.warnings += 1;
         }
     });
@@ -379,7 +460,7 @@ function setActiveHeight(height) {
 }
 
 function setActiveTeleportGroup(group) {
-    state.activeTeleportGroup = clamp(Number(group) || 1, 1, 8);
+    state.activeTeleportGroup = Math.max(1, Math.trunc(Number(group) || 1));
     saveState();
     renderToolbar();
     renderStatus();
@@ -415,9 +496,12 @@ function paintCell(row, col) {
     const nextHeight = state.applyMode !== 'terrain'
         ? clamp(state.activeHeight, 0, MAX_HEIGHT)
         : cell.height;
-    const nextTeleportGroup = state.applyMode !== 'terrain'
-        ? cell.teleportGroup
-        : (state.activeTool === 'teleport' ? state.activeTeleportGroup : null);
+    let nextTeleportGroup = cell.teleportGroup;
+    if (state.applyMode !== 'height' && nextTerrain === 'teleport') {
+        nextTeleportGroup = allocateTeleportGroup(state.activeMap, state.activeTeleportGroup);
+    } else if (state.applyMode !== 'height' && nextTerrain !== 'teleport') {
+        nextTeleportGroup = null;
+    }
 
     const changed = cell.terrain !== nextTerrain
         || cell.height !== nextHeight
@@ -431,13 +515,14 @@ function paintCell(row, col) {
 
     if (state.applyMode !== 'height') {
         cell.terrain = nextTerrain;
-        cell.teleportGroup = nextTerrain === 'teleport' ? state.activeTeleportGroup : null;
+        cell.teleportGroup = nextTeleportGroup;
     }
     if (state.applyMode !== 'terrain') {
         cell.height = nextHeight;
     }
-    if (state.applyMode === 'terrain' && nextTerrain !== 'teleport') {
-        cell.teleportGroup = null;
+
+    if (nextTerrain === 'teleport') {
+        state.activeTeleportGroup = nextTeleportGroup;
     }
 
     saveState();
@@ -591,13 +676,13 @@ function renderTeleportLinks(map) {
             layer.appendChild(circle);
         });
 
-        for (let i = 0; i < points.length - 1; i += 1) {
+        if (points.length === 2) {
             const line = document.createElementNS(svgNS, 'line');
             line.setAttribute('class', 'teleport-link-line');
-            line.setAttribute('x1', String(points[i].x));
-            line.setAttribute('y1', String(points[i].y));
-            line.setAttribute('x2', String(points[i + 1].x));
-            line.setAttribute('y2', String(points[i + 1].y));
+            line.setAttribute('x1', String(points[0].x));
+            line.setAttribute('y1', String(points[0].y));
+            line.setAttribute('x2', String(points[1].x));
+            line.setAttribute('y2', String(points[1].y));
             layer.appendChild(line);
         }
 
