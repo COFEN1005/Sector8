@@ -19,6 +19,7 @@ const CORE_COLS = [4, 5, 6];
 const VALID_TERRAINS = new Set(['wall', 'teleport', 'core']);
 const VALID_APPLY_MODES = new Set(['terrain', 'height', 'both']);
 const STORAGE_KEY = 'sector8-map-editor-v5';
+const PRESET_STORAGE_KEY = 'sector8-fixed-map-preset-v1';
 const MAX_HEIGHT = 1;
 const EXPORT_VERSION = 4;
 
@@ -44,9 +45,11 @@ const dom = {
     btnExportJson: document.getElementById('btn-export-json'),
     btnExportJs: document.getElementById('btn-export-js'),
     btnImport: document.getElementById('btn-import'),
+    btnImportFile: document.getElementById('btn-import-file'),
     btnCopyJson: document.getElementById('btn-copy-json'),
     btnCopyJs: document.getElementById('btn-copy-js'),
     btnDownload: document.getElementById('btn-download'),
+    importFileInput: document.getElementById('import-file-input'),
     boardArea1: document.getElementById('board-area1'),
     boardArea2: document.getElementById('board-area2'),
     boardArea3: document.getElementById('board-area3'),
@@ -331,7 +334,10 @@ function loadState() {
 
 function saveState() {
     try {
+        const preset = serializeExportPayload();
         localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        localStorage.setItem(PRESET_STORAGE_KEY, JSON.stringify(preset));
+        window.SECTOR8_FIXED_MAP_PRESET = preset;
     } catch {
         // ignore storage errors
     }
@@ -911,6 +917,13 @@ async function importFromTextarea() {
     }
 }
 
+async function importFromFile(file) {
+    if (!file) return;
+    const text = await file.text();
+    dom.importText.value = text;
+    await importFromTextarea();
+}
+
 function downloadJson() {
     const payload = serializeExportPayload();
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
@@ -956,6 +969,12 @@ function bindEvents() {
         announce('JS を更新しました');
     });
     dom.btnImport.addEventListener('click', importFromTextarea);
+    dom.btnImportFile.addEventListener('click', () => dom.importFileInput?.click());
+    dom.importFileInput.addEventListener('change', () => {
+        const file = dom.importFileInput.files?.[0] || null;
+        if (file) importFromFile(file).catch(() => announce('ファイルの読み込みに失敗しました'));
+        dom.importFileInput.value = '';
+    });
     dom.btnCopyJson.addEventListener('click', () => copyText(dom.exportJson.value, 'JSON'));
     dom.btnCopyJs.addEventListener('click', () => copyText(dom.exportJs.value, 'JS'));
     dom.btnDownload.addEventListener('click', downloadJson);

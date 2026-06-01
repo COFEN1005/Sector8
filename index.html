@@ -40,6 +40,20 @@
                     <summary class="small-tool-btn">NEWS</summary>
                     <div class="news-menu-panel">
                         <details class="news-item">
+                            <summary>PATCH 0.7.23</summary>
+                            <ul class="news-list">
+                                <li>衛生兵の偵察兵補充を7ターン周期に変更し、右上にターン経過カウンターを表示するよう修正</li>
+                                <li>衛生兵の補充が上限3体で止まっても、カウンターは満了時にリセットされるよう変更</li>
+                                <li>視界外の煙幕マスを非表示にし、見えている範囲だけ煙幕が表示されるよう修正</li>
+                            </ul>
+                        </details>
+                        <details class="news-item">
+                            <summary>PATCH 0.7.22</summary>
+                            <ul class="news-list">
+                                <li>視界外の煙幕マスを非表示にし、見えている範囲だけ煙幕が表示されるよう修正</li>
+                            </ul>
+                        </details>
+                        <details class="news-item">
                             <summary>PATCH 0.7.21</summary>
                             <ul class="news-list">
                                 <li>REPLAY押下時に結果ポップアップを隠し、再生画面だけを前面に出すよう修正</li>
@@ -375,7 +389,7 @@
                                 </div>
                                 <div class="ability-detail-card">
                                     <h4>衛生兵</h4>
-                                    <p>パッシブ型。このコマが生存している間、偵察兵の補充周期は5ターンになり、上限は3体になる。</p>
+                                    <p>パッシブ型。このコマが生存している間、偵察兵の補充周期は7ターンになり、上限は3体になる。補充状況は右上カウンターで確認できる。</p>
                                     <div class="ability-detail-meta"><span>行動範囲: なし</span><span>視界範囲: 甲の基本視界</span></div>
                                 </div>
                                 <div class="ability-detail-card">
@@ -437,7 +451,7 @@
                             <li><strong>爆破</strong>: 発動、パッシブ型。発動した、もしくは死亡時、周囲2マスの壁、敵味方ユニット、軍旗をすべて破壊する。</li>
                             <li><strong>暗殺者</strong>: パッシブ型。敵撃破時、進行方向から1マス戻る。</li>
                             <li><strong>盲目</strong>: 視界1、移動4の盲目コマ。</li>
-                            <li><strong>衛生兵</strong>: パッシブ型。このコマが生存してるなら偵察兵の補給が5ターンに1回になり、偵察兵の上限が3になる。</li>
+                            <li><strong>衛生兵</strong>: パッシブ型。このコマが生存してるなら偵察兵の補給が7ターンに1回になり、偵察兵の上限が3になる。右上カウンターで進行状況を確認できる。</li>
                             <li><strong>監視</strong>: パッシブ型。敵コマがこのコマの視界内にいるなら、そのコマの移動-1。</li>
                             <li><strong>迷彩</strong>: 発動型。スキル使用後、マンハッタン視界1になり、動かない限り敵の視界に表示されない。</li>
                             <li><strong>煙幕</strong>: 発動型。マンハッタン視界3、直線移動4＋正方形移動1。3×3の煙幕を同マップ内の視界内に設置し、煙幕内の敵味方コマを迷彩状態にする。3ターン使えない。</li>
@@ -534,7 +548,18 @@
                                 <button id="btn-dev-apply-minus" class="small-tool-btn" type="button">APPLY -</button>
                                 <button id="btn-dev-delete" class="small-tool-btn danger" type="button">DELETE</button>
                             </div>
+                            <div class="account-hint">MAP SOURCE は初期状態で RANDOM のままです。固定マップを読み込んだときだけ切り替えられます。</div>
+                            <div class="account-actions">
+                                <button id="btn-map-source-random" class="small-tool-btn" type="button">RANDOM MAP</button>
+                                <button id="btn-map-source-fixed" class="small-tool-btn" type="button">FIXED MAP</button>
+                            </div>
+                            <div id="map-source-status" class="account-status">RANDOM MAP MODE</div>
+                            <div class="account-actions">
+                                <button id="btn-load-map-preset" class="small-tool-btn" type="button">LOAD MAP FILE</button>
+                                <button id="btn-clear-map-preset" class="small-tool-btn danger" type="button">CLEAR PRESET</button>
+                            </div>
                             <button id="btn-dev-open-map-editor" class="small-tool-btn" type="button">MAP EDITOR</button>
+                            <input id="map-preset-file-input" type="file" accept="application/json,.json" hidden />
                         </div>
                     </details>
 
@@ -788,7 +813,7 @@
         </div>
     </div>
 
-    <div class="patch-badge">PATCH ver.0.7.21</div>
+    <div class="patch-badge">PATCH ver.0.7.23</div>
     <script>
     // Mode tab switching helper (called from inline onclick)
     function setModeTab(mode) {

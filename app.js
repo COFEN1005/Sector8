@@ -19,11 +19,13 @@ const MAP_SIZES = {
     area2: { rows: 11, cols: 11 },
     area3: { rows: 11, cols: 11 }
 };
+const FIXED_MAP_PRESET_STORAGE_KEY = 'sector8-fixed-map-preset-v1';
+const MAP_SOURCE_STORAGE_KEY = 'sector8-map-source-mode-v1';
 
 const PORTAL_COLS = [0, 1, 9, 10];
 const WALLS_PER_MAP = 12;
 const SCOUT_REINFORCE_INTERVAL = 10;
-const MEDIC_SCOUT_REINFORCE_INTERVAL = 5;
+const MEDIC_SCOUT_REINFORCE_INTERVAL = 7;
 const DEFAULT_SCOUT_LIMIT_PER_PLAYER = 2;
 const MEDIC_SCOUT_LIMIT_PER_PLAYER = 3;
 const ACTIONS_PER_TURN = 2;
@@ -166,6 +168,8 @@ let currentMatchStartedAt = 0;
 let currentMatchStartProfile = null;
 let currentMatchOpponentStartProfile = null;
 let currentMatchRecord = null;
+let mapSourceMode = 'random';
+let fixedMapPreset = null;
 let currentMatchReplay = null;
 let activeMatchSummaryView = null;
 let replayPlaybackActive = false;
@@ -1744,6 +1748,7 @@ class Unit {
         this.carryingFlagPlayer = null;
         this.carryingFlagAbility = null;
         this.flagSurvivalTurns = 0;
+        this.medicScoutReinforceTurns = 0;
 
         this.configureTypeStats(type);
     }
@@ -1820,7 +1825,7 @@ class Unit {
                 '爆破': '【甲特有: 爆破 / 発動・パッシブ型】発動時または死亡時、周囲2マスを完全破壊。',
                 '暗殺者': '【甲特有: 暗殺者 / パッシブ型】直線移動5・直線視界5。敵撃破時、進行方向から1マス戻る。',
                 '盲目': '【甲特有: 盲目 / パッシブ型】マンハッタン移動4、視界1。',
-                '衛生兵': '【甲特有: 衛生兵 / パッシブ型】生存中、偵察兵の補充周期が5ターンになり上限が3になる。',
+                '衛生兵': '【甲特有: 衛生兵 / パッシブ型】生存中、偵察兵の補充周期が7ターンになり上限が3になる。補充状況は甲の右上カウンターで確認できる。',
                 '監視': '【甲特有: 監視 / パッシブ型】周囲正方形視界2・周囲正方形移動1。視界内の敵移動-1。',
                 '迷彩': '【甲特有: 迷彩 / 発動型】使用後はマンハッタン視界1になり、動かない限り敵視界に出ない。',
                 '煙幕': '【甲特有: 煙幕 / 発動型】マンハッタン視界3。直線移動4＋周囲1。3×3の煙幕を設置し、煙幕内の敵味方を迷彩状態にする。'
@@ -1894,6 +1899,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadSavedAuthSession();
     loadSavedOnlineSession();
     loadSavedUiSettings();
+    refreshMapSourceModeFromStorage();
     syncAbilitySelectOptions();
     setupUIEventListeners();
     setupMapTabs();
@@ -1942,6 +1948,11 @@ function getSmokeCooldownRemaining(player) {
 
 function isCellInSmoke(mapName, row, col) {
     return smokeZones.some(zone => zone.map === mapName && zone.cells.some(cell => cell.row === row && cell.col === col));
+}
+
+function shouldShowSmokeTile(mapName, row, col, revealAll, activeVisionSet) {
+    if (revealAll) return true;
+    return Boolean(activeVisionSet && activeVisionSet.has(`${row},${col}`));
 }
 
 function serializeSmokeZone(zone) {
@@ -2091,6 +2102,8 @@ function serializeReplayCell(cell) {
         isWall: Boolean(cell?.isWall),
         isTeleport: Boolean(cell?.isTeleport),
         isCoreTile: Boolean(cell?.isCoreTile),
+        height: Number(cell?.height || 0),
+        teleportGroup: cell?.teleportGroup || null,
         unitId: cell?.unit?.id || null,
         flag: serializeReplayFlag(cell?.flag),
         flags: Array.isArray(cell?.flags) ? cell.flags.map(serializeReplayFlag).filter(Boolean) : []
@@ -2208,17 +2221,19 @@ function hydrateReplaySnapshot(snapshot = {}) {
             const flags = Array.isArray(cell.flags) ? cell.flags.map(hydrateReplayFlag).filter(Boolean) : [];
             const fallbackFlag = cell.flag ? hydrateReplayFlag(cell.flag) : null;
             const combinedFlags = flags.length ? flags : (fallbackFlag ? [fallbackFlag] : []);
-            return {
-                row: rowIndex,
-                col: colIndex,
-                isWall: Boolean(cell.isWall),
-                isTeleport: Boolean(cell.isTeleport),
-                isCoreTile: Boolean(cell.isCoreTile),
-                unit: cell.unitId ? (unitsById.get(cell.unitId) || null) : null,
-                flag: combinedFlags[combinedFlags.length - 1] || null,
-                flags: combinedFlags
-            };
-        }));
+                return {
+                    row: rowIndex,
+                    col: colIndex,
+                    isWall: Boolean(cell.isWall),
+                    isTeleport: Boolean(cell.isTeleport),
+                    isCoreTile: Boolean(cell.isCoreTile),
+                    height: Number(cell.height || 0),
+                    teleportGroup: cell.teleportGroup || null,
+                    unit: cell.unitId ? (unitsById.get(cell.unitId) || null) : null,
+                    flag: combinedFlags[combinedFlags.length - 1] || null,
+                    flags: combinedFlags
+                };
+            }));
     });
     const smokeState = Array.isArray(snapshot.smokeZones) ? snapshot.smokeZones.map(hydrateSmokeZone).filter(Boolean) : [];
 
@@ -2437,6 +2452,39 @@ function setupUIEventListeners() {
     if (openMapEditorBtn) openMapEditorBtn.addEventListener('click', () => {
         window.open('map-editor.html', '_blank', 'noopener');
     });
+    const mapSourceRandomBtn = document.getElementById('btn-map-source-random');
+    if (mapSourceRandomBtn) mapSourceRandomBtn.addEventListener('click', () => {
+        setMapSourceMode('random');
+        showStatusAlert('マップソースを RANDOM に切り替えました。', 'system', 1800);
+    });
+    const mapSourceFixedBtn = document.getElementById('btn-map-source-fixed');
+    if (mapSourceFixedBtn) mapSourceFixedBtn.addEventListener('click', () => {
+        setMapSourceMode('fixed');
+        if (!fixedMapPreset) {
+            showStatusAlert('固定マップがまだ読み込まれていません。', 'warning', 2500);
+        } else {
+            showStatusAlert('マップソースを FIXED に切り替えました。', 'success', 1800);
+        }
+    });
+    const loadMapPresetBtn = document.getElementById('btn-load-map-preset');
+    if (loadMapPresetBtn) loadMapPresetBtn.addEventListener('click', () => {
+        document.getElementById('map-preset-file-input')?.click();
+    });
+    const clearMapPresetBtn = document.getElementById('btn-clear-map-preset');
+    if (clearMapPresetBtn) clearMapPresetBtn.addEventListener('click', () => {
+        saveFixedMapPreset(null);
+        showStatusAlert('固定マップを解除しました。', 'system', 1800);
+    });
+    const mapPresetFileInput = document.getElementById('map-preset-file-input');
+    if (mapPresetFileInput) {
+        mapPresetFileInput.addEventListener('change', () => {
+            const file = mapPresetFileInput.files?.[0] || null;
+            if (file) importMapPresetFromFile(file).catch(() => {
+                showStatusAlert('固定マップの読み込みに失敗しました。', 'warning', 3000);
+            });
+            mapPresetFileInput.value = '';
+        });
+    }
     const saveUsernameBtn = document.getElementById('btn-save-username');
     if (saveUsernameBtn) saveUsernameBtn.addEventListener('click', () => saveUsername());
     const usernameInput = document.getElementById('username-input');
@@ -3091,7 +3139,7 @@ function prepareOnlineMatchPreview(seed = null) {
     initializeAudio();
     initializeBoards();
     initializeUnits();
-    generateRandomWalls(gameSeed);
+    applyMapTerrainForCurrentMode(gameSeed);
     revealAllPreviewVision();
     calculateVisibility();
 
@@ -3647,7 +3695,7 @@ function startGame(config = null, fromOnline = false) {
     if (!reusePreview) {
         initializeBoards();
         initializeUnits();
-        generateRandomWalls(gameSeed);
+        applyMapTerrainForCurrentMode(gameSeed);
     } else {
         hideOnlineMatchPreview();
     }
@@ -3718,12 +3766,13 @@ function initializeBoards() {
                 if (mapName === 'area1' && r === 10 && (c >= 4 && c <= 6)) isCoreTile = true;
                 if (mapName === 'area3' && r === 0 && (c >= 4 && c <= 6)) isCoreTile = true;
 
-                rowCells.push({ row: r, col: c, isWall: false, isTeleport, isCoreTile, unit: null, flag: null, flags: [] });
+                rowCells.push({ row: r, col: c, isWall: false, isTeleport, isCoreTile, height: 0, teleportGroup: null, unit: null, flag: null, flags: [] });
             }
             mapBoard.push(rowCells);
         }
         boards[mapName] = mapBoard;
     });
+    if (shouldUseFixedMap()) applyFixedMapPresetToBoards();
 }
 
 function isNearTeleporter(mapName, row, col) {
@@ -3734,6 +3783,134 @@ function isNearTeleporter(mapName, row, col) {
             [10];
         return portalRows.some(portalRow => Math.max(Math.abs(portalRow - row), Math.abs(portalCol - col)) <= 1);
     });
+}
+
+function normalizeFixedMapPreset(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    const maps = raw.maps && typeof raw.maps === 'object' ? raw.maps : null;
+    if (!maps) return null;
+
+    const normalized = {
+        ...raw,
+        maps: {}
+    };
+
+    MAP_ORDER.forEach(mapName => {
+        const size = MAP_SIZES[mapName];
+        const sourceMap = maps[mapName];
+        const sourceRows = Array.isArray(sourceMap?.cells) ? sourceMap.cells : (Array.isArray(sourceMap) ? sourceMap : []);
+        normalized.maps[mapName] = {
+            rows: size.rows,
+            cols: size.cols,
+            cells: Array.from({ length: size.rows }, (_, row) => (
+                Array.from({ length: size.cols }, (_, col) => {
+                    const rawCell = sourceRows[row]?.[col] || {};
+                    const terrain = ['wall', 'teleport', 'core'].includes(rawCell.terrain) ? rawCell.terrain : null;
+                    return {
+                        terrain,
+                        height: Number.isFinite(Number(rawCell.height)) ? clamp(Math.trunc(Number(rawCell.height)), 0, 1) : 0,
+                        teleportGroup: terrain === 'teleport' ? (Number(rawCell.teleportGroup) > 0 ? Math.trunc(Number(rawCell.teleportGroup)) : null) : null
+                    };
+                })
+            ))
+        };
+    });
+
+    return normalized;
+}
+
+function loadFixedMapPreset() {
+    const fromWindow = normalizeFixedMapPreset(window.SECTOR8_FIXED_MAP_PRESET || window.__SECTOR8_FIXED_MAP_PRESET || null);
+    if (fromWindow) return fromWindow;
+    try {
+        const raw = localStorage.getItem(FIXED_MAP_PRESET_STORAGE_KEY);
+        return normalizeFixedMapPreset(raw ? JSON.parse(raw) : null);
+    } catch {
+        return null;
+    }
+}
+
+function saveFixedMapPreset(preset) {
+    fixedMapPreset = normalizeFixedMapPreset(preset);
+    try {
+        if (fixedMapPreset) {
+            localStorage.setItem(FIXED_MAP_PRESET_STORAGE_KEY, JSON.stringify(fixedMapPreset));
+            window.SECTOR8_FIXED_MAP_PRESET = fixedMapPreset;
+        } else {
+            localStorage.removeItem(FIXED_MAP_PRESET_STORAGE_KEY);
+            delete window.SECTOR8_FIXED_MAP_PRESET;
+        }
+    } catch {}
+    updateMapSourceUI();
+    return fixedMapPreset;
+}
+
+function setMapSourceMode(mode) {
+    mapSourceMode = mode === 'fixed' ? 'fixed' : 'random';
+    try { localStorage.setItem(MAP_SOURCE_STORAGE_KEY, mapSourceMode); } catch {}
+    updateMapSourceUI();
+}
+
+function shouldUseFixedMap() {
+    return mapSourceMode === 'fixed' && Boolean(fixedMapPreset);
+}
+
+function applyFixedMapPresetToBoards() {
+    if (!fixedMapPreset) return false;
+    MAP_ORDER.forEach(mapName => {
+        const mapPreset = fixedMapPreset.maps?.[mapName];
+        if (!mapPreset?.cells) return;
+        for (let r = 0; r < Math.min(MAP_SIZES[mapName].rows, mapPreset.cells.length); r++) {
+            for (let c = 0; c < Math.min(MAP_SIZES[mapName].cols, mapPreset.cells[r].length); c++) {
+                const source = mapPreset.cells[r][c] || {};
+                const cell = boards[mapName][r][c];
+                const terrain = ['wall', 'teleport', 'core'].includes(source.terrain) ? source.terrain : null;
+                cell.isWall = terrain === 'wall';
+                cell.isTeleport = terrain === 'teleport';
+                cell.isCoreTile = terrain === 'core';
+                cell.height = Number.isFinite(Number(source.height)) ? clamp(Math.trunc(Number(source.height)), 0, 1) : 0;
+                cell.teleportGroup = cell.isTeleport && Number(source.teleportGroup) > 0 ? Math.trunc(Number(source.teleportGroup)) : null;
+            }
+        }
+    });
+    return true;
+}
+
+function refreshMapSourceModeFromStorage() {
+    try {
+        const savedMode = localStorage.getItem(MAP_SOURCE_STORAGE_KEY);
+        mapSourceMode = savedMode === 'fixed' ? 'fixed' : 'random';
+    } catch {
+        mapSourceMode = 'random';
+    }
+    fixedMapPreset = loadFixedMapPreset();
+    updateMapSourceUI();
+}
+
+function updateMapSourceUI() {
+    const randomBtn = document.getElementById('btn-map-source-random');
+    const fixedBtn = document.getElementById('btn-map-source-fixed');
+    const status = document.getElementById('map-source-status');
+    if (randomBtn) randomBtn.classList.toggle('active', mapSourceMode === 'random');
+    if (fixedBtn) fixedBtn.classList.toggle('active', mapSourceMode === 'fixed');
+    if (status) {
+        status.textContent = mapSourceMode === 'fixed'
+            ? (fixedMapPreset ? 'FIXED MAP READY' : 'FIXED MAP NOT LOADED')
+            : 'RANDOM MAP MODE';
+    }
+}
+
+async function importMapPresetFromFile(file) {
+    if (!file) return;
+    const text = await file.text();
+    const parsed = JSON.parse(text);
+    const saved = saveFixedMapPreset(parsed);
+    if (!saved) {
+        showStatusAlert('固定マップの読み込みに失敗しました。', 'warning', 3000);
+        return;
+    }
+    setMapSourceMode('fixed');
+    showStatusAlert('固定マップを読み込みました。', 'success', 2500);
 }
 
 // --- UNIT INITIALIZATION ---
@@ -3890,6 +4067,14 @@ function isMapConnected(mapName) {
 function generateRandomWalls(seed) {
     placeSymmetricWalls('area1', seed + 9973, ['area3']);
     placeSymmetricWalls('area2', seed + 19946);
+}
+
+function applyMapTerrainForCurrentMode(seed) {
+    if (shouldUseFixedMap()) {
+        applyFixedMapPresetToBoards();
+        return;
+    }
+    generateRandomWalls(seed);
 }
 
 function placeSymmetricWalls(mapName, seed, mirrorMaps = []) {
@@ -4368,7 +4553,10 @@ function renderBoard(options = {}) {
             if (cellData.isTeleport) cellEl.classList.add('teleport');
             if (cellData.isWall) cellEl.classList.add('wall');
             if (cellData.isCoreTile) cellEl.classList.add('core-tile');
-            if (isCellInSmoke(mapName, r, c)) cellEl.classList.add('smoke');
+            if (Number(cellData.height || 0) > 0) cellEl.classList.add(`height-${Math.min(1, Number(cellData.height || 0))}`);
+            if (isCellInSmoke(mapName, r, c) && shouldShowSmokeTile(mapName, r, c, revealAll, activeVision)) {
+                cellEl.classList.add('smoke');
+            }
             const visibleFlags = revealAll
                 ? (cellData.flags?.length ? cellData.flags : (cellData.flag ? [cellData.flag] : []))
                 : getVisibleFlagsOnCell(cellData, viewerPlayer, activeVision);
@@ -4397,6 +4585,12 @@ function renderBoard(options = {}) {
                     if (u.type === 'koh') {
                         unitEl.classList.add('koh-ability', getAbilityClass(u.player));
                         unitEl.setAttribute('data-ability', u.player === 1 ? p1Ability : p2Ability);
+                        if ((u.player === 1 ? p1Ability : p2Ability) === '衛生兵') {
+                            const medicCounter = document.createElement('span');
+                            medicCounter.className = 'medic-counter';
+                            medicCounter.textContent = `${Math.min(7, Number(u.medicScoutReinforceTurns || 0))}/7`;
+                            unitEl.appendChild(medicCounter);
+                        }
                         if ((u.player === 1 ? p1Ability : p2Ability) === '戦姫') {
                             const killCounter = document.createElement('span');
                             killCounter.className = 'kill-counter';
@@ -4478,10 +4672,13 @@ function renderMinimaps() {
                 const cell = document.createElement('span');
                 const boardCell = boards[mapName][r][c];
                 cell.className = 'minimap-cell';
-                if (boardCell.isWall) cell.classList.add('wall');
-                if (boardCell.isTeleport) cell.classList.add('teleport');
-                if (boardCell.isCoreTile) cell.classList.add('core-tile');
-                if (isCellInSmoke(mapName, r, c)) cell.classList.add('smoke');
+            if (boardCell.isWall) cell.classList.add('wall');
+            if (boardCell.isTeleport) cell.classList.add('teleport');
+            if (boardCell.isCoreTile) cell.classList.add('core-tile');
+            if (Number(boardCell.height || 0) > 0) cell.classList.add(`height-${Math.min(1, Number(boardCell.height || 0))}`);
+                if (isCellInSmoke(mapName, r, c) && shouldShowSmokeTile(mapName, r, c, false, vision[mapName])) {
+                    cell.classList.add('smoke');
+                }
                 const visibleFlags = getVisibleFlagsOnCell(boardCell, viewerPlayer, vision[mapName]);
                 if (visibleFlags.length) {
                     cell.classList.add(`flag-p${visibleFlags[visibleFlags.length - 1].player}`);
@@ -5395,10 +5592,18 @@ function reinforceScouts() {
     [1, 2].forEach(player => {
         const interval = getScoutReinforceInterval(player);
         const limit = getScoutLimit(player);
-        if (gameTurn % interval !== 0) return;
+        const koh = getKohUnit(player);
+        const isMedic = Boolean(koh && getPlayerAbility(player) === '衛生兵');
+        if (isMedic) {
+            koh.medicScoutReinforceTurns = Math.min(interval, Number(koh.medicScoutReinforceTurns || 0) + 1);
+            if (koh.medicScoutReinforceTurns < interval) return;
+        } else if (gameTurn % interval !== 0) {
+            return;
+        }
         const scoutCount = units.filter(unit => unit.player === player && unit.type === 'scout').length;
         if (scoutCount >= limit) {
             addConsoleLog(`SUPPLY: Player ${player} の偵察兵は上限${limit}体です。`, 'system');
+            if (isMedic && koh) koh.medicScoutReinforceTurns = 0;
             return;
         }
         const rows = player === 1 ? [10, 9] : [0, 1];
@@ -5410,6 +5615,7 @@ function reinforceScouts() {
         });
         if (!spawn) {
             addConsoleLog(`SUPPLY: Player ${player} の偵察兵補充地点がありません。`, 'system');
+            if (isMedic && koh) koh.medicScoutReinforceTurns = 0;
             return;
         }
         scoutReinforcementSerial++;
@@ -5420,6 +5626,7 @@ function reinforceScouts() {
             spawn.col
         );
         addConsoleLog(`SUPPLY: Player ${player} に偵察兵を1体補充しました。`, player === 1 ? 'p1' : 'p2');
+        if (isMedic && koh) koh.medicScoutReinforceTurns = 0;
     });
 }
 

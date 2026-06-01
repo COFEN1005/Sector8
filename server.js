@@ -530,25 +530,42 @@ const server = http.createServer(async (req, res) => {
                     const player1Won = result === 'win';
                     let player1Profile = player1Id ? await accountStore.getPlayerById(player1Id) : null;
                     let player2Profile = player2Id ? await accountStore.getPlayerById(player2Id) : null;
+                    const player1StartRating = Number(body.player1StartRating || player1Profile?.rating || 0);
+                    const player2StartRating = Number(body.player2StartRating || player2Profile?.rating || 0);
+                    const player1StartLevel = Number(body.player1Level || player1Profile?.level || 1);
+                    const player2StartLevel = Number(body.player2Level || player2Profile?.level || 1);
                     let player1RatingDelta = 0;
                     let player2RatingDelta = 0;
+                    const updateWarnings = [];
                     const ratingBonus = (playerRating, opponentRating) => {
                         const diff = Math.max(0, Number(opponentRating || 0) - Number(playerRating || 0));
                         return Math.floor(diff / 100);
                     };
 
-                    if (player1Profile && player2Profile) {
-                        if (matchType === 'rank' && !isDraw) {
-                            const bonus1 = ratingBonus(player1Profile.rating, player2Profile.rating);
-                            const bonus2 = ratingBonus(player2Profile.rating, player1Profile.rating);
-                            player1RatingDelta = (player1Won ? 10 : -10) + bonus1;
-                            player2RatingDelta = (player1Won ? -10 : 10) + bonus2;
-                        }
-                        player1Profile = await accountStore.updatePlayerProgress(player1Profile.id, player1RatingDelta, 50);
-                        player2Profile = await accountStore.updatePlayerProgress(player2Profile.id, player2RatingDelta, 50);
+                    if (matchType === 'rank' && !isDraw && player1Profile && player2Profile) {
+                        const bonus1 = ratingBonus(player1StartRating, player2StartRating);
+                        const bonus2 = ratingBonus(player2StartRating, player1StartRating);
+                        player1RatingDelta = (player1Won ? 10 : -10) + bonus1;
+                        player2RatingDelta = (player1Won ? -10 : 10) + bonus2;
                     } else if (matchType === 'rank' && player1Profile && !player2Profile && !isDraw) {
                         player1RatingDelta = player1Won ? 10 : -10;
-                        player1Profile = await accountStore.updatePlayerProgress(player1Profile.id, player1RatingDelta, 50);
+                    }
+
+                    if (player1Profile) {
+                        try {
+                            player1Profile = await accountStore.updatePlayerProgress(player1Profile.id, player1RatingDelta, 50);
+                        } catch (error) {
+                            updateWarnings.push(`player1:${error?.message || error}`);
+                            console.error('match update failed for player1', error);
+                        }
+                    }
+                    if (player2Profile) {
+                        try {
+                            player2Profile = await accountStore.updatePlayerProgress(player2Profile.id, player2RatingDelta, 50);
+                        } catch (error) {
+                            updateWarnings.push(`player2:${error?.message || error}`);
+                            console.error('match update failed for player2', error);
+                        }
                     }
 
                     const matchId = await accountStore.recordMatchHistory({
@@ -563,10 +580,10 @@ const server = http.createServer(async (req, res) => {
                         result: body.result || 'win',
                         player1RatingDelta,
                         player2RatingDelta,
-                        player1Level: player1Profile?.level || 1,
-                        player2Level: player2Profile?.level || 1,
-                        player1StartRating: Number(body.player1StartRating || player1Profile?.rating || 0),
-                        player2StartRating: Number(body.player2StartRating || player2Profile?.rating || 0),
+                        player1Level: player1Profile?.level || player1StartLevel,
+                        player2Level: player2Profile?.level || player2StartLevel,
+                        player1StartRating,
+                        player2StartRating,
                         startedTime: body.startedTime,
                         endedTime: body.endedTime,
                         timeTaken: body.timeTaken,
@@ -578,7 +595,8 @@ const server = http.createServer(async (req, res) => {
                         ok: true,
                         id: matchId,
                         player1: player1Profile,
-                        player2: player2Profile
+                        player2: player2Profile,
+                        warnings: updateWarnings.length ? updateWarnings : undefined
                     });
                 } finally {
                     if (matchKey) pendingMatchHistoryKeys.delete(matchKey);
