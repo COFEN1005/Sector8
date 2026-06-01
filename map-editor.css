@@ -179,6 +179,7 @@ a {
 
 .tab-row,
 .tool-grid,
+.teleport-grid,
 .height-grid,
 .target-grid {
     display: grid;
@@ -190,6 +191,7 @@ a {
 }
 
 .tool-grid,
+.teleport-grid,
 .height-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
 }
@@ -200,6 +202,7 @@ a {
 
 .map-tab,
 .tool-btn,
+.teleport-btn,
 .height-btn,
 .target-btn {
     padding: 0.8rem 0.55rem;
@@ -208,6 +211,7 @@ a {
 
 .map-tab.active,
 .tool-btn.active,
+.teleport-btn.active,
 .height-btn.active,
 .target-btn.active {
     background: rgba(255, 183, 0, 0.16);
@@ -381,6 +385,7 @@ a {
     display: flex;
     align-items: center;
     justify-content: center;
+    position: relative;
 }
 
 .editor-board {
@@ -389,6 +394,8 @@ a {
     display: grid;
     gap: 4px;
     grid-template-columns: repeat(11, minmax(0, 1fr));
+    position: relative;
+    z-index: 1;
 }
 
 .cell {
@@ -424,16 +431,6 @@ a {
     transform: translateY(-1px);
 }
 
-.cell.height-2 {
-    --height-shadow: rgba(0, 255, 122, 0.16);
-    transform: translateY(-2px);
-}
-
-.cell.height-3 {
-    --height-shadow: rgba(255, 183, 0, 0.22);
-    transform: translateY(-3px);
-}
-
 .cell.height-0,
 .cell.height-1,
 .cell.height-2,
@@ -460,40 +457,19 @@ a {
         linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent);
 }
 
-.cell.height-2 .height-fill {
-    background:
-        linear-gradient(180deg, rgba(0, 255, 122, 0.2), rgba(0, 0, 0, 0.18) 45%, rgba(0, 0, 0, 0.36)),
-        linear-gradient(180deg, rgba(255, 255, 255, 0.1), transparent);
-}
-
-.cell.height-3 .height-fill {
-    background:
-        linear-gradient(180deg, rgba(255, 183, 0, 0.24), rgba(0, 0, 0, 0.18) 45%, rgba(0, 0, 0, 0.38)),
-        linear-gradient(180deg, rgba(255, 255, 255, 0.12), transparent);
-}
-
 .cell.height-1 {
+    transform: translateY(-1px);
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.05),
         inset 0 -14px 20px rgba(0, 0, 0, 0.18),
         0 0 0 1px rgba(255, 255, 255, 0.02),
-        0 0 0 2px rgba(0, 240, 255, 0.08);
+        0 0 0 2px rgba(0, 240, 255, 0.1);
 }
 
-.cell.height-2 {
-    box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.05),
-        inset 0 -14px 20px rgba(0, 0, 0, 0.18),
-        0 0 0 1px rgba(255, 255, 255, 0.02),
-        0 0 0 2px rgba(0, 255, 122, 0.1);
-}
-
-.cell.height-3 {
-    box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.05),
-        inset 0 -14px 20px rgba(0, 0, 0, 0.18),
-        0 0 0 1px rgba(255, 255, 255, 0.02),
-        0 0 0 2px rgba(255, 183, 0, 0.12);
+.cell.height-1 .height-fill {
+    background:
+        linear-gradient(180deg, rgba(0, 240, 255, 0.18), rgba(0, 0, 0, 0.18) 45%, rgba(0, 0, 0, 0.34)),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent);
 }
 
 .cell .terrain-glyph {
@@ -558,38 +534,12 @@ a {
 
 .cell.height-1.terrain-wall,
 .cell.height-1.terrain-teleport,
-.cell.height-1.terrain-core,
-.cell.height-2.terrain-wall,
-.cell.height-2.terrain-teleport,
-.cell.height-2.terrain-core,
-.cell.height-3.terrain-wall,
-.cell.height-3.terrain-teleport,
-.cell.height-3.terrain-core {
+.cell.height-1.terrain-core {
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.06),
         inset 0 -14px 20px rgba(0, 0, 0, 0.2),
         0 0 0 1px rgba(255, 255, 255, 0.03),
         0 0 18px rgba(0, 240, 255, 0.08);
-}
-
-.cell.height-2.terrain-wall,
-.cell.height-2.terrain-teleport,
-.cell.height-2.terrain-core {
-    box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.06),
-        inset 0 -14px 20px rgba(0, 0, 0, 0.2),
-        0 0 0 1px rgba(255, 255, 255, 0.03),
-        0 0 18px rgba(0, 255, 122, 0.08);
-}
-
-.cell.height-3.terrain-wall,
-.cell.height-3.terrain-teleport,
-.cell.height-3.terrain-core {
-    box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.06),
-        inset 0 -14px 20px rgba(0, 0, 0, 0.2),
-        0 0 0 1px rgba(255, 255, 255, 0.03),
-        0 0 18px rgba(255, 183, 0, 0.1);
 }
 
 .cell.illegal {
@@ -629,6 +579,55 @@ a {
     letter-spacing: 0.08em;
     text-align: center;
     pointer-events: none;
+}
+
+.cell .teleport-link-badge {
+    position: absolute;
+    left: 6px;
+    top: 6px;
+    z-index: 2;
+    min-width: 2rem;
+    padding: 2px 6px;
+    border-radius: 999px;
+    background: rgba(0, 255, 122, 0.16);
+    border: 1px solid rgba(0, 255, 122, 0.36);
+    color: #88ffbf;
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-align: center;
+    pointer-events: none;
+}
+
+.teleport-link-layer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: visible;
+    z-index: 0;
+}
+
+.teleport-link-line {
+    stroke: rgba(0, 255, 122, 0.75);
+    stroke-width: 3;
+    fill: none;
+    filter: drop-shadow(0 0 6px rgba(0, 255, 122, 0.45));
+}
+
+.teleport-link-node {
+    fill: rgba(0, 255, 122, 0.96);
+    stroke: rgba(3, 10, 14, 0.9);
+    stroke-width: 2;
+}
+
+.teleport-link-label {
+    fill: #d8ffe9;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 800;
+    text-anchor: middle;
+    dominant-baseline: central;
 }
 
 .cell.locked {

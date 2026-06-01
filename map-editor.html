@@ -49,18 +49,29 @@
                 </section>
 
                 <section class="editor-block">
+                    <h2>TELEPORT SYNC</h2>
+                    <div class="teleport-grid">
+                        <button class="teleport-btn active" data-teleport-group="1" type="button">T1</button>
+                        <button class="teleport-btn" data-teleport-group="2" type="button">T2</button>
+                        <button class="teleport-btn" data-teleport-group="3" type="button">T3</button>
+                        <button class="teleport-btn" data-teleport-group="4" type="button">T4</button>
+                        <button class="teleport-btn" data-teleport-group="5" type="button">T5</button>
+                        <button class="teleport-btn" data-teleport-group="6" type="button">T6</button>
+                        <button class="teleport-btn" data-teleport-group="7" type="button">T7</button>
+                        <button class="teleport-btn" data-teleport-group="8" type="button">T8</button>
+                    </div>
+                    <p class="help-text">同じ番号のテレポート同士が同期先です。盤面では番号と線で見えるようにしています。</p>
+                </section>
+
+                <section class="editor-block">
                     <h2>HEIGHT</h2>
                     <div class="height-grid">
                         <button class="height-btn active" data-height="0" type="button">H0 FLAT</button>
                         <button class="height-btn" data-height="1" type="button">H1 LOW</button>
-                        <button class="height-btn" data-height="2" type="button">H2 MID</button>
-                        <button class="height-btn" data-height="3" type="button">H3 HIGH</button>
                     </div>
                     <div class="height-legend">
                         <span><i class="legend-swatch h0"></i>FLAT</span>
-                        <span><i class="legend-swatch h1"></i>LOW</span>
-                        <span><i class="legend-swatch h2"></i>MID</span>
-                        <span><i class="legend-swatch h3"></i>HIGH</span>
+                        <span><i class="legend-swatch h1"></i>HIGH</span>
                     </div>
                 </section>
 
@@ -79,7 +90,7 @@
                     <div><span>TELEPORT</span><strong id="stat-teleport">0</strong></div>
                     <div><span>CORE</span><strong id="stat-core">0</strong></div>
                     <div><span>ELEVATED</span><strong id="stat-high">0</strong></div>
-                    <div><span>PEAK</span><strong id="stat-peak">0</strong></div>
+                    <div><span>H1</span><strong id="stat-peak">0</strong></div>
                     <div><span>CHANGED</span><strong id="stat-changed">0</strong></div>
                     <div><span>WARNINGS</span><strong id="stat-warnings">0</strong></div>
                 </section>
@@ -107,11 +118,10 @@
                 <div class="height-summary">
                     <span><i class="summary-swatch h0"></i>H0</span>
                     <span><i class="summary-swatch h1"></i>H1</span>
-                    <span><i class="summary-swatch h2"></i>H2</span>
-                    <span><i class="summary-swatch h3"></i>H3</span>
                 </div>
 
                 <div id="board-wrap" class="board-wrap">
+                    <svg id="teleport-link-layer" class="teleport-link-layer" aria-hidden="true"></svg>
                     <div id="board" class="editor-board" aria-label="map editor board"></div>
                 </div>
 

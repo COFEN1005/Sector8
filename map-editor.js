@@ -14,7 +14,7 @@ const CORE_COLS = [4, 5, 6];
 const VALID_TERRAINS = new Set(['wall', 'teleport', 'core']);
 const VALID_APPLY_MODES = new Set(['terrain', 'height', 'both']);
 const STORAGE_KEY = 'sector8-map-editor-v3';
-const MAX_HEIGHT = 3;
+const MAX_HEIGHT = 1;
 const EXPORT_VERSION = 2;
 
 const dom = {
@@ -60,22 +60,24 @@ function deepClone(value) {
 function makeGrid() {
     const { rows, cols } = MAP_SIZES.area1;
     return Array.from({ length: rows }, () => (
-        Array.from({ length: cols }, () => ({ terrain: null, height: 0 }))
+        Array.from({ length: cols }, () => ({ terrain: null, height: 0, teleportGroup: null }))
     ));
 }
 
 function seedAnchors(mapName, grid) {
     if (mapName === 'area1' || mapName === 'area2') {
         const topRow = 0;
-        PORTAL_COLS.forEach(col => {
+        PORTAL_COLS.forEach((col, index) => {
             grid[topRow][col].terrain = 'teleport';
+            grid[topRow][col].teleportGroup = index + 1;
         });
     }
 
     if (mapName === 'area2' || mapName === 'area3') {
         const bottomRow = 10;
-        PORTAL_COLS.forEach(col => {
+        PORTAL_COLS.forEach((col, index) => {
             grid[bottomRow][col].terrain = 'teleport';
+            grid[bottomRow][col].teleportGroup = index + 1;
         });
     }
 
@@ -109,6 +111,7 @@ function createState(seedAnchorsEnabled = true) {
         activeMap: 'area1',
         activeTool: 'wall',
         activeHeight: 0,
+        activeTeleportGroup: 1,
         applyMode: 'both',
         maps
     };
@@ -124,26 +127,33 @@ function normalizeHeight(value) {
     return clamp(Math.trunc(n), 0, MAX_HEIGHT);
 }
 
+function normalizeTeleportGroup(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return null;
+    return clamp(Math.trunc(n), 1, 8);
+}
+
 function normalizeCell(raw) {
     if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
         return {
             terrain: normalizeTerrain(raw.terrain),
-            height: normalizeHeight(raw.height ?? raw.h ?? 0)
+            height: normalizeHeight(raw.height ?? raw.h ?? 0),
+            teleportGroup: normalizeTeleportGroup(raw.teleportGroup ?? raw.link ?? raw.teleportId ?? null)
         };
     }
 
     if (typeof raw === 'string') {
         if (VALID_TERRAINS.has(raw)) {
-            return { terrain: raw, height: 0 };
+            return { terrain: raw, height: 0, teleportGroup: raw === 'teleport' ? 1 : null };
         }
 
         const maybeHeight = Number(raw);
         if (Number.isFinite(maybeHeight)) {
-            return { terrain: null, height: clamp(Math.trunc(maybeHeight), 0, MAX_HEIGHT) };
+            return { terrain: null, height: clamp(Math.trunc(maybeHeight), 0, MAX_HEIGHT), teleportGroup: null };
         }
     }
 
-    return { terrain: null, height: 0 };
+    return { terrain: null, height: 0, teleportGroup: null };
 }
 
 function normalizeGrid(source) {
@@ -193,6 +203,10 @@ function normalizeState(raw) {
 
     if (Number.isFinite(Number(raw.activeHeight))) {
         next.activeHeight = clamp(Math.trunc(Number(raw.activeHeight)), 0, MAX_HEIGHT);
+    }
+
+    if (Number.isFinite(Number(raw.activeTeleportGroup))) {
+        next.activeTeleportGroup = clamp(Math.trunc(Number(raw.activeTeleportGroup)), 1, 8);
     }
 
     if (VALID_APPLY_MODES.has(raw.applyMode)) {
@@ -278,6 +292,7 @@ function getMapStats(mapName) {
         changed: 0,
         warnings: 0
     };
+    const teleportGroups = new Map();
 
     for (let row = 0; row < map.length; row += 1) {
         for (let col = 0; col < map[row].length; col += 1) {
@@ -294,8 +309,18 @@ function getMapStats(mapName) {
             ) {
                 stats.warnings += 1;
             }
+            if (cell.terrain === 'teleport') {
+                const group = cell.teleportGroup || 0;
+                teleportGroups.set(group, (teleportGroups.get(group) || 0) + 1);
+            }
         }
     }
+
+    teleportGroups.forEach((count, group) => {
+        if (!group || count > 2) {
+            stats.warnings += 1;
+        }
+    });
 
     return stats;
 }
@@ -353,6 +378,13 @@ function setActiveHeight(height) {
     renderStatus();
 }
 
+function setActiveTeleportGroup(group) {
+    state.activeTeleportGroup = clamp(Number(group) || 1, 1, 8);
+    saveState();
+    renderToolbar();
+    renderStatus();
+}
+
 function setApplyMode(mode) {
     if (!VALID_APPLY_MODES.has(mode)) return;
     state.applyMode = mode;
@@ -383,8 +415,13 @@ function paintCell(row, col) {
     const nextHeight = state.applyMode !== 'terrain'
         ? clamp(state.activeHeight, 0, MAX_HEIGHT)
         : cell.height;
+    const nextTeleportGroup = state.applyMode !== 'terrain'
+        ? cell.teleportGroup
+        : (state.activeTool === 'teleport' ? state.activeTeleportGroup : null);
 
-    const changed = cell.terrain !== nextTerrain || cell.height !== nextHeight;
+    const changed = cell.terrain !== nextTerrain
+        || cell.height !== nextHeight
+        || cell.teleportGroup !== nextTeleportGroup;
     if (!changed) return false;
 
     if (!strokeSnapshotTaken) {
@@ -394,9 +431,13 @@ function paintCell(row, col) {
 
     if (state.applyMode !== 'height') {
         cell.terrain = nextTerrain;
+        cell.teleportGroup = nextTerrain === 'teleport' ? state.activeTeleportGroup : null;
     }
     if (state.applyMode !== 'terrain') {
         cell.height = nextHeight;
+    }
+    if (state.applyMode === 'terrain' && nextTerrain !== 'teleport') {
+        cell.teleportGroup = null;
     }
 
     saveState();
@@ -451,6 +492,10 @@ function renderToolbar() {
         button.classList.toggle('active', button.dataset.applyMode === state.applyMode);
     });
 
+    document.querySelectorAll('[data-teleport-group]').forEach(button => {
+        button.classList.toggle('active', Number(button.dataset.teleportGroup) === state.activeTeleportGroup);
+    });
+
     dom.activeMapLabel.textContent = MAP_LABELS[state.activeMap];
 }
 
@@ -480,17 +525,91 @@ function renderBoard() {
                 'aria-label',
                 `${MAP_LABELS[state.activeMap]} ${row + 1}-${col + 1} ${getTerrainLabel(cell.terrain)} H${cell.height}`
             );
-            button.title = `${getTerrainLabel(cell.terrain)} / H${cell.height}`;
+            const teleportLabel = cell.terrain === 'teleport' ? ` / T${cell.teleportGroup || '?'}` : '';
+            button.title = `${getTerrainLabel(cell.terrain)} / H${cell.height}${teleportLabel}`;
             button.innerHTML = `
                 <span class="height-fill"></span>
                 <span class="terrain-glyph">${getTerrainGlyph(cell.terrain)}</span>
                 <span class="height-badge">H${cell.height}</span>
+                ${cell.terrain === 'teleport' ? `<span class="teleport-link-badge">T${cell.teleportGroup || '?'}</span>` : ''}
             `;
             fragment.appendChild(button);
         }
     }
 
     dom.board.replaceChildren(fragment);
+    renderTeleportLinks(map);
+}
+
+function renderTeleportLinks(map) {
+    const layer = document.getElementById('teleport-link-layer');
+    if (!layer) return;
+
+    const boardWrap = document.getElementById('board-wrap');
+    const cells = Array.from(dom.board.querySelectorAll('.cell'));
+    layer.replaceChildren();
+
+    if (!cells.length) {
+        return;
+    }
+
+    const wrapRect = boardWrap.getBoundingClientRect();
+    layer.setAttribute('viewBox', `0 0 ${wrapRect.width} ${wrapRect.height}`);
+    layer.setAttribute('width', String(wrapRect.width));
+    layer.setAttribute('height', String(wrapRect.height));
+    const groups = new Map();
+
+    for (const cell of cells) {
+        const row = Number(cell.dataset.row);
+        const col = Number(cell.dataset.col);
+        const data = map[row][col];
+        if (data.terrain !== 'teleport' || !data.teleportGroup) continue;
+        const group = data.teleportGroup;
+        if (!groups.has(group)) groups.set(group, []);
+        groups.get(group).push(cell);
+    }
+
+    const svgNS = 'http://www.w3.org/2000/svg';
+
+    groups.forEach((groupCells, group) => {
+        const points = groupCells
+            .map(cell => {
+                const rect = cell.getBoundingClientRect();
+                return {
+                    x: rect.left - wrapRect.left + rect.width / 2,
+                    y: rect.top - wrapRect.top + rect.height / 2
+                };
+            })
+            .sort((a, b) => (a.y - b.y) || (a.x - b.x));
+
+        points.forEach(point => {
+            const circle = document.createElementNS(svgNS, 'circle');
+            circle.setAttribute('class', 'teleport-link-node');
+            circle.setAttribute('cx', String(point.x));
+            circle.setAttribute('cy', String(point.y));
+            circle.setAttribute('r', '6');
+            layer.appendChild(circle);
+        });
+
+        for (let i = 0; i < points.length - 1; i += 1) {
+            const line = document.createElementNS(svgNS, 'line');
+            line.setAttribute('class', 'teleport-link-line');
+            line.setAttribute('x1', String(points[i].x));
+            line.setAttribute('y1', String(points[i].y));
+            line.setAttribute('x2', String(points[i + 1].x));
+            line.setAttribute('y2', String(points[i + 1].y));
+            layer.appendChild(line);
+        }
+
+        if (points.length) {
+            const label = document.createElementNS(svgNS, 'text');
+            label.setAttribute('class', 'teleport-link-label');
+            label.setAttribute('x', String(points[0].x));
+            label.setAttribute('y', String(points[0].y - 12));
+            label.textContent = `T${group}`;
+            layer.appendChild(label);
+        }
+    });
 }
 
 function renderStats() {
@@ -509,7 +628,7 @@ function renderStatus() {
     const toolLabel = state.activeTool === 'erase' ? 'ERASE' : state.activeTool.toUpperCase();
     const applyLabel = state.applyMode.toUpperCase();
     const warningPart = stats.warnings > 0 ? ` / WARNINGS ${stats.warnings}` : '';
-    dom.statusLine.textContent = `TOOL ${toolLabel} / HEIGHT H${state.activeHeight} / APPLY ${applyLabel}${warningPart}`;
+    dom.statusLine.textContent = `TOOL ${toolLabel} / HEIGHT H${state.activeHeight} / T-GROUP T${state.activeTeleportGroup} / APPLY ${applyLabel}${warningPart}`;
 }
 
 function serializeExportPayload() {
@@ -533,6 +652,10 @@ function serializeExportPayload() {
                 maxLevel: MAX_HEIGHT,
                 visionBonusPerLevel: 1,
                 moveExtraCostPerLevel: 1
+            },
+            teleport: {
+                syncMode: 'group',
+                visualize: ['number', 'line']
             }
         },
         maps
@@ -635,6 +758,10 @@ function bindEvents() {
         button.addEventListener('click', () => setActiveHeight(button.dataset.height));
     });
 
+    document.querySelectorAll('[data-teleport-group]').forEach(button => {
+        button.addEventListener('click', () => setActiveTeleportGroup(button.dataset.teleportGroup));
+    });
+
     document.querySelectorAll('[data-apply-mode]').forEach(button => {
         button.addEventListener('click', () => setApplyMode(button.dataset.applyMode));
     });
@@ -663,6 +790,7 @@ function bindEvents() {
     window.addEventListener('pointerup', endStroke);
     window.addEventListener('pointercancel', endStroke);
     window.addEventListener('blur', endStroke);
+    window.addEventListener('resize', () => renderAll());
 
     document.addEventListener('keydown', event => {
         if (event.ctrlKey && event.key.toLowerCase() === 'z') {
@@ -684,8 +812,6 @@ function bindEvents() {
         if (key === '4') setActiveTool('erase');
         if (key === '5') setActiveHeight(0);
         if (key === '6') setActiveHeight(1);
-        if (key === '7') setActiveHeight(2);
-        if (key === '8') setActiveHeight(3);
     });
 }
 
