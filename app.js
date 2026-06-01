@@ -4505,10 +4505,7 @@ function selectActionType(type) {
             const warps = getScoutWarpTargets(selectedUnit);
             warps.forEach(w => {
                 const el = document.querySelector(`.cell[data-row="${w.row}"][data-col="${w.col}"]`);
-                if (el) {
-                    el.classList.add('highlight-ability');
-                    if (w.camouflagedTarget) el.classList.add('camouflage-target');
-                }
+                if (el) el.classList.add('highlight-ability');
             });
         } else if (selectedUnit.type === 'koh') {
             const abilityName = currentPlayer === 1 ? p1Ability : p2Ability;

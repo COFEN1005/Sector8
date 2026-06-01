@@ -1402,32 +1402,6 @@ details li {
     animation: cell-pulse-gold 1.5s infinite;
 }
 
-.cell.highlight-ability.camouflage-target {
-    background: rgba(124, 196, 102, 0.22) !important;
-    border: 2px solid rgba(124, 196, 102, 0.95) !important;
-    box-shadow: 0 0 14px rgba(124, 196, 102, 0.42), inset 0 0 0 1px rgba(255, 255, 255, 0.14);
-}
-
-.cell.highlight-ability.camouflage-target::after {
-    content: 'C';
-    position: absolute;
-    right: 0.12rem;
-    bottom: 0.08rem;
-    width: 0.95rem;
-    height: 0.95rem;
-    display: grid;
-    place-items: center;
-    border-radius: 999px;
-    background: rgba(0, 0, 0, 0.72);
-    color: var(--neon-green);
-    border: 1px solid rgba(124, 196, 102, 0.85);
-    font-size: 0.58rem;
-    font-weight: 800;
-    letter-spacing: 0;
-    text-shadow: 0 0 6px rgba(124, 196, 102, 0.45);
-    opacity: 1;
-}
-
 .cell.highlight-preview-move {
     background: rgba(255, 255, 255, 0.08) !important;
     border: 2px dashed rgba(255, 255, 255, 0.7) !important;
