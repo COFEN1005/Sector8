@@ -544,6 +544,7 @@ const server = http.createServer(async (req, res) => {
 
                 const matchId = await accountStore.recordMatchHistory({
                     matchKey,
+                    matchType,
                     player1Id: player1Profile?.id || player1Id,
                     player2Id: player2Profile?.id || player2Id,
                     player1Name: body.player1Name || player1Profile?.name || 'PLAYER 1',

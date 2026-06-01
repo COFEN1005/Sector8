@@ -543,6 +543,7 @@ function buildMatchSummary(reason, winnerId) {
     const opponentName = onlineMode
         ? getOnlineDisplayName(localPlayer === 1 ? 2 : 1)
         : (vsAI ? 'AI BOT' : 'PLAYER 2');
+    const opponentProfile = currentMatchOpponentStartProfile || null;
     const viewerSide = onlineMode && localPlayer ? localPlayer : 1;
     const isDraw = winnerId == null || reason === 'draw';
     const viewerWon = isDraw ? null : winnerId === viewerSide;
@@ -664,6 +665,7 @@ function normalizeMatchHistoryEntry(entry) {
     const replay = safeJsonParse(entry?.replay_json || entry?.replayJson, null);
     return {
         ...entry,
+        match_type: entry?.match_type || summary?.matchType || 'unknown',
         summary_json: summary || null,
         replay_json: replay || null
     };
@@ -1354,15 +1356,16 @@ async function submitMatchHistory(reason, winnerId) {
     activeMatchSummaryView = summary;
     const payload = {
         matchKey: currentMatchKey || `local:${Date.now()}`,
+        matchType: getCurrentMatchType(),
         player1Id: authProfile.id,
+        player2Id: opponentProfile?.id ?? null,
         player1Name: authProfile.name,
         player2Name: opponentName,
         winner: isDraw ? 'DRAW' : (viewerWon ? authProfile.name : opponentName),
         loser: isDraw ? 'DRAW' : (viewerWon ? opponentName : authProfile.name),
         result: isDraw ? 'draw' : (viewerWon ? 'win' : 'lose'),
-        matchType: getCurrentMatchType(),
         player1Level: authProfile.level,
-        player2Level: 1,
+        player2Level: opponentProfile?.level ?? 1,
         player1StartRating: currentMatchRecord?.startProfile?.rating ?? authProfile.rating ?? 0,
         player2StartRating: currentMatchRecord?.opponentStartProfile?.rating ?? null,
         startedTime: currentMatchStartedAt || Date.now(),
@@ -1634,7 +1637,7 @@ class Unit {
                 '戦姫': '【甲特有: 戦姫 / パッシブ型】4体撃破で丁→丙、10体撃破で丙→乙へ昇格。',
                 '爆破': '【甲特有: 爆破 / 発動・パッシブ型】発動時または死亡時、周囲2マスを完全破壊。',
                 '暗殺者': '【甲特有: 暗殺者 / パッシブ型】直線移動5・直線視界5。敵撃破時、進行方向から1マス戻る。',
-                '盲目': '【甲特有: 盲目 / パッシブ型】マンハッタン移動5、視界1。',
+                '盲目': '【甲特有: 盲目 / パッシブ型】マンハッタン移動4、視界1。',
                 '衛生兵': '【甲特有: 衛生兵 / パッシブ型】生存中、偵察兵の補充周期が5ターンになり上限が3になる。',
                 '監視': '【甲特有: 監視 / パッシブ型】周囲正方形視界2・周囲正方形移動1。視界内の敵移動-1。',
                 '迷彩': '【甲特有: 迷彩 / 発動型】使用後はマンハッタン視界1になり、動かない限り敵視界に出ない。'
@@ -1655,7 +1658,7 @@ class Unit {
         if (this.type === 'koh') {
             const ability = getPlayerAbility(this.player);
             if (ability === '暗殺者') { return 5; }
-            if (ability === '盲目') { return 5; }
+            if (ability === '盲目') { return 4; }
             if (ability === '監視') { return 1; }
             if (ability === '歴戦王' && this.veteranMomentumPenalty) r = 2;
         }
@@ -3982,7 +3985,6 @@ function applyClairvoyanceSight(clairObj, targetVisionSet) {
     let currR = row + dr, currC = col + dc;
     while (currR >= 0 && currR < size.rows && currC >= 0 && currC < size.cols) {
         targetVisionSet.add(`${currR},${currC}`);
-        if (boards[map][currR][currC].isWall) break;
         currR += dr; currC += dc;
     }
 }

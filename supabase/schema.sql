@@ -61,6 +61,7 @@ create table if not exists match_history (
   player2_id bigint references players(id) on delete cascade,
   player1_name text not null,
   player2_name text not null,
+  match_type text not null default 'unknown',
   winner text not null,
   loser text not null,
   result text not null,
@@ -102,3 +103,6 @@ alter table if exists match_history
 
 alter table if exists match_history
   add column if not exists player2_start_rating integer;
+
+alter table if exists match_history
+  add column if not exists match_type text not null default 'unknown';

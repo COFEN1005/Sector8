@@ -607,6 +607,7 @@ function createSupabaseStore() {
       player2_id: entry.player2Id || null,
       player1_name: sanitizeDisplayName(entry.player1Name || 'PLAYER 1'),
       player2_name: sanitizeDisplayName(entry.player2Name || 'PLAYER 2'),
+      match_type: String(entry.matchType || 'unknown'),
       winner: String(entry.winner || ''),
       loser: String(entry.loser || ''),
       result: String(entry.result || 'win'),
@@ -744,6 +745,7 @@ function createSqliteStore() {
       player2_id INTEGER,
       player1_name TEXT NOT NULL,
       player2_name TEXT NOT NULL,
+      match_type TEXT NOT NULL DEFAULT 'unknown',
       winner TEXT NOT NULL,
       loser TEXT NOT NULL,
       result TEXT NOT NULL,
@@ -771,6 +773,7 @@ function createSqliteStore() {
   try { db.exec('ALTER TABLE match_history ADD COLUMN loser_player_id INTEGER;'); } catch {}
   try { db.exec('ALTER TABLE match_history ADD COLUMN player1_start_rating INTEGER;'); } catch {}
   try { db.exec('ALTER TABLE match_history ADD COLUMN player2_start_rating INTEGER;'); } catch {}
+  try { db.exec("ALTER TABLE match_history ADD COLUMN match_type TEXT NOT NULL DEFAULT 'unknown';"); } catch {}
 
   function withTransaction(fn) {
     db.exec('BEGIN IMMEDIATE;');
@@ -1154,13 +1157,13 @@ function createSqliteStore() {
 
     const info = db.prepare(`
       INSERT INTO match_history (
-        match_key, player1_id, player2_id, player1_name, player2_name,
+        match_key, player1_id, player2_id, player1_name, player2_name, match_type,
         winner, loser, result, player1_get_rating, player2_get_rating,
         player1_level, player2_level, started_time, ended_time, time_taken,
         surrender_by_player_id, created_at, summary_json, replay_json,
         winner_player_id, loser_player_id, player1_start_rating, player2_start_rating
     ) VALUES (
-        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
       )
     `).run(
       payload.matchKey || null,
@@ -1168,6 +1171,7 @@ function createSqliteStore() {
       payload.player2Id,
       payload.player1Name,
       payload.player2Name,
+      payload.matchType,
       payload.winner,
       payload.loser,
       payload.result,
