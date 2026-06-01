@@ -25,6 +25,7 @@ const rooms = new Map();
 const clients = new Map();
 let pendingRandomRoomId = null;
 const pendingRandomRoomIds = { rank: null, normal: null };
+const pendingMatchHistoryKeys = new Set();
 let randomRoomSerial = 1;
 
 const mimeTypes = {
@@ -507,70 +508,81 @@ const server = http.createServer(async (req, res) => {
                 if (!session) return sendJson(res, 401, { ok: false, error: 'unauthorized' });
                 const matchKey = String(body.matchKey || '').trim();
                 if (matchKey) {
-                    const existing = await accountStore.hasMatchHistoryByKey(matchKey);
-                    if (existing) return sendJson(res, 200, { ok: true, id: existing.id, duplicate: true });
-                }
-
-                const player1Id = body.player1Id ? Number(body.player1Id) : null;
-                const player2Id = body.player2Id ? Number(body.player2Id) : null;
-                const winnerPlayerId = body.winnerPlayerId ? Number(body.winnerPlayerId) : null;
-                const loserPlayerId = body.loserPlayerId ? Number(body.loserPlayerId) : null;
-                const matchType = String(body.matchType || 'normal');
-                const result = String(body.result || '');
-                const isDraw = result === 'draw';
-                const player1Won = result === 'win';
-                let player1Profile = player1Id ? await accountStore.getPlayerById(player1Id) : null;
-                let player2Profile = player2Id ? await accountStore.getPlayerById(player2Id) : null;
-                let player1RatingDelta = 0;
-                let player2RatingDelta = 0;
-                const ratingBonus = (playerRating, opponentRating) => {
-                    const diff = Math.max(0, Number(opponentRating || 0) - Number(playerRating || 0));
-                    return Math.floor(diff / 100);
-                };
-
-                if (player1Profile && player2Profile) {
-                    if (matchType === 'rank' && !isDraw) {
-                        const bonus1 = ratingBonus(player1Profile.rating, player2Profile.rating);
-                        const bonus2 = ratingBonus(player2Profile.rating, player1Profile.rating);
-                        player1RatingDelta = (player1Won ? 10 : -10) + bonus1;
-                        player2RatingDelta = (player1Won ? -10 : 10) + bonus2;
+                    if (pendingMatchHistoryKeys.has(matchKey)) {
+                        return sendJson(res, 200, { ok: true, duplicate: true });
                     }
-                    player1Profile = await accountStore.updatePlayerProgress(player1Profile.id, player1RatingDelta, 50);
-                    player2Profile = await accountStore.updatePlayerProgress(player2Profile.id, player2RatingDelta, 50);
-                } else if (matchType === 'rank' && player1Profile && !player2Profile && !isDraw) {
-                    player1RatingDelta = player1Won ? 10 : -10;
-                    player1Profile = await accountStore.updatePlayerProgress(player1Profile.id, player1RatingDelta, 50);
+                    pendingMatchHistoryKeys.add(matchKey);
+                    const existing = await accountStore.hasMatchHistoryByKey(matchKey);
+                    if (existing) {
+                        pendingMatchHistoryKeys.delete(matchKey);
+                        return sendJson(res, 200, { ok: true, id: existing.id, duplicate: true });
+                    }
                 }
 
-                const matchId = await accountStore.recordMatchHistory({
-                    matchKey,
-                    matchType,
-                    player1Id: player1Profile?.id || player1Id,
-                    player2Id: player2Profile?.id || player2Id,
-                    player1Name: body.player1Name || player1Profile?.name || 'PLAYER 1',
-                    player2Name: body.player2Name || player2Profile?.name || 'PLAYER 2',
-                    winner: body.winner || (isDraw ? 'DRAW' : (winnerPlayerId === player1Profile?.id ? (player1Profile?.name || 'PLAYER 1') : (player2Profile?.name || 'PLAYER 2'))),
-                    loser: body.loser || (isDraw ? 'DRAW' : (loserPlayerId === player1Profile?.id ? (player1Profile?.name || 'PLAYER 1') : (player2Profile?.name || 'PLAYER 2'))),
-                    result: body.result || 'win',
-                    player1RatingDelta,
-                    player2RatingDelta,
-                    player1Level: player1Profile?.level || 1,
-                    player2Level: player2Profile?.level || 1,
-                    player1StartRating: Number(body.player1StartRating || player1Profile?.rating || 0),
-                    player2StartRating: Number(body.player2StartRating || player2Profile?.rating || 0),
-                    startedTime: body.startedTime,
-                    endedTime: body.endedTime,
-                    timeTaken: body.timeTaken,
-                    surrenderByPlayerId: body.surrenderByPlayerId || null,
-                    winnerPlayerId: isDraw ? null : (winnerPlayerId || null),
-                    loserPlayerId: isDraw ? null : (loserPlayerId || null)
-                });
-                return sendJson(res, 200, {
-                    ok: true,
-                    id: matchId,
-                    player1: player1Profile,
-                    player2: player2Profile
-                });
+                try {
+                    const player1Id = body.player1Id ? Number(body.player1Id) : null;
+                    const player2Id = body.player2Id ? Number(body.player2Id) : null;
+                    const winnerPlayerId = body.winnerPlayerId ? Number(body.winnerPlayerId) : null;
+                    const loserPlayerId = body.loserPlayerId ? Number(body.loserPlayerId) : null;
+                    const matchType = String(body.matchType || 'normal');
+                    const result = String(body.result || '');
+                    const isDraw = result === 'draw';
+                    const player1Won = result === 'win';
+                    let player1Profile = player1Id ? await accountStore.getPlayerById(player1Id) : null;
+                    let player2Profile = player2Id ? await accountStore.getPlayerById(player2Id) : null;
+                    let player1RatingDelta = 0;
+                    let player2RatingDelta = 0;
+                    const ratingBonus = (playerRating, opponentRating) => {
+                        const diff = Math.max(0, Number(opponentRating || 0) - Number(playerRating || 0));
+                        return Math.floor(diff / 100);
+                    };
+
+                    if (player1Profile && player2Profile) {
+                        if (matchType === 'rank' && !isDraw) {
+                            const bonus1 = ratingBonus(player1Profile.rating, player2Profile.rating);
+                            const bonus2 = ratingBonus(player2Profile.rating, player1Profile.rating);
+                            player1RatingDelta = (player1Won ? 10 : -10) + bonus1;
+                            player2RatingDelta = (player1Won ? -10 : 10) + bonus2;
+                        }
+                        player1Profile = await accountStore.updatePlayerProgress(player1Profile.id, player1RatingDelta, 50);
+                        player2Profile = await accountStore.updatePlayerProgress(player2Profile.id, player2RatingDelta, 50);
+                    } else if (matchType === 'rank' && player1Profile && !player2Profile && !isDraw) {
+                        player1RatingDelta = player1Won ? 10 : -10;
+                        player1Profile = await accountStore.updatePlayerProgress(player1Profile.id, player1RatingDelta, 50);
+                    }
+
+                    const matchId = await accountStore.recordMatchHistory({
+                        matchKey,
+                        matchType,
+                        player1Id: player1Profile?.id || player1Id,
+                        player2Id: player2Profile?.id || player2Id,
+                        player1Name: body.player1Name || player1Profile?.name || 'PLAYER 1',
+                        player2Name: body.player2Name || player2Profile?.name || 'PLAYER 2',
+                        winner: body.winner || (isDraw ? 'DRAW' : (winnerPlayerId === player1Profile?.id ? (player1Profile?.name || 'PLAYER 1') : (player2Profile?.name || 'PLAYER 2'))),
+                        loser: body.loser || (isDraw ? 'DRAW' : (loserPlayerId === player1Profile?.id ? (player1Profile?.name || 'PLAYER 1') : (player2Profile?.name || 'PLAYER 2'))),
+                        result: body.result || 'win',
+                        player1RatingDelta,
+                        player2RatingDelta,
+                        player1Level: player1Profile?.level || 1,
+                        player2Level: player2Profile?.level || 1,
+                        player1StartRating: Number(body.player1StartRating || player1Profile?.rating || 0),
+                        player2StartRating: Number(body.player2StartRating || player2Profile?.rating || 0),
+                        startedTime: body.startedTime,
+                        endedTime: body.endedTime,
+                        timeTaken: body.timeTaken,
+                        surrenderByPlayerId: body.surrenderByPlayerId || null,
+                        winnerPlayerId: isDraw ? null : (winnerPlayerId || null),
+                        loserPlayerId: isDraw ? null : (loserPlayerId || null)
+                    });
+                    return sendJson(res, 200, {
+                        ok: true,
+                        id: matchId,
+                        player1: player1Profile,
+                        player2: player2Profile
+                    });
+                } finally {
+                    if (matchKey) pendingMatchHistoryKeys.delete(matchKey);
+                }
             }
 
             return sendJson(res, 404, { ok: false, error: 'not_found' });
@@ -674,6 +686,7 @@ server.on('upgrade', (req, socket) => {
                 if (!result.ok || socket.destroyed) return;
                 const profile = result.profile;
                 room.profileDetails[player] = {
+                    id: profile.id,
                     playerId: profile.playerId,
                     name: profile.name,
                     level: profile.level,

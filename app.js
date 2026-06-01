@@ -31,7 +31,7 @@ const LEVEL_EXP_PER_LEVEL = 100;
 const MATCH_EXP_GAIN = 50;
 const KEEPALIVE_WARNING_MS = 10 * 60 * 1000;
 const DEVELOP_MODE_SEQUENCE = '12312321213';
-const ALL_ABILITY_OPTIONS = ['千里眼', '鼓舞', '足跡', '歴戦王', '戦姫', '爆破', '暗殺者', '盲目', '衛生兵', '監視', '迷彩'];
+const ALL_ABILITY_OPTIONS = ['千里眼', '鼓舞', '足跡', '歴戦王', '戦姫', '爆破', '暗殺者', '盲目', '衛生兵', '監視', '迷彩', '煙幕'];
 const USERNAME_STORAGE_KEY = 'sector8_username';
 const ONLINE_SESSION_STORAGE_KEY = 'sector8_online_session';
 const AUTH_SESSION_STORAGE_KEY = 'sector8_auth_session';
@@ -140,6 +140,9 @@ let gameSeed = 1;
 let actionsThisTurn = 0;
 let actedUnitIds = new Set();
 let militaryFlags = [];
+let smokeZones = [];
+let smokeZoneSerial = 0;
+let smokeCooldownByPlayer = { 1: 0, 2: 0 };
 let lastKeepAliveAt = Date.now();
 let developModeEnabled = false;
 let developModeSequence = '';
@@ -447,6 +450,9 @@ function resetMatchRecording() {
     currentMatchRecord = createMatchRecordBase();
     currentMatchReplay = createMatchReplayBase();
     activeMatchSummaryView = null;
+    smokeZones = [];
+    smokeZoneSerial = 0;
+    smokeCooldownByPlayer = { 1: 0, 2: 0 };
     resetDrawRequests();
 }
 
@@ -667,6 +673,7 @@ function renderGameOverSummary(summary = null) {
 
 function setGameOverReplayMode(active) {
     const overlay = document.getElementById('game-over-overlay');
+    const modal = overlay?.querySelector('.modal');
     const summaryEl = document.getElementById('game-summary-panel');
     const titleEl = document.getElementById('game-over-title');
     const subtitleEl = document.getElementById('game-over-subtitle');
@@ -676,6 +683,7 @@ function setGameOverReplayMode(active) {
     const restartBtn = document.getElementById('btn-restart');
 
     overlay?.classList.toggle('replay-active', Boolean(active));
+    modal?.classList.toggle('replay-active', Boolean(active));
     titleEl?.classList.toggle('hidden', Boolean(active));
     subtitleEl?.classList.toggle('hidden', Boolean(active));
     summaryEl?.classList.toggle('hidden', Boolean(active));
@@ -1409,45 +1417,58 @@ function startMatchTracking() {
 
 async function submitMatchHistory(reason, winnerId) {
     if (!authSession?.token || !authProfile || replayPlaybackActive) return;
-    const viewerSide = onlineMode && localPlayer ? localPlayer : 1;
+    const localSide = onlineMode && localPlayer ? localPlayer : 1;
+    const localIsPlayer1 = !onlineMode || localSide === 1;
     const isDraw = winnerId == null || reason === 'draw';
-    const viewerWon = isDraw ? null : winnerId === viewerSide;
+    const player1Won = isDraw ? null : winnerId === 1;
+    const viewerWon = isDraw ? null : winnerId === localSide;
     const opponentName = onlineMode
         ? getOnlineDisplayName(localPlayer === 1 ? 2 : 1)
         : (vsAI ? 'AI BOT' : 'PLAYER 2');
-    const opponentProfile = currentMatchOpponentStartProfile || currentMatchRecord?.opponentStartProfile || null;
+    const player1StartProfile = onlineMode
+        ? (localIsPlayer1 ? (currentMatchStartProfile || authProfile) : (currentMatchOpponentStartProfile || null))
+        : (currentMatchStartProfile || authProfile);
+    const player2StartProfile = onlineMode
+        ? (localIsPlayer1 ? (currentMatchOpponentStartProfile || null) : (currentMatchStartProfile || authProfile))
+        : (currentMatchRecord?.opponentStartProfile || null);
+    const player1Profile = onlineMode ? (player1StartProfile || null) : authProfile;
+    const player2Profile = onlineMode ? (player2StartProfile || null) : null;
     const summary = buildMatchSummary(isDraw ? 'draw' : reason, isDraw ? null : winnerId);
     summary.winnerName = isDraw ? 'DRAW' : (viewerWon ? authProfile.name : opponentName);
     summary.loserName = isDraw ? 'DRAW' : (viewerWon ? opponentName : authProfile.name);
     summary.replay = currentMatchReplay;
     activeMatchSummaryView = summary;
-    const startRating = Number(currentMatchStartProfile?.rating ?? authProfile.rating ?? 0);
-    const opponentStartRating = Number(currentMatchRecord?.opponentStartProfile?.rating ?? opponentProfile?.rating ?? 0);
+    const localStartProfile = localIsPlayer1 ? player1Profile : player2Profile;
+    const opponentStartProfile = localIsPlayer1 ? player2Profile : player1Profile;
+    const startRating = Number(localStartProfile?.rating ?? authProfile.rating ?? 0);
+    const opponentStartRating = Number(opponentStartProfile?.rating ?? 0);
     const matchType = getCurrentMatchType();
-    const localRatingDelta = isDraw ? 0 : calculateMatchRatingDelta(matchType, Boolean(viewerWon), startRating, opponentStartRating);
-    const opponentRatingDelta = isDraw ? 0 : calculateMatchRatingDelta(matchType, !viewerWon, opponentStartRating, startRating);
+    const player1RatingDelta = isDraw ? 0 : calculateMatchRatingDelta(matchType, Boolean(player1Won), Number(player1StartProfile?.rating || 0), Number(player2StartProfile?.rating || 0));
+    const player2RatingDelta = isDraw ? 0 : calculateMatchRatingDelta(matchType, !Boolean(player1Won), Number(player2StartProfile?.rating || 0), Number(player1StartProfile?.rating || 0));
+    const localRatingDelta = localIsPlayer1 ? player1RatingDelta : player2RatingDelta;
+    const opponentRatingDelta = localIsPlayer1 ? player2RatingDelta : player1RatingDelta;
     const localExpGain = matchType === 'rank' && !isDraw ? MATCH_EXP_GAIN : 0;
-    const shouldPersistMatchHistory = !onlineMode || localPlayer === 1;
+    const canPersistMatchHistory = Boolean(authSession?.token && authProfile);
     const payload = {
         matchKey: currentMatchKey || `local:${Date.now()}`,
         matchType,
-        player1Id: authProfile.id,
-        player2Id: opponentProfile?.playerId ?? opponentProfile?.id ?? null,
-        player1Name: authProfile.name,
-        player2Name: opponentName,
-        winner: isDraw ? 'DRAW' : (viewerWon ? authProfile.name : opponentName),
-        loser: isDraw ? 'DRAW' : (viewerWon ? opponentName : authProfile.name),
-        result: isDraw ? 'draw' : (viewerWon ? 'win' : 'lose'),
-        player1Level: authProfile.level,
-        player2Level: opponentProfile?.level ?? 1,
-        player1StartRating: currentMatchRecord?.startProfile?.rating ?? authProfile.rating ?? 0,
-        player2StartRating: currentMatchRecord?.opponentStartProfile?.rating ?? null,
+        player1Id: player1Profile?.id ?? null,
+        player2Id: player2Profile?.id ?? null,
+        player1Name: player1Profile?.name || (localIsPlayer1 ? authProfile.name : opponentName),
+        player2Name: player2Profile?.name || (localIsPlayer1 ? opponentName : authProfile.name),
+        winner: isDraw ? 'DRAW' : (player1Won ? (player1Profile?.name || 'PLAYER 1') : (player2Profile?.name || 'PLAYER 2')),
+        loser: isDraw ? 'DRAW' : (player1Won ? (player2Profile?.name || 'PLAYER 2') : (player1Profile?.name || 'PLAYER 1')),
+        result: isDraw ? 'draw' : (player1Won ? 'win' : 'lose'),
+        player1Level: player1Profile?.level ?? 1,
+        player2Level: player2Profile?.level ?? 1,
+        player1StartRating: Number(player1StartProfile?.rating ?? 0),
+        player2StartRating: Number(player2StartProfile?.rating ?? 0),
         startedTime: currentMatchStartedAt || Date.now(),
         endedTime: Date.now(),
         timeTaken: Math.max(0, Date.now() - (currentMatchStartedAt || Date.now())),
         surrenderByPlayerId: !isDraw && !viewerWon && reason === 'forfeit' ? authProfile.id : null,
-        winnerPlayerId: isDraw ? null : winnerId,
-        loserPlayerId: isDraw ? null : (viewerWon ? null : authProfile.id),
+        winnerPlayerId: isDraw ? null : (winnerId === 1 ? (player1Profile?.id || null) : (player2Profile?.id || null)),
+        loserPlayerId: isDraw ? null : (winnerId === 1 ? (player2Profile?.id || null) : (player1Profile?.id || null)),
         summaryJson: summary,
         replayJson: currentMatchReplay
     };
@@ -1466,13 +1487,13 @@ async function submitMatchHistory(reason, winnerId) {
         applyLocalMatchProgress(localRatingDelta, localExpGain);
     };
 
-    if (!shouldPersistMatchHistory) {
+    if (!canPersistMatchHistory) {
         applyLocalOutcome();
         cacheMatchHistoryEntry({
             id: null,
             ...payload,
-            player1_get_rating: localRatingDelta,
-            player2_get_rating: opponentRatingDelta,
+            player1_get_rating: player1RatingDelta,
+            player2_get_rating: player2RatingDelta,
             player1_start_rating: payload.player1StartRating,
             player2_start_rating: payload.player2StartRating,
             summary_json: summary,
@@ -1489,19 +1510,20 @@ async function submitMatchHistory(reason, winnerId) {
 
     try {
         const result = await apiRequest('/api/matches', { method: 'POST', body: payload, auth: true });
-        if (result.player1) {
-            const endProfile = result.player1;
+        const updatedProfile = localIsPlayer1 ? (result.player1 || result.player2) : (result.player2 || result.player1);
+        if (updatedProfile) {
             summary.endProfile = {
-                id: endProfile.id,
-                playerId: endProfile.playerId,
-                name: endProfile.name,
-                level: endProfile.level,
-                exp: endProfile.exp,
-                rating: endProfile.rating
+                id: updatedProfile.id,
+                playerId: updatedProfile.playerId,
+                name: updatedProfile.name,
+                level: updatedProfile.level,
+                exp: updatedProfile.exp,
+                rating: updatedProfile.rating
             };
-            summary.ratingDelta = Number(endProfile.rating || 0) - Number(currentMatchStartProfile?.rating || authProfile?.rating || 0);
-            summary.expDelta = Number(endProfile.exp || 0) - Number(currentMatchStartProfile?.exp || authProfile?.exp || 0);
-            applyAuthProfile(result.player1, authSession.token);
+            const beforeProfile = localStartProfile || authProfile;
+            summary.ratingDelta = Number(updatedProfile.rating || 0) - Number(beforeProfile?.rating || 0);
+            summary.expDelta = Number(updatedProfile.exp || 0) - Number(beforeProfile?.exp || 0);
+            applyAuthProfile(updatedProfile, authSession.token);
         } else {
             applyLocalOutcome();
         }
@@ -1516,8 +1538,8 @@ async function submitMatchHistory(reason, winnerId) {
             winner: payload.winner,
             loser: payload.loser,
             result: payload.result,
-            player1_get_rating: Number(result.player1 ? summary.ratingDelta : localRatingDelta || 0),
-            player2_get_rating: opponentRatingDelta,
+            player1_get_rating: player1RatingDelta,
+            player2_get_rating: player2RatingDelta,
             player1_level: payload.player1Level,
             player2_level: payload.player2Level,
             started_time: payload.startedTime,
@@ -1551,11 +1573,12 @@ function normalizeOnlineProfileData(profile, fallbackName = null) {
     if (!profile) return null;
     if (typeof profile === 'string') {
         const name = sanitizeUsername(profile) || sanitizeUsername(fallbackName) || null;
-        return name ? { name, level: null, rating: null, playerId: null } : null;
+        return name ? { id: null, name, level: null, rating: null, playerId: null } : null;
     }
     const name = sanitizeUsername(profile.name || fallbackName || '');
     if (!name) return null;
     return {
+        id: profile.id ?? profile.player_id ?? profile.playerId ?? null,
         name,
         level: profile.level ?? null,
         rating: profile.rating ?? null,
@@ -1567,12 +1590,22 @@ function applyOnlineProfileData(player, profile, fallbackName = null) {
     const normalized = normalizeOnlineProfileData(profile, fallbackName);
     onlineProfileDetails[player] = normalized;
     if (normalized?.name) onlineUsernames[player] = normalized.name;
+    if (normalized?.id) {
+        if (localPlayer && player === localPlayer && currentMatchStartProfile && !currentMatchStartProfile.id) {
+            currentMatchStartProfile = { ...currentMatchStartProfile, id: normalized.id };
+        }
+        const opponentPlayer = getMatchIntroOpponentPlayer();
+        if (player === opponentPlayer && currentMatchOpponentStartProfile && !currentMatchOpponentStartProfile.id) {
+            currentMatchOpponentStartProfile = { ...currentMatchOpponentStartProfile, id: normalized.id };
+        }
+    }
     if (matchIntroActive) refreshMatchIntroCutIn();
     return normalized;
 }
 
 function getOnlineProfileData(player) {
     return onlineProfileDetails[player] || {
+        id: null,
         name: onlineUsernames[player] || `P${player}`,
         level: null,
         rating: null,
@@ -1704,6 +1737,8 @@ class Unit {
         this.warPrincessTeiPromoted = false;
         this.warPrincessHeiPromoted = false;
         this.camouflaged = false;
+        this.manualCamouflage = false;
+        this.smokeCamouflage = false;
         this.veteranMomentumPenalty = false;
         this.carryingFlagPlayer = null;
         this.carryingFlagAbility = null;
@@ -1776,7 +1811,7 @@ class Unit {
         if (this.type === 'koh') {
             const ability = getPlayerAbility(this.player);
             const descriptions = {
-                '千里眼': '【甲特有: 千里眼 / 発動型】選んだ1方向の直線全マスを表示。',
+                '千里眼': '【甲特有: 千里眼 / 発動型】壁を貫通して、選んだ1方向の直線全マスを表示。',
                 '鼓舞': '【甲特有: 鼓舞 / 発動型】周囲1マスの味方に移動+1・視界+1を付与。',
                 '足跡': '【甲特有: 足跡 / パッシブ型】直近2ターン分の視界情報を保持。',
                 '歴戦王': '【甲特有: 歴戦王 / パッシブ型】敵撃破時に行動済みを解除。再行動は自陣側を除く直線移動2。',
@@ -1786,7 +1821,8 @@ class Unit {
                 '盲目': '【甲特有: 盲目 / パッシブ型】マンハッタン移動4、視界1。',
                 '衛生兵': '【甲特有: 衛生兵 / パッシブ型】生存中、偵察兵の補充周期が5ターンになり上限が3になる。',
                 '監視': '【甲特有: 監視 / パッシブ型】周囲正方形視界2・周囲正方形移動1。視界内の敵移動-1。',
-                '迷彩': '【甲特有: 迷彩 / 発動型】使用後はマンハッタン視界1になり、動かない限り敵視界に出ない。'
+                '迷彩': '【甲特有: 迷彩 / 発動型】使用後はマンハッタン視界1になり、動かない限り敵視界に出ない。',
+                '煙幕': '【甲特有: 煙幕 / 発動型】マンハッタン視界3。直線移動4＋周囲1。3×3の煙幕を設置し、煙幕内の敵味方を迷彩状態にする。'
             };
             return descriptions[ability] || `【甲特有: ${ability}】`;
         }
@@ -1806,6 +1842,7 @@ class Unit {
             if (ability === '暗殺者') { return 5; }
             if (ability === '盲目') { return 4; }
             if (ability === '監視') { return 1; }
+            if (ability === '煙幕') { return 4; }
             if (ability === '歴戦王' && this.veteranMomentumPenalty) r = 2;
         }
         r -= getMonitorPenalty(this);
@@ -1820,6 +1857,7 @@ class Unit {
             if (ability === '暗殺者') v = 5; // 直線視界5 (special: handled separately)
             if (ability === '盲目') v = 1;
             if (ability === '監視') v = 2;
+            if (ability === '煙幕') v = 3;
             if (ability === '歴戦王') v = 2;
             if (ability === '迷彩' && this.camouflaged) v = 1;
         }
@@ -1832,6 +1870,7 @@ class Unit {
             const ability = getPlayerAbility(this.player);
             if (ability === '暗殺者') return 'straight';
             if (ability === '監視') return 'square';
+            if (ability === '煙幕') return 'smoke';
             if (ability === '歴戦王' && this.veteranMomentumPenalty) return 'straight';
         }
         return this.moveType;
@@ -1894,6 +1933,117 @@ function getAbilityClass(player) {
 
 function getPlayerAbility(player) {
     return player === 1 ? p1Ability : p2Ability;
+}
+
+function getSmokeCooldownRemaining(player) {
+    return Math.max(0, Number(smokeCooldownByPlayer[player] || 0));
+}
+
+function isCellInSmoke(mapName, row, col) {
+    return smokeZones.some(zone => zone.map === mapName && zone.cells.some(cell => cell.row === row && cell.col === col));
+}
+
+function serializeSmokeZone(zone) {
+    if (!zone) return null;
+    return {
+        id: zone.id,
+        map: zone.map,
+        row: zone.row,
+        col: zone.col,
+        player: zone.player,
+        turnsRemaining: zone.turnsRemaining,
+        cells: Array.isArray(zone.cells) ? zone.cells.map(cell => ({ row: cell.row, col: cell.col })) : []
+    };
+}
+
+function hydrateSmokeZone(raw) {
+    if (!raw) return null;
+    return {
+        id: raw.id,
+        map: raw.map,
+        row: Number(raw.row || 0),
+        col: Number(raw.col || 0),
+        player: Number(raw.player || 0) || null,
+        turnsRemaining: Math.max(0, Number(raw.turnsRemaining || 0)),
+        cells: Array.isArray(raw.cells) && raw.cells.length
+            ? raw.cells.map(cell => ({ row: Number(cell.row || 0), col: Number(cell.col || 0) }))
+            : []
+    };
+}
+
+function getSmokeCells(mapName, centerRow, centerCol) {
+    const size = MAP_SIZES[mapName];
+    const cells = [];
+    for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+            const row = centerRow + dr;
+            const col = centerCol + dc;
+            if (row < 0 || row >= size.rows || col < 0 || col >= size.cols) continue;
+            cells.push({ row, col });
+        }
+    }
+    return cells;
+}
+
+function refreshUnitCamouflageState(unit) {
+    if (!unit) return;
+    const inSmoke = unit.type !== 'core' && isCellInSmoke(unit.map, unit.row, unit.col);
+    unit.smokeCamouflage = Boolean(inSmoke);
+    unit.camouflaged = Boolean(unit.manualCamouflage || unit.smokeCamouflage);
+}
+
+function refreshSmokeCamouflageStates() {
+    units.forEach(refreshUnitCamouflageState);
+}
+
+function pruneExpiredSmokeZones() {
+    const before = smokeZones.length;
+    smokeZones = smokeZones.filter(zone => zone.turnsRemaining > 0);
+    if (smokeZones.length !== before) {
+        refreshSmokeCamouflageStates();
+    }
+}
+
+function addSmokeZone(mapName, centerRow, centerCol, player) {
+    const cells = getSmokeCells(mapName, centerRow, centerCol);
+    if (!cells.length) return null;
+    smokeZoneSerial += 1;
+    const zone = {
+        id: `smoke_${smokeZoneSerial}`,
+        map: mapName,
+        row: centerRow,
+        col: centerCol,
+        player,
+        turnsRemaining: 2,
+        cells
+    };
+    smokeZones.push(zone);
+    refreshSmokeCamouflageStates();
+    return zone;
+}
+
+function getSmokePlacementTargets(unit) {
+    const valid = [];
+    const map = unit.map;
+    const activeVision = unit.player === 1 ? p1Vision[map] : p2Vision[map];
+    const size = MAP_SIZES[map];
+    for (let r = 0; r < size.rows; r++) {
+        for (let c = 0; c < size.cols; c++) {
+            const cell = boards[map][r][c];
+            if (cell.isWall) continue;
+            if (!activeVision.has(`${r},${c}`)) continue;
+            valid.push({ row: r, col: c, type: 'ability' });
+        }
+    }
+    return valid;
+}
+
+function getUnitMovementSummary(unit) {
+    if (unit.type === 'koh') {
+        const ability = getPlayerAbility(unit.player);
+        if (ability === '煙幕') return '直線4＋周囲1';
+    }
+    return `${getMoveTypeLabel(unit.getEffectiveMoveType())}${unit.getMovementRange()}`;
 }
 
 function getAllAbilityOptions() {
@@ -1961,6 +2111,8 @@ function serializeReplayUnit(unit) {
         warPrincessTeiPromoted: Boolean(unit.warPrincessTeiPromoted),
         warPrincessHeiPromoted: Boolean(unit.warPrincessHeiPromoted),
         camouflaged: Boolean(unit.camouflaged),
+        manualCamouflage: Boolean(unit.manualCamouflage),
+        smokeCamouflage: Boolean(unit.smokeCamouflage),
         veteranMomentumPenalty: Boolean(unit.veteranMomentumPenalty),
         carryingFlagPlayer: unit.carryingFlagPlayer || null,
         carryingFlagAbility: unit.carryingFlagAbility || null,
@@ -1990,6 +2142,7 @@ function serializeReplaySnapshot(label = null) {
         p1Vision: serializeReplayVision(p1Vision),
         p2Vision: serializeReplayVision(p2Vision),
         actedUnitIds: Array.from(actedUnitIds || []),
+        smokeZones: smokeZones.map(serializeSmokeZone).filter(Boolean),
         boards: Object.fromEntries(Object.entries(boards).map(([mapName, rows]) => [
             mapName,
             rows.map(row => row.map(cell => serializeReplayCell(cell)))
@@ -2022,6 +2175,9 @@ function hydrateReplayUnit(raw) {
     if (!raw) return null;
     const unit = new Unit(raw.id, raw.type, raw.player, raw.map, raw.row, raw.col, raw.isFrontline);
     Object.assign(unit, raw);
+    unit.manualCamouflage = Boolean(raw.manualCamouflage);
+    unit.smokeCamouflage = Boolean(raw.smokeCamouflage);
+    unit.camouflaged = Boolean(unit.manualCamouflage || unit.smokeCamouflage || raw.camouflaged);
     return unit;
 }
 
@@ -2063,6 +2219,7 @@ function hydrateReplaySnapshot(snapshot = {}) {
             };
         }));
     });
+    const smokeState = Array.isArray(snapshot.smokeZones) ? snapshot.smokeZones.map(hydrateSmokeZone).filter(Boolean) : [];
 
     return {
         ...snapshot,
@@ -2071,6 +2228,7 @@ function hydrateReplaySnapshot(snapshot = {}) {
         gameMode: snapshot.gameMode || 'debug',
         boards: boardState,
         units: unitsList,
+        smokeZones: smokeState,
         p1Vision: hydrateReplayVision(snapshot.p1Vision),
         p2Vision: hydrateReplayVision(snapshot.p2Vision),
         actedUnitIds: new Set(snapshot.actedUnitIds || [])
@@ -2081,6 +2239,7 @@ function withReplayRenderState(snapshotState, callback) {
     const saved = {
         boards,
         units,
+        smokeZones,
         activeMap,
         currentPlayer,
         gameTurn,
@@ -2095,6 +2254,7 @@ function withReplayRenderState(snapshotState, callback) {
 
     boards = snapshotState.boards;
     units = snapshotState.units;
+    smokeZones = Array.isArray(snapshotState.smokeZones) ? snapshotState.smokeZones : [];
     activeMap = snapshotState.activeMap;
     currentPlayer = snapshotState.currentPlayer;
     gameTurn = snapshotState.turn || snapshotState.gameTurn || gameTurn;
@@ -2105,12 +2265,14 @@ function withReplayRenderState(snapshotState, callback) {
     p1Ability = snapshotState.p1Ability || p1Ability;
     p2Ability = snapshotState.p2Ability || p2Ability;
     gameMode = snapshotState.gameMode || gameMode;
+    refreshSmokeCamouflageStates();
 
     try {
         callback();
     } finally {
         boards = saved.boards;
         units = saved.units;
+        smokeZones = saved.smokeZones;
         activeMap = saved.activeMap;
         currentPlayer = saved.currentPlayer;
         gameTurn = saved.gameTurn;
@@ -2121,6 +2283,7 @@ function withReplayRenderState(snapshotState, callback) {
         p1Ability = saved.p1Ability;
         p2Ability = saved.p2Ability;
         gameMode = saved.gameMode;
+        refreshSmokeCamouflageStates();
     }
 }
 
@@ -4062,13 +4225,19 @@ function isUnitVisibleToViewer(unit, viewerPlayer, activeVisionSet) {
 }
 
 function maybeClearCamouflageAfterMove(unit) {
-    if (unit.type !== 'koh' || !unit.camouflaged) return;
-    unit.camouflaged = false;
-    addConsoleLog(`ABILITY: 迷彩解除 - ${unit.name} が移動したため姿を現しました。`, 'ability');
+    if (!unit || unit.type !== 'koh') return;
+    const hadManualCamouflage = Boolean(unit.manualCamouflage);
+    if (hadManualCamouflage) unit.manualCamouflage = false;
+    refreshUnitCamouflageState(unit);
+    if (hadManualCamouflage && !unit.camouflaged) {
+        addConsoleLog(`ABILITY: 迷彩解除 - ${unit.name} が移動したため姿を現しました。`, 'ability');
+    }
 }
 
 // --- FOG OF WAR / VISIBILITY ---
 function calculateVisibility() {
+    pruneExpiredSmokeZones();
+    refreshSmokeCamouflageStates();
     Object.keys(p1Vision).forEach(map => p1Vision[map].clear());
     Object.keys(p2Vision).forEach(map => p2Vision[map].clear());
 
@@ -4196,6 +4365,7 @@ function renderBoard(options = {}) {
             if (cellData.isTeleport) cellEl.classList.add('teleport');
             if (cellData.isWall) cellEl.classList.add('wall');
             if (cellData.isCoreTile) cellEl.classList.add('core-tile');
+            if (isCellInSmoke(mapName, r, c)) cellEl.classList.add('smoke');
             const visibleFlags = revealAll
                 ? (cellData.flags?.length ? cellData.flags : (cellData.flag ? [cellData.flag] : []))
                 : getVisibleFlagsOnCell(cellData, viewerPlayer, activeVision);
@@ -4239,7 +4409,7 @@ function renderBoard(options = {}) {
                         unitEl.appendChild(flagCounter);
                     }
                     unitEl.setAttribute('data-rank', u.symbol);
-                    unitEl.title = `${u.name} (P${u.player})\n移動: ${getMoveTypeLabel(u.getEffectiveMoveType())}${u.getMovementRange()}\n視界: ${getVisionShapeLabel(u.getVisionShape())}${u.getVisionRange()}${u.carryingFlagPlayer ? '\n軍旗生存: ' + u.flagSurvivalTurns + '/' + FLAG_SURVIVAL_TURNS : ''}\n${u.abilityDescription}`;
+                    unitEl.title = `${u.name} (P${u.player})\n移動: ${getUnitMovementSummary(u)}\n視界: ${getVisionShapeLabel(u.getVisionShape())}${u.getVisionRange()}${u.carryingFlagPlayer ? '\n軍旗生存: ' + u.flagSurvivalTurns + '/' + FLAG_SURVIVAL_TURNS : ''}\n${u.abilityDescription}`;
                     if (u.type === 'core') unitEl.classList.add('core');
                     cellEl.appendChild(unitEl);
                 }
@@ -4308,6 +4478,7 @@ function renderMinimaps() {
                 if (boardCell.isWall) cell.classList.add('wall');
                 if (boardCell.isTeleport) cell.classList.add('teleport');
                 if (boardCell.isCoreTile) cell.classList.add('core-tile');
+                if (isCellInSmoke(mapName, r, c)) cell.classList.add('smoke');
                 const visibleFlags = getVisibleFlagsOnCell(boardCell, viewerPlayer, vision[mapName]);
                 if (visibleFlags.length) {
                     cell.classList.add(`flag-p${visibleFlags[visibleFlags.length - 1].player}`);
@@ -4335,6 +4506,7 @@ function getViewerAreaLabel(mapName, viewerPlayer = getViewerPlayer()) {
 function getMoveTypeLabel(moveType) {
     if (moveType === 'straight') return '直線';
     if (moveType === 'square') return '周囲';
+    if (moveType === 'smoke') return '混成';
     return 'マンハッタン';
 }
 
@@ -4353,6 +4525,78 @@ function getValidMoves(unit, options = {}) {
     const size = MAP_SIZES[map];
 
     if (moveRange === 0) return valid;
+
+    if (effectiveMoveType === 'smoke') {
+        const added = new Map();
+        const addCandidate = (row, col, type) => {
+            const key = `${row},${col}`;
+            const current = added.get(key);
+            if (current === 'attack' || current === type) return;
+            if (current === 'move' && type === 'attack') {
+                added.set(key, 'attack');
+                const existing = valid.find(item => item.row === row && item.col === col);
+                if (existing) existing.type = 'attack';
+                return;
+            }
+            added.set(key, type);
+            valid.push({ row, col, type });
+        };
+        const size = MAP_SIZES[map];
+        const straightDirs = [{ r: -1, c: 0 }, { r: 1, c: 0 }, { r: 0, c: -1 }, { r: 0, c: 1 }];
+        straightDirs.forEach(dir => {
+            for (let step = 1; step <= moveRange; step++) {
+                const targetR = unit.row + dir.r * step;
+                const targetC = unit.col + dir.c * step;
+                if (targetR < 0 || targetR >= size.rows || targetC < 0 || targetC >= size.cols) break;
+                const pathCells = [];
+                for (let s = 1; s <= step; s++) {
+                    pathCells.push({ r: unit.row + dir.r * s, c: unit.col + dir.c * s });
+                }
+                if (!isValidPath(unit, pathCells, options)) break;
+                if (isMoveDestinationBlockedByFriendly(unit, targetR, targetC)) break;
+                const resolved = resolveMoveDestination(unit, targetR, targetC);
+                const hasEnemyTarget =
+                    (resolved.localOccupant &&
+                        resolved.localOccupant.player !== unit.player &&
+                        !shouldIgnoreOccupantForPreview(unit, resolved.localOccupant, unit.map, options)) ||
+                    (resolved.portalDest &&
+                        resolved.destOccupant &&
+                        resolved.destOccupant.player !== unit.player &&
+                        !shouldIgnoreOccupantForPreview(unit, resolved.destOccupant, resolved.targetMap, options));
+                const visibleEnemyTarget = isVisibleEnemyMoveTarget(unit, resolved, targetR, targetC);
+                addCandidate(targetR, targetC, hasEnemyTarget && visibleEnemyTarget ? 'attack' : 'move');
+                const localBlocked = resolved.localOccupant && !shouldIgnoreOccupantForPreview(unit, resolved.localOccupant, unit.map, options);
+                const portalBlocked = resolved.portalDest && resolved.destOccupant && !shouldIgnoreOccupantForPreview(unit, resolved.destOccupant, resolved.targetMap, options);
+                if (localBlocked || portalBlocked) break;
+            }
+        });
+
+        const squareDirs = [
+            { r: -1, c: 0 }, { r: 1, c: 0 }, { r: 0, c: -1 }, { r: 0, c: 1 },
+            { r: -1, c: -1 }, { r: -1, c: 1 }, { r: 1, c: -1 }, { r: 1, c: 1 }
+        ];
+        squareDirs.forEach(dir => {
+            const nextR = unit.row + dir.r;
+            const nextC = unit.col + dir.c;
+            if (nextR < 0 || nextR >= size.rows || nextC < 0 || nextC >= size.cols) return;
+            if (boards[map][nextR][nextC].isWall) return;
+            if (isDiagonalCornerBlocked(map, unit.row, unit.col, nextR, nextC)) return;
+            if (unit.type === 'scout' && map !== 'area2') return;
+            if (isMoveDestinationBlockedByFriendly(unit, nextR, nextC)) return;
+            const resolved = resolveMoveDestination(unit, nextR, nextC);
+            const hasEnemyTarget =
+                (resolved.localOccupant &&
+                    resolved.localOccupant.player !== unit.player &&
+                    !shouldIgnoreOccupantForPreview(unit, resolved.localOccupant, unit.map, options)) ||
+                (resolved.portalDest &&
+                    resolved.destOccupant &&
+                    resolved.destOccupant.player !== unit.player &&
+                    !shouldIgnoreOccupantForPreview(unit, resolved.destOccupant, resolved.targetMap, options));
+            const visibleEnemyTarget = isVisibleEnemyMoveTarget(unit, resolved, nextR, nextC);
+            addCandidate(nextR, nextC, hasEnemyTarget && visibleEnemyTarget ? 'attack' : 'move');
+        });
+        return valid;
+    }
 
     if (effectiveMoveType === 'straight') {
         const dirs = [{ r: -1, c: 0 }, { r: 1, c: 0 }, { r: 0, c: -1 }, { r: 0, c: 1 }];
@@ -4498,7 +4742,7 @@ function getScoutWarpTargets(scout) {
 
             if (occupant) {
                 if (occupant.player !== scout.player && occupant.camouflaged && activeVision.has(`${r},${c}`)) {
-                    valid.push({ row: r, col: c, type: 'ability', camouflagedTarget: true });
+                    valid.push({ row: r, col: c, type: 'ability' });
                 }
                 continue;
             }
@@ -4613,10 +4857,12 @@ function selectUnit(unit) {
     const abilityBtn = document.getElementById('btn-ability');
     const teleportBtn = document.getElementById('btn-teleport');
     const abilityName = getPlayerAbility(unit.player);
+    const smokeCooldown = getSmokeCooldownRemaining(unit.player);
 
     if (unit.type === 'koh') {
         abilityBtn.classList.remove('hidden');
         if (abilityName === '千里眼') abilityBtn.textContent = `方向選択: ${abilityName}`;
+        else if (abilityName === '煙幕') abilityBtn.textContent = smokeCooldown > 0 ? `煙幕 CD ${smokeCooldown}` : `即時発動: ${abilityName}`;
         else if (abilityName === '鼓舞' || abilityName === '爆破' || abilityName === '迷彩') abilityBtn.textContent = `即時発動: ${abilityName}`;
         else abilityBtn.textContent = `特性確認: ${abilityName}`;
     } else if (unit.type === 'scout') {
@@ -4660,6 +4906,20 @@ function selectActionType(type) {
             const abilityName = getPlayerAbility(selectedUnit.player);
             if (abilityName === '千里眼') {
                 document.getElementById('direction-overlay').classList.remove('hidden');
+            } else if (abilityName === '煙幕') {
+                if (getSmokeCooldownRemaining(selectedUnit.player) > 0) {
+                    showStatusAlert(`煙幕はあと ${getSmokeCooldownRemaining(selectedUnit.player)} ターン使用できません。`, 'warning', 2400);
+                    return;
+                }
+                const placements = getSmokePlacementTargets(selectedUnit);
+                if (!placements.length) {
+                    showStatusAlert('煙幕を置ける場所がありません。', 'warning', 2400);
+                    return;
+                }
+                placements.forEach(target => {
+                    const el = document.querySelector(`.cell[data-row="${target.row}"][data-col="${target.col}"]`);
+                    if (el) el.classList.add('highlight-ability');
+                });
             } else if (abilityName === '鼓舞' || abilityName === '爆破' || abilityName === '迷彩') {
                 executeAbility(selectedUnit, null, null);
             }
@@ -4876,8 +5136,37 @@ function executeAbility(unit, destRow, destCol) {
             sendOnlineMessage({ kind: 'action', action: { type: 'ability', unitId: unit.id } });
             completeUnitAction(unit);
 
+        } else if (abilityName === '煙幕') {
+            if (getSmokeCooldownRemaining(unit.player) > 0) {
+                addConsoleLog(`ERROR: 煙幕はまだ再使用できません。`, 'warning');
+                return;
+            }
+            if (destRow == null || destCol == null) {
+                addConsoleLog(`ERROR: 煙幕の設置先を選択してください。`, 'warning');
+                return;
+            }
+            const targetCell = boards[map][destRow]?.[destCol];
+            if (!targetCell) {
+                addConsoleLog(`ERROR: 煙幕の設置先が見つかりません。`, 'error');
+                return;
+            }
+            const activeVision = unit.player === 1 ? p1Vision[map] : p2Vision[map];
+            if (!activeVision.has(`${destRow},${destCol}`)) {
+                addConsoleLog(`ERROR: 視界外には煙幕を設置できません。`, 'error');
+                return;
+            }
+            addSmokeZone(map, destRow, destCol, unit.player);
+            smokeCooldownByPlayer[unit.player] = 3;
+            addConsoleLog(`ABILITY: 甲の「煙幕」発動。${map} の [${destCol},${destRow}] に煙幕を展開。`, 'ability');
+            if (!shouldHideAiActionFeedback(unit.player)) playMoveSfx();
+            refreshSmokeCamouflageStates();
+            recordMatchReplayEvent({ kind: 'action', action: { type: 'ability', unitId: unit.id, row: destRow, col: destCol } });
+            sendOnlineMessage({ kind: 'action', action: { type: 'ability', unitId: unit.id, row: destRow, col: destCol } });
+            completeUnitAction(unit);
+
         } else if (abilityName === '迷彩') {
-            unit.camouflaged = true;
+            unit.manualCamouflage = true;
+            refreshUnitCamouflageState(unit);
             addConsoleLog(`ABILITY: 甲の「迷彩」発動。次の移動まで偵察兵以外から視認されません。`, 'ability');
             if (!shouldHideAiActionFeedback(unit.player)) playMoveSfx();
             recordMatchReplayEvent({ kind: 'action', action: { type: 'ability', unitId: unit.id } });
@@ -5029,6 +5318,13 @@ function endTurn() {
     units.forEach(u => {
         if (u.player === currentPlayer && u.inspirationTurns > 0) u.inspirationTurns--;
     });
+    smokeZones.forEach(zone => {
+        if (zone.turnsRemaining > 0) zone.turnsRemaining--;
+    });
+    if (smokeCooldownByPlayer[currentPlayer] > 0) {
+        smokeCooldownByPlayer[currentPlayer]--;
+    }
+    pruneExpiredSmokeZones();
     updateFlagCarrierSurvival(currentPlayer);
 
     saveTurnVision();
@@ -5252,6 +5548,9 @@ function resetToSetup(fromOnline = false) {
     currentMatchReplay = null;
     activeMatchSummaryView = null;
     currentMatchOpponentStartProfile = null;
+    smokeZones = [];
+    smokeZoneSerial = 0;
+    smokeCooldownByPlayer = { 1: 0, 2: 0 };
     resetDrawRequests();
 
     boards = { area1: [], area2: [], area3: [] };
@@ -5436,6 +5735,20 @@ function executeAITurn() {
                         bestAction = { type: 'ability', unit: u, action: '鼓舞' };
                     }
                 }
+            } else if (aiAbility === '煙幕') {
+                const enemyNearby = units.some(enemy =>
+                    enemy.player === 1 &&
+                    enemy.map === map &&
+                    Math.abs(enemy.row - u.row) <= 2 &&
+                    Math.abs(enemy.col - u.col) <= 2
+                );
+                if (getSmokeCooldownRemaining(2) === 0 && enemyNearby) {
+                    const score = 160;
+                    if (score > bestScore) {
+                        bestScore = score;
+                        bestAction = { type: 'ability', unit: u, action: '煙幕', row: u.row, col: u.col };
+                    }
+                }
             } else if (aiAbility === '迷彩') {
                 const enemyNearby = units.some(enemy =>
                     enemy.player === 1 &&
@@ -5465,6 +5778,8 @@ function executeAITurn() {
             } else if (bestAction.type === 'ability') {
                 if (bestAction.action === '爆破' || bestAction.action === '鼓舞' || bestAction.action === '迷彩') {
                     executeAbility(bestAction.unit, null, null);
+                } else if (bestAction.action === '煙幕') {
+                    executeAbility(bestAction.unit, bestAction.row ?? bestAction.unit.row, bestAction.col ?? bestAction.unit.col);
                 } else if (bestAction.action === '千里眼') {
                     selectedUnit = bestAction.unit;
                     executeClairvoyance(bestAction.dir);

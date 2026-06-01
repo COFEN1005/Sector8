@@ -415,7 +415,8 @@ header {
 #game-over-overlay.replay-active {
     align-items: stretch;
     justify-content: stretch;
-    background: rgba(3, 4, 6, 0.94);
+    background: rgba(3, 4, 6, 0.22);
+    backdrop-filter: blur(4px);
 }
 
 #game-over-overlay.replay-active .modal {
@@ -423,14 +424,21 @@ header {
     max-width: none;
     height: calc(100vh - 1rem);
     margin: 0.5rem;
-    padding: 1rem;
+    padding: 0.9rem;
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
     overflow: hidden;
+    background: rgba(4, 7, 13, 0.14);
+    border-color: rgba(255, 255, 255, 0.04);
+    box-shadow: none;
 }
 
 #game-over-overlay.replay-active .modal > .hidden {
+    display: none !important;
+}
+
+#game-over-overlay.replay-active .modal > :not(#replay-viewer):not(.modal-buttons):not(.hidden) {
     display: none !important;
 }
 
@@ -439,6 +447,8 @@ header {
     min-height: 0;
     margin-top: 0;
     overflow: hidden;
+    background: rgba(7, 10, 18, 0.9);
+    border-color: rgba(255, 255, 255, 0.08);
 }
 
 #game-over-overlay.replay-active .replay-controls {
@@ -446,7 +456,47 @@ header {
 }
 
 #game-over-overlay.replay-active .modal-buttons {
-    justify-content: center;
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    margin: 0;
+    justify-content: flex-end;
+    z-index: 5;
+    pointer-events: auto;
+    background: transparent;
+}
+
+#game-over-overlay.replay-active .modal-buttons #btn-replay-match,
+#game-over-overlay.replay-active .modal-buttons #btn-restart {
+    display: none !important;
+}
+
+#game-over-overlay.replay-active .modal-buttons #btn-replay-close {
+    display: inline-flex !important;
+}
+
+.cell.smoke {
+    background:
+        radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.16), transparent 34%),
+        radial-gradient(circle at 70% 60%, rgba(0, 240, 255, 0.12), transparent 36%),
+        linear-gradient(135deg, rgba(114, 124, 140, 0.22), rgba(16, 20, 28, 0.82));
+    border: 1px solid rgba(182, 191, 206, 0.48);
+    box-shadow:
+        inset 0 0 18px rgba(255, 255, 255, 0.06),
+        0 0 10px rgba(0, 240, 255, 0.09);
+}
+
+.cell.smoke::before {
+    content: "SMK";
+    position: absolute;
+    top: 4px;
+    left: 5px;
+    font-size: 0.5rem;
+    font-family: var(--font-mono);
+    color: rgba(212, 223, 235, 0.85);
+    font-weight: 800;
+    letter-spacing: 0.08em;
+}
 }
 
 .replay-viewer-header {
@@ -2052,6 +2102,7 @@ details li {
 .minimap-cell.p2 { background: var(--neon-magenta); }
 .minimap-cell.flag-p1 { box-shadow: inset 0 0 0 1px var(--neon-cyan); }
 .minimap-cell.flag-p2 { box-shadow: inset 0 0 0 1px var(--neon-magenta); }
+.minimap-cell.smoke { background: rgba(190, 200, 215, 0.42); }
 
 #log-feed {
     flex: 1;

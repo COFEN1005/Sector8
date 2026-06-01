@@ -40,6 +40,15 @@
                     <summary class="small-tool-btn">NEWS</summary>
                     <div class="news-menu-panel">
                         <details class="news-item">
+                            <summary>PATCH 0.7.20</summary>
+                            <ul class="news-list">
+                                <li>リプレイ再生時の結果ポップアップを整理し、再生画面を見やすく調整</li>
+                                <li>対戦後のSupabase更新が相手側まで通るよう、相手IDの受け渡しと保存経路を修正</li>
+                                <li>煙幕を追加し、甲アビリティ一覧と詳細をゲーム実装に合わせて再整理</li>
+                                <li>千里眼の壁貫通と盲目の移動4を反映し、説明文を最新仕様に更新</li>
+                            </ul>
+                        </details>
+                        <details class="news-item">
                             <summary>PATCH 0.7.19</summary>
                             <ul class="news-list">
                                 <li>アビリティ発動時にも行動音が鳴るよう修正</li>
@@ -320,7 +329,7 @@
                             <div class="ability-detail-list">
                                 <div class="ability-detail-card">
                                     <h4>千里眼</h4>
-                                    <p>発動型。選んだ1方向の直線全マスを表示する。</p>
+                                    <p>発動型。壁を貫通して、選んだ1方向の直線全マスを表示する。</p>
                                     <div class="ability-detail-meta"><span>行動範囲: 1方向の直線全マス</span><span>視界範囲: 選択方向の直線全マス</span></div>
                                 </div>
                                 <div class="ability-detail-card">
@@ -373,6 +382,11 @@
                                     <p>発動型。スキル使用後、マンハッタン視界1になり、動かない限り敵の視界に表示されない。</p>
                                     <div class="ability-detail-meta"><span>行動範囲: 静止で隠密維持</span><span>視界範囲: マンハッタン視界1</span></div>
                                 </div>
+                                <div class="ability-detail-card">
+                                    <h4>煙幕</h4>
+                                    <p>発動型。マンハッタン視界3、直線移動4＋正方形移動1。3×3の煙幕を同マップ内の視界内に設置し、煙幕内の敵味方コマを迷彩状態にする。3ターン使えない。</p>
+                                    <div class="ability-detail-meta"><span>行動範囲: 直線移動4＋正方形移動1</span><span>視界範囲: マンハッタン視界3</span></div>
+                                </div>
                             </div>
                         </div>
                     </details>
@@ -409,17 +423,18 @@
                     <details>
                         <summary>⚔️ 甲アビリティ一覧</summary>
                         <ul>
-                            <li><strong>千里眼</strong>: 発動型。1方向の直線全マスを可視化</li>
-                            <li><strong>鼓舞</strong>: 発動型。次ターン周囲1マスの味方移動・視界+1</li>
-                            <li><strong>足跡</strong>: パッシブ：直近2ターン分の視界情報を維持</li>
-                            <li><strong>歴戦王</strong>: パッシブ：敵撃破時に行動済み解除</li>
-                            <li><strong>戦姫</strong>: パッシブ：撃破数に応じて自軍を昇格</li>
-                            <li><strong>爆破</strong>: 発動型。周囲2マスの全マス破壊して自滅</li>
-                            <li><strong>暗殺者</strong>: パッシブ：直線移動5・直線視界5。敵撃破時、進行方向から1マス後退。</li>
-                            <li><strong>盲目</strong>: パッシブ：マンハッタン移動4・視界周囲1。</li>
-                            <li><strong>衛生兵</strong>: パッシブ：生存中、偵察兵補充が5ターン周期・上限3体。</li>
-                            <li><strong>監視</strong>: パッシブ：周囲移動1・視界周囲2。視界内の敵移動-1。</li>
-                            <li><strong>迷彩</strong>: 発動型：次の移動まで偵察兵以外から不可視、視界は周囲1。</li>
+                            <li><strong>千里眼</strong>: 発動型。1方向の直線全マスを表示する。壁を貫通する。</li>
+                            <li><strong>鼓舞</strong>: 発動型。周囲1マスの味方の視界と移動を+1する。</li>
+                            <li><strong>足跡</strong>: このコマの視界を2ターン前まで保存する。</li>
+                            <li><strong>歴戦王</strong>: パッシブ型。敵撃破時、行動済みを解除する。解除後の移動は自陣側を除く直線移動2になる。</li>
+                            <li><strong>戦姫</strong>: パッシブ型。このコマが敵を4体撃破すると、自コマの丁を全て丙に変える。10体撃破すると、自コマの丙を全て乙に変える。</li>
+                            <li><strong>爆破</strong>: 発動、パッシブ型。発動した、もしくは死亡時、周囲2マスの壁、敵味方ユニット、軍旗をすべて破壊する。</li>
+                            <li><strong>暗殺者</strong>: パッシブ型。敵撃破時、進行方向から1マス戻る。</li>
+                            <li><strong>盲目</strong>: 視界1、移動4の盲目コマ。</li>
+                            <li><strong>衛生兵</strong>: パッシブ型。このコマが生存してるなら偵察兵の補給が5ターンに1回になり、偵察兵の上限が3になる。</li>
+                            <li><strong>監視</strong>: パッシブ型。敵コマがこのコマの視界内にいるなら、そのコマの移動-1。</li>
+                            <li><strong>迷彩</strong>: 発動型。スキル使用後、マンハッタン視界1になり、動かない限り敵の視界に表示されない。</li>
+                            <li><strong>煙幕</strong>: 発動型。マンハッタン視界3、直線移動4＋正方形移動1。3×3の煙幕を同マップ内の視界内に設置し、煙幕内の敵味方コマを迷彩状態にする。3ターン使えない。</li>
                         </ul>
                     </details>
                     <details>
@@ -544,6 +559,11 @@
                                 <option value="戦姫">戦姫</option>
                                 <option value="爆破">爆破</option>
                                 <option value="暗殺者">暗殺者</option>
+                                <option value="盲目">盲目</option>
+                                <option value="衛生兵">衛生兵</option>
+                                <option value="監視">監視</option>
+                                <option value="迷彩">迷彩</option>
+                                <option value="煙幕">煙幕</option>
                             </select>
 
                             <div id="p2-ability-group" style="opacity:0.5">
@@ -556,6 +576,11 @@
                                     <option value="戦姫">戦姫</option>
                                     <option value="爆破">爆破</option>
                                     <option value="暗殺者">暗殺者</option>
+                                    <option value="盲目">盲目</option>
+                                    <option value="衛生兵">衛生兵</option>
+                                    <option value="監視">監視</option>
+                                    <option value="迷彩">迷彩</option>
+                                    <option value="煙幕">煙幕</option>
                                 </select>
                             </div>
                         </div>
@@ -645,6 +670,11 @@
                                 <option value="戦姫">戦姫</option>
                                 <option value="爆破">爆破</option>
                                 <option value="暗殺者">暗殺者</option>
+                                <option value="盲目">盲目</option>
+                                <option value="衛生兵">衛生兵</option>
+                                <option value="監視">監視</option>
+                                <option value="迷彩">迷彩</option>
+                                <option value="煙幕">煙幕</option>
                             </select>
                             <button id="btn-online-ready" class="neon-btn ready-btn" type="button" disabled>準備完了</button>
                         </div>
@@ -752,7 +782,7 @@
         </div>
     </div>
 
-    <div class="patch-badge">PATCH ver.0.7.19</div>
+    <div class="patch-badge">PATCH ver.0.7.20</div>
     <script>
     // Mode tab switching helper (called from inline onclick)
     function setModeTab(mode) {
