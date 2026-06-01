@@ -3912,8 +3912,6 @@ function isUnitVisibleToViewer(unit, viewerPlayer, activeVisionSet) {
 
 function maybeClearCamouflageAfterMove(unit) {
     if (unit.type !== 'koh' || !unit.camouflaged) return;
-    const ability = getPlayerAbility(unit.player);
-    if (ability !== '迷彩') return;
     unit.camouflaged = false;
     addConsoleLog(`ABILITY: 迷彩解除 - ${unit.name} が移動したため姿を現しました。`, 'ability');
 }
@@ -4071,6 +4069,7 @@ function renderBoard(options = {}) {
                 if (!isHiddenByFog) {
                     const unitEl = document.createElement('div');
                     unitEl.className = `unit player-${u.player} ${u.type}`;
+                    if (u.inspirationTurns > 0) unitEl.classList.add('inspired');
                     if (actedUnitIds.has(u.id)) unitEl.classList.add('acted');
                     if (u.type === 'koh') {
                         unitEl.classList.add('koh-ability', getAbilityClass(u.player));
@@ -4463,7 +4462,7 @@ function selectUnit(unit) {
 
     const abilityBtn = document.getElementById('btn-ability');
     const teleportBtn = document.getElementById('btn-teleport');
-    const abilityName = currentPlayer === 1 ? p1Ability : p2Ability;
+    const abilityName = getPlayerAbility(unit.player);
 
     if (unit.type === 'koh') {
         abilityBtn.classList.remove('hidden');
@@ -4508,7 +4507,7 @@ function selectActionType(type) {
                 if (el) el.classList.add('highlight-ability');
             });
         } else if (selectedUnit.type === 'koh') {
-            const abilityName = currentPlayer === 1 ? p1Ability : p2Ability;
+            const abilityName = getPlayerAbility(selectedUnit.player);
             if (abilityName === '千里眼') {
                 document.getElementById('direction-overlay').classList.remove('hidden');
             } else if (abilityName === '鼓舞' || abilityName === '爆破' || abilityName === '迷彩') {
@@ -4704,7 +4703,7 @@ function executeAbility(unit, destRow, destCol) {
     }
 
     if (unit.type === 'koh') {
-        const abilityName = currentPlayer === 1 ? p1Ability : p2Ability;
+        const abilityName = getPlayerAbility(unit.player);
 
         if (abilityName === '鼓舞') {
             let affectedCount = 0;
