@@ -27,6 +27,8 @@ const MEDIC_SCOUT_REINFORCE_INTERVAL = 5;
 const SCOUT_LIMIT_PER_PLAYER = 3;
 const ACTIONS_PER_TURN = 2;
 const FLAG_SURVIVAL_TURNS = 7;
+const LEVEL_EXP_PER_LEVEL = 100;
+const MATCH_EXP_GAIN = 50;
 const KEEPALIVE_WARNING_MS = 10 * 60 * 1000;
 const DEVELOP_MODE_SEQUENCE = '12312321213';
 const ALL_ABILITY_OPTIONS = ['千里眼', '鼓舞', '足跡', '歴戦王', '戦姫', '爆破', '暗殺者', '盲目', '衛生兵', '監視', '迷彩'];
@@ -235,6 +237,7 @@ let onlineProfileDetails = { 1: null, 2: null };
 let matchIntroActive = false;
 let matchIntroTimer = null;
 let pendingMatchIntroCutIn = false;
+let matchIntroProfileSnapshot = null;
 let drawRequestTurnByPlayer = { 1: null, 2: null };
 // Matchmaking state
 let matchmakingMode = false;
@@ -691,6 +694,52 @@ function normalizeMatchHistoryEntry(entry) {
         summary_json: summary || null,
         replay_json: replay || null
     };
+}
+
+function cacheMatchHistoryEntry(entry) {
+    if (!entry) return;
+    const normalized = normalizeMatchHistoryEntry(entry);
+    const key = String(normalized.match_key || normalized.matchKey || normalized.id || '');
+    if (key) {
+        matchHistoryCache = matchHistoryCache.filter(item => {
+            const itemKey = String(item?.match_key || item?.matchKey || item?.id || '');
+            return itemKey !== key;
+        });
+    }
+    matchHistoryCache = [normalized, ...matchHistoryCache];
+    matchHistoryLoadedForPlayerId = Number(authProfile?.id || 0) || null;
+    renderMatchHistory(matchHistoryCache);
+}
+
+function calculateMatchRatingDelta(matchType, didWin, playerRating, opponentRating) {
+    if (String(matchType || '').toLowerCase() !== 'rank') return 0;
+    const myRating = Number(playerRating || 0);
+    const theirRating = Number(opponentRating || 0);
+    const base = 10;
+    const bonus = didWin
+        ? Math.floor(Math.max(0, theirRating - myRating) / 100)
+        : Math.floor(Math.max(0, myRating - theirRating) / 100);
+    return didWin ? base + bonus : -(base + bonus);
+}
+
+function applyLocalMatchProgress(ratingDelta, expGain = MATCH_EXP_GAIN) {
+    if (!authProfile) return null;
+    const nextRating = Number(authProfile.rating || 0) + Number(ratingDelta || 0);
+    let nextLevel = Number(authProfile.level || 1);
+    let nextExp = Number(authProfile.exp || 0) + Number(expGain || 0);
+    while (nextExp >= LEVEL_EXP_PER_LEVEL) {
+        nextExp -= LEVEL_EXP_PER_LEVEL;
+        nextLevel += 1;
+    }
+    const nextProfile = {
+        ...authProfile,
+        rating: nextRating,
+        level: nextLevel,
+        exp: nextExp,
+        nextLevelExp: Math.max(0, LEVEL_EXP_PER_LEVEL - nextExp)
+    };
+    applyAuthProfile(nextProfile, authSession?.token || null);
+    return nextProfile;
 }
 
 function startReplayPlayback(matchEntry) {
@@ -1372,9 +1421,16 @@ async function submitMatchHistory(reason, winnerId) {
     summary.loserName = isDraw ? 'DRAW' : (viewerWon ? opponentName : authProfile.name);
     summary.replay = currentMatchReplay;
     activeMatchSummaryView = summary;
+    const startRating = Number(currentMatchStartProfile?.rating ?? authProfile.rating ?? 0);
+    const opponentStartRating = Number(currentMatchRecord?.opponentStartProfile?.rating ?? opponentProfile?.rating ?? 0);
+    const matchType = getCurrentMatchType();
+    const localRatingDelta = isDraw ? 0 : calculateMatchRatingDelta(matchType, Boolean(viewerWon), startRating, opponentStartRating);
+    const opponentRatingDelta = isDraw ? 0 : calculateMatchRatingDelta(matchType, !viewerWon, opponentStartRating, startRating);
+    const localExpGain = matchType === 'rank' && !isDraw ? MATCH_EXP_GAIN : 0;
+    const shouldPersistMatchHistory = !onlineMode || localPlayer === 1;
     const payload = {
         matchKey: currentMatchKey || `local:${Date.now()}`,
-        matchType: getCurrentMatchType(),
+        matchType,
         player1Id: authProfile.id,
         player2Id: opponentProfile?.playerId ?? opponentProfile?.id ?? null,
         player1Name: authProfile.name,
@@ -1395,6 +1451,42 @@ async function submitMatchHistory(reason, winnerId) {
         summaryJson: summary,
         replayJson: currentMatchReplay
     };
+
+    const applyLocalOutcome = (profileData = null) => {
+        if (profileData) {
+            summary.endProfile = profileData;
+        } else {
+            summary.endProfile = {
+                ...authProfile,
+                rating: Number(authProfile.rating || 0) + Number(localRatingDelta || 0)
+            };
+        }
+        summary.ratingDelta = localRatingDelta;
+        summary.expDelta = localExpGain;
+        applyLocalMatchProgress(localRatingDelta, localExpGain);
+    };
+
+    if (!shouldPersistMatchHistory) {
+        applyLocalOutcome();
+        cacheMatchHistoryEntry({
+            id: null,
+            ...payload,
+            player1_get_rating: localRatingDelta,
+            player2_get_rating: opponentRatingDelta,
+            player1_start_rating: payload.player1StartRating,
+            player2_start_rating: payload.player2StartRating,
+            summary_json: summary,
+            replay_json: currentMatchReplay
+        });
+        if (activeMatchSummaryView) {
+            activeMatchSummaryView.ratingDelta = summary.ratingDelta;
+            activeMatchSummaryView.expDelta = summary.expDelta;
+            activeMatchSummaryView.replay = currentMatchReplay;
+            renderGameOverSummary(activeMatchSummaryView);
+        }
+        return;
+    }
+
     try {
         const result = await apiRequest('/api/matches', { method: 'POST', body: payload, auth: true });
         if (result.player1) {
@@ -1410,7 +1502,35 @@ async function submitMatchHistory(reason, winnerId) {
             summary.ratingDelta = Number(endProfile.rating || 0) - Number(currentMatchStartProfile?.rating || authProfile?.rating || 0);
             summary.expDelta = Number(endProfile.exp || 0) - Number(currentMatchStartProfile?.exp || authProfile?.exp || 0);
             applyAuthProfile(result.player1, authSession.token);
+        } else {
+            applyLocalOutcome();
         }
+        cacheMatchHistoryEntry({
+            id: result.id || null,
+            match_key: payload.matchKey,
+            match_type: payload.matchType,
+            player1_id: payload.player1Id,
+            player2_id: payload.player2Id,
+            player1_name: payload.player1Name,
+            player2_name: payload.player2Name,
+            winner: payload.winner,
+            loser: payload.loser,
+            result: payload.result,
+            player1_get_rating: Number(result.player1 ? summary.ratingDelta : localRatingDelta || 0),
+            player2_get_rating: opponentRatingDelta,
+            player1_level: payload.player1Level,
+            player2_level: payload.player2Level,
+            started_time: payload.startedTime,
+            ended_time: payload.endedTime,
+            time_taken: payload.timeTaken,
+            surrender_by_player_id: payload.surrenderByPlayerId,
+            winner_player_id: payload.winnerPlayerId,
+            loser_player_id: payload.loserPlayerId,
+            player1_start_rating: payload.player1StartRating,
+            player2_start_rating: payload.player2StartRating,
+            summary_json: summary,
+            replay_json: currentMatchReplay
+        });
         loadMatchHistory({ force: true }).catch(() => {});
         if (activeMatchSummaryView) {
             activeMatchSummaryView.ratingDelta = summary.ratingDelta;
@@ -1471,27 +1591,36 @@ function showMatchIntroCutIn() {
     overlay.classList.remove('hidden');
     overlay.getBoundingClientRect();
     matchIntroActive = true;
-    refreshMatchIntroCutIn();
+    const opponent = getMatchIntroOpponentPlayer();
+    matchIntroProfileSnapshot = onlineMode ? (currentMatchOpponentStartProfile ? { ...currentMatchOpponentStartProfile } : {
+        ...getOnlineProfileData(opponent)
+    }) : {
+        name: vsAI ? 'AI BOT' : 'PLAYER 2',
+        level: 1,
+        rating: null
+    };
+    refreshMatchIntroCutIn(matchIntroProfileSnapshot);
     window.clearTimeout(matchIntroTimer);
     matchIntroTimer = window.setTimeout(() => {
         overlay.classList.add('hidden');
         matchIntroActive = false;
+        matchIntroProfileSnapshot = null;
         matchIntroTimer = null;
         startAfkTurnReminder();
     }, 2000);
 }
 
-function refreshMatchIntroCutIn() {
+function refreshMatchIntroCutIn(profileOverride = null) {
     const nameEl = document.getElementById('match-intro-opponent-name');
     const levelEl = document.getElementById('match-intro-opponent-level');
     const ratingEl = document.getElementById('match-intro-opponent-rating');
     if (!matchIntroActive || !nameEl || !levelEl || !ratingEl) return;
     const opponent = getMatchIntroOpponentPlayer();
-    const profile = onlineMode ? getOnlineProfileData(opponent) : {
+    const profile = profileOverride || matchIntroProfileSnapshot || (onlineMode ? getOnlineProfileData(opponent) : {
         name: vsAI ? 'AI BOT' : 'PLAYER 2',
         level: 1,
         rating: null
-    };
+    });
     levelEl.textContent = profile.level == null ? 'LV ?' : `LV ${profile.level}`;
     ratingEl.textContent = profile.rating == null ? 'RATING ?' : `RATING ${profile.rating}`;
     nameEl.textContent = profile.name || `P${opponent}`;
@@ -1544,6 +1673,7 @@ function deactivateOnlineMode(clearSession = true) {
     window.clearTimeout(matchIntroTimer);
     matchIntroTimer = null;
     pendingMatchIntroCutIn = false;
+    matchIntroProfileSnapshot = null;
     document.getElementById('match-intro-overlay')?.classList.add('hidden');
     currentMatchOpponentStartProfile = null;
     if (clearSession) clearOnlineSession();
@@ -2401,6 +2531,7 @@ function resetOnlineMatchmakingState(keepPanel = true) {
     window.clearTimeout(matchIntroTimer);
     matchIntroTimer = null;
     pendingMatchIntroCutIn = false;
+    matchIntroProfileSnapshot = null;
     document.getElementById('match-intro-overlay')?.classList.add('hidden');
     onlineMatchPreviewActive = false;
     clearOnlineSession();
@@ -3380,6 +3511,7 @@ function startGame(config = null, fromOnline = false) {
         queueMatchIntroCutIn();
     } else {
         matchIntroActive = false;
+        matchIntroProfileSnapshot = null;
         document.getElementById('match-intro-overlay')?.classList.add('hidden');
     }
 
@@ -4739,6 +4871,7 @@ function executeAbility(unit, destRow, destCol) {
                 }
             }
             addConsoleLog(`ABILITY: 甲の「鼓舞」発動！同マップ周囲 ${affectedCount} 体の味方の移動・視界+1。`, 'ability');
+            if (!shouldHideAiActionFeedback(unit.player)) playMoveSfx();
             recordMatchReplayEvent({ kind: 'action', action: { type: 'ability', unitId: unit.id } });
             sendOnlineMessage({ kind: 'action', action: { type: 'ability', unitId: unit.id } });
             completeUnitAction(unit);
@@ -4746,12 +4879,14 @@ function executeAbility(unit, destRow, destCol) {
         } else if (abilityName === '迷彩') {
             unit.camouflaged = true;
             addConsoleLog(`ABILITY: 甲の「迷彩」発動。次の移動まで偵察兵以外から視認されません。`, 'ability');
+            if (!shouldHideAiActionFeedback(unit.player)) playMoveSfx();
             recordMatchReplayEvent({ kind: 'action', action: { type: 'ability', unitId: unit.id } });
             sendOnlineMessage({ kind: 'action', action: { type: 'ability', unitId: unit.id } });
             completeUnitAction(unit);
 
         } else if (abilityName === '爆破') {
             addConsoleLog(`ABILITY: 甲の「爆破」自滅シークエンス開始！`, 'destroy');
+            if (!shouldHideAiActionFeedback(unit.player)) playMoveSfx();
             const selfRow = unit.row;
             const selfCol = unit.col;
             captureUnit(unit, unit.player === 1 ? 2 : 1);
@@ -4824,6 +4959,7 @@ function executeClairvoyance(direction, unitOverride = selectedUnit) {
 
     const dirKanji = { up: 'UP', down: 'DOWN', left: 'LEFT', right: 'RIGHT' }[actualDirection];
     addConsoleLog(`ABILITY: 甲の「千里眼」起動。${unit.map} 内の ${dirKanji} 方向を可視化。`, 'ability');
+    if (!shouldHideAiActionFeedback(unit.player)) playMoveSfx();
     recordMatchReplayEvent({ kind: 'action', action: { type: 'clairvoyance', unitId: unit.id, dir: actualDirection } });
     sendOnlineMessage({ kind: 'action', action: { type: 'clairvoyance', unitId: unit.id, dir: actualDirection } });
     completeUnitAction(unit);
