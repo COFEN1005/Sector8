@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SECTOR-8 MAP LAB</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="map-editor.css">
+</head>
+<body>
+    <div class="editor-shell">
+        <header class="editor-header glass-panel">
+            <div>
+                <div class="editor-kicker">SECTOR-8 / MAP LAB</div>
+                <h1>固定マップエディタ</h1>
+                <p>壁・転送・コアを編集して、固定マップ用JSONをそのまま書き出せます。</p>
+            </div>
+            <div class="editor-header-actions">
+                <button id="btn-new-preset" class="editor-btn secondary" type="button">新規</button>
+                <button id="btn-undo" class="editor-btn secondary" type="button">UNDO</button>
+                <button id="btn-redo" class="editor-btn secondary" type="button">REDO</button>
+                <button id="btn-export-json" class="editor-btn" type="button">JSON</button>
+                <button id="btn-export-js" class="editor-btn" type="button">JS</button>
+            </div>
+        </header>
+
+        <main class="editor-layout">
+            <aside class="editor-panel glass-panel">
+                <section class="editor-block">
+                    <h2>MAP</h2>
+                    <div class="tab-row">
+                        <button class="map-tab active" data-map="area1" type="button">AREA 1</button>
+                        <button class="map-tab" data-map="area2" type="button">AREA 2</button>
+                        <button class="map-tab" data-map="area3" type="button">AREA 3</button>
+                    </div>
+                </section>
+
+                <section class="editor-block">
+                    <h2>BRUSH</h2>
+                    <div class="tool-grid">
+                        <button class="tool-btn active" data-tool="wall" type="button">WALL</button>
+                        <button class="tool-btn" data-tool="teleport" type="button">TELEPORT</button>
+                        <button class="tool-btn" data-tool="core" type="button">CORE</button>
+                        <button class="tool-btn" data-tool="erase" type="button">ERASE</button>
+                    </div>
+                    <p class="help-text">Teleport と Core は、ゲーム側の仕様に合うマスだけに置けます。</p>
+                </section>
+
+                <section class="editor-block stats-grid">
+                    <div><span>WALL</span><strong id="stat-wall">0</strong></div>
+                    <div><span>TELEPORT</span><strong id="stat-teleport">0</strong></div>
+                    <div><span>CORE</span><strong id="stat-core">0</strong></div>
+                    <div><span>CHANGED</span><strong id="stat-changed">0</strong></div>
+                </section>
+
+                <section class="editor-block">
+                    <h2>IMPORT</h2>
+                    <textarea id="import-text" class="editor-textarea" rows="8" placeholder="JSON を貼り付けて読み込み"></textarea>
+                    <div class="inline-actions">
+                        <button id="btn-import" class="editor-btn secondary" type="button">読み込み</button>
+                        <button id="btn-copy-json" class="editor-btn secondary" type="button">JSONコピー</button>
+                    </div>
+                </section>
+
+                <section class="editor-block">
+                    <a class="editor-link" href="index.html">ゲームへ戻る</a>
+                </section>
+            </aside>
+
+            <section class="editor-stage glass-panel">
+                <div class="stage-head">
+                    <div id="active-map-label" class="stage-label">AREA 1</div>
+                    <div id="status-line" class="status-line">編集モード</div>
+                </div>
+                <div id="board-wrap" class="board-wrap">
+                    <div id="board" class="editor-board" aria-label="map editor board"></div>
+                </div>
+                <div class="hint-row">
+                    <span>1: WALL</span>
+                    <span>2: TELEPORT</span>
+                    <span>3: CORE</span>
+                    <span>4: ERASE</span>
+                    <span>CTRL+Z / CTRL+Y</span>
+                </div>
+            </section>
+
+            <aside class="editor-panel glass-panel">
+                <section class="editor-block">
+                    <h2>EXPORT JSON</h2>
+                    <textarea id="export-json" class="editor-textarea export-area" rows="15" readonly></textarea>
+                </section>
+                <section class="editor-block">
+                    <h2>EXPORT JS</h2>
+                    <textarea id="export-js" class="editor-textarea export-area" rows="15" readonly></textarea>
+                    <div class="inline-actions">
+                        <button id="btn-copy-js" class="editor-btn secondary" type="button">JSコピー</button>
+                        <button id="btn-download" class="editor-btn" type="button">JSON保存</button>
+                    </div>
+                </section>
+            </aside>
+        </main>
+    </div>
+
+    <script src="map-editor.js"></script>
+</body>
+</html>

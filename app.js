@@ -2120,6 +2120,10 @@ function setupUIEventListeners() {
     if (toggleMoveSfxBtn) toggleMoveSfxBtn.addEventListener('click', toggleMoveSfx);
     const toggleBgmBtn = document.getElementById('btn-toggle-bgm');
     if (toggleBgmBtn) toggleBgmBtn.addEventListener('click', toggleBgm);
+    const openMapEditorBtn = document.getElementById('btn-open-map-editor');
+    if (openMapEditorBtn) openMapEditorBtn.addEventListener('click', () => {
+        window.open('map-editor.html', '_blank', 'noopener');
+    });
     const saveUsernameBtn = document.getElementById('btn-save-username');
     if (saveUsernameBtn) saveUsernameBtn.addEventListener('click', () => saveUsername());
     const usernameInput = document.getElementById('username-input');
@@ -2191,6 +2195,10 @@ function setupUIEventListeners() {
     if (devDeleteBtn) devDeleteBtn.addEventListener('click', () => deleteDevTargetPlayer().catch(() => {
         showStatusAlert('削除に失敗しました。', 'warning', 3000);
     }));
+    const devOpenMapEditorBtn = document.getElementById('btn-dev-open-map-editor');
+    if (devOpenMapEditorBtn) devOpenMapEditorBtn.addEventListener('click', () => {
+        window.open('map-editor.html', '_blank', 'noopener');
+    });
     const devQueryInput = document.getElementById('dev-player-query-input');
     if (devQueryInput) {
         devQueryInput.addEventListener('input', () => {
