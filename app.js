@@ -1421,7 +1421,16 @@ function startMatchTracking() {
 }
 
 async function submitMatchHistory(reason, winnerId) {
-    if (!authSession?.token || !authProfile || replayPlaybackActive) return;
+    if (replayPlaybackActive) return;
+    if (!authProfile && authSession?.token) {
+        try {
+            await restoreAuthSession();
+        } catch {}
+    }
+    if (!authSession?.token || !authProfile) {
+        console.warn('match history skipped: auth profile missing');
+        return;
+    }
     const localSide = onlineMode && localPlayer ? localPlayer : 1;
     const localIsPlayer1 = !onlineMode || localSide === 1;
     const isDraw = winnerId == null || reason === 'draw';

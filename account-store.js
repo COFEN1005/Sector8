@@ -1131,6 +1131,7 @@ function createSqliteStore() {
       player2Id: entry.player2Id || null,
       player1Name: sanitizeDisplayName(entry.player1Name || 'PLAYER 1'),
       player2Name: sanitizeDisplayName(entry.player2Name || 'PLAYER 2'),
+      matchType: String(entry.matchType || 'unknown'),
       winner: String(entry.winner || ''),
       loser: String(entry.loser || ''),
       result: String(entry.result || 'win'),
