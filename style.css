@@ -412,6 +412,43 @@ header {
     gap: 0.8rem;
 }
 
+#game-over-overlay.replay-active {
+    align-items: stretch;
+    justify-content: stretch;
+    background: rgba(3, 4, 6, 0.94);
+}
+
+#game-over-overlay.replay-active .modal {
+    width: min(88rem, calc(100vw - 1rem));
+    max-width: none;
+    height: calc(100vh - 1rem);
+    margin: 0.5rem;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    overflow: hidden;
+}
+
+#game-over-overlay.replay-active .modal > .hidden {
+    display: none !important;
+}
+
+#game-over-overlay.replay-active .replay-viewer {
+    flex: 1 1 auto;
+    min-height: 0;
+    margin-top: 0;
+    overflow: hidden;
+}
+
+#game-over-overlay.replay-active .replay-controls {
+    margin-top: auto;
+}
+
+#game-over-overlay.replay-active .modal-buttons {
+    justify-content: center;
+}
+
 .replay-viewer-header {
     display: flex;
     flex-wrap: wrap;

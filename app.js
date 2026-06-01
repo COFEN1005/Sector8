@@ -635,12 +635,14 @@ function renderGameOverSummary(summary = null) {
     if (!summaryEl || !captureP1El || !captureP2El || !statsEl) return;
 
     if (!summary) {
+        setGameOverReplayMode(false);
         summaryEl.classList.add('hidden');
         if (replayBtn) replayBtn.disabled = true;
         if (restartBtn) restartBtn.textContent = 'RELOAD SYSTEM';
         return;
     }
 
+    setGameOverReplayMode(false);
     const capturedByP1 = summary.capturedByPlayer1 || [];
     const capturedByP2 = summary.capturedByPlayer2 || [];
     const timeTaken = Number(summary.timeTaken || 0);
@@ -658,6 +660,26 @@ function renderGameOverSummary(summary = null) {
     `;
     if (replayBtn) replayBtn.disabled = !(summary.replay && summary.replay.snapshots && summary.replay.snapshots.length);
     if (restartBtn) restartBtn.textContent = 'RELOAD SYSTEM';
+}
+
+function setGameOverReplayMode(active) {
+    const overlay = document.getElementById('game-over-overlay');
+    const summaryEl = document.getElementById('game-summary-panel');
+    const titleEl = document.getElementById('game-over-title');
+    const subtitleEl = document.getElementById('game-over-subtitle');
+    const replayViewerEl = document.getElementById('replay-viewer');
+    const replayBtn = document.getElementById('btn-replay-match');
+    const replayCloseBtn = document.getElementById('btn-replay-close');
+    const restartBtn = document.getElementById('btn-restart');
+
+    overlay?.classList.toggle('replay-active', Boolean(active));
+    titleEl?.classList.toggle('hidden', Boolean(active));
+    subtitleEl?.classList.toggle('hidden', Boolean(active));
+    summaryEl?.classList.toggle('hidden', Boolean(active));
+    replayViewerEl?.classList.toggle('hidden', !active);
+    replayBtn?.classList.toggle('hidden', Boolean(active));
+    restartBtn?.classList.toggle('hidden', Boolean(active));
+    replayCloseBtn?.classList.toggle('hidden', !active);
 }
 
 function normalizeMatchHistoryEntry(entry) {
@@ -687,10 +709,7 @@ function startReplayPlayback(matchEntry) {
     replayViewerOpen = true;
     const replaySummary = entry.summary_json || {};
     activeMatchSummaryView = { ...replaySummary, replay };
-    document.getElementById('game-summary-panel')?.classList.add('hidden');
-    document.getElementById('replay-viewer')?.classList.remove('hidden');
-    document.getElementById('btn-replay-match')?.classList.add('hidden');
-    document.getElementById('btn-replay-close')?.classList.remove('hidden');
+    setGameOverReplayMode(true);
     document.getElementById('replay-slider').max = String(Math.max(0, replayViewerSnapshots.length - 1));
     renderReplaySnapshot(0);
 }
@@ -733,10 +752,8 @@ function closeReplayViewer() {
     replayViewerEntry = null;
     replayViewerSnapshots = [];
     replayViewerIndex = 0;
-    document.getElementById('replay-viewer')?.classList.add('hidden');
-    document.getElementById('game-summary-panel')?.classList.remove('hidden');
-    document.getElementById('btn-replay-match')?.classList.remove('hidden');
-    document.getElementById('btn-replay-close')?.classList.add('hidden');
+    setGameOverReplayMode(false);
+    renderGameOverSummary(activeMatchSummaryView);
 }
 
 function openMatchHistorySummary(matchEntry) {
@@ -1349,6 +1366,7 @@ async function submitMatchHistory(reason, winnerId) {
     const opponentName = onlineMode
         ? getOnlineDisplayName(localPlayer === 1 ? 2 : 1)
         : (vsAI ? 'AI BOT' : 'PLAYER 2');
+    const opponentProfile = currentMatchOpponentStartProfile || currentMatchRecord?.opponentStartProfile || null;
     const summary = buildMatchSummary(isDraw ? 'draw' : reason, isDraw ? null : winnerId);
     summary.winnerName = isDraw ? 'DRAW' : (viewerWon ? authProfile.name : opponentName);
     summary.loserName = isDraw ? 'DRAW' : (viewerWon ? opponentName : authProfile.name);
@@ -1358,7 +1376,7 @@ async function submitMatchHistory(reason, winnerId) {
         matchKey: currentMatchKey || `local:${Date.now()}`,
         matchType: getCurrentMatchType(),
         player1Id: authProfile.id,
-        player2Id: opponentProfile?.id ?? null,
+        player2Id: opponentProfile?.playerId ?? opponentProfile?.id ?? null,
         player1Name: authProfile.name,
         player2Name: opponentName,
         winner: isDraw ? 'DRAW' : (viewerWon ? authProfile.name : opponentName),
@@ -1393,9 +1411,7 @@ async function submitMatchHistory(reason, winnerId) {
             summary.expDelta = Number(endProfile.exp || 0) - Number(currentMatchStartProfile?.exp || authProfile?.exp || 0);
             applyAuthProfile(result.player1, authSession.token);
         }
-        if (!document.getElementById('menu-panel')?.classList.contains('hidden')) {
-            loadMatchHistory({ force: true }).catch(() => {});
-        }
+        loadMatchHistory({ force: true }).catch(() => {});
         if (activeMatchSummaryView) {
             activeMatchSummaryView.ratingDelta = summary.ratingDelta;
             activeMatchSummaryView.expDelta = summary.expDelta;
