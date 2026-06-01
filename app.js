@@ -24,7 +24,8 @@ const PORTAL_COLS = [0, 1, 9, 10];
 const WALLS_PER_MAP = 12;
 const SCOUT_REINFORCE_INTERVAL = 10;
 const MEDIC_SCOUT_REINFORCE_INTERVAL = 5;
-const SCOUT_LIMIT_PER_PLAYER = 3;
+const DEFAULT_SCOUT_LIMIT_PER_PLAYER = 2;
+const MEDIC_SCOUT_LIMIT_PER_PLAYER = 3;
 const ACTIONS_PER_TURN = 2;
 const FLAG_SURVIVAL_TURNS = 7;
 const LEVEL_EXP_PER_LEVEL = 100;
@@ -1401,7 +1402,7 @@ function startMatchTracking() {
     if (replayPlaybackActive) return;
     currentMatchStartedAt = Date.now();
     currentMatchKey = onlineMode
-        ? `${matchRoomId || 'online'}:${gameSeed}`
+        ? `${matchRoomId || onlineSession?.roomId || 'online'}:${gameSeed}:${currentMatchStartedAt}`
         : `local:${gameSeed}:${Date.now()}`;
     currentMatchStartProfile = authProfile ? {
         id: authProfile.id,
@@ -3080,7 +3081,7 @@ function prepareOnlineMatchPreview(seed = null) {
     p2VisionHistory = [];
     currentMatchStartedAt = 0;
     currentMatchKey = onlineMode
-        ? `${matchRoomId || onlineSession?.roomId || 'online'}:${gameSeed}`
+        ? `${matchRoomId || onlineSession?.roomId || 'online'}:${gameSeed}:${Date.now()}`
         : `preview:${gameSeed}`;
 
     p1Ability = onlineAbilityChoices[1] || '足跡';
@@ -3668,9 +3669,11 @@ function startGame(config = null, fromOnline = false) {
     recordMatchReplaySnapshot('TURN START');
     window.clearTimeout(matchIntroTimer);
     matchIntroTimer = null;
-    if (onlineMode && fromOnline && !replayPlaybackActive && !reusePreview) {
-        queueMatchIntroCutIn();
-    } else if (!onlineMode && vsAI && !replayPlaybackActive) {
+    const shouldShowMatchIntro = !replayPlaybackActive && (
+        (onlineMode && fromOnline) ||
+        (!onlineMode && vsAI)
+    );
+    if (shouldShowMatchIntro) {
         queueMatchIntroCutIn();
     } else {
         matchIntroActive = false;
@@ -5391,10 +5394,11 @@ function showTurnBanner() {
 function reinforceScouts() {
     [1, 2].forEach(player => {
         const interval = getScoutReinforceInterval(player);
+        const limit = getScoutLimit(player);
         if (gameTurn % interval !== 0) return;
         const scoutCount = units.filter(unit => unit.player === player && unit.type === 'scout').length;
-        if (scoutCount >= SCOUT_LIMIT_PER_PLAYER) {
-            addConsoleLog(`SUPPLY: Player ${player} の偵察兵は上限${SCOUT_LIMIT_PER_PLAYER}体です。`, 'system');
+        if (scoutCount >= limit) {
+            addConsoleLog(`SUPPLY: Player ${player} の偵察兵は上限${limit}体です。`, 'system');
             return;
         }
         const rows = player === 1 ? [10, 9] : [0, 1];
@@ -5423,6 +5427,12 @@ function getScoutReinforceInterval(player) {
     const koh = getKohUnit(player);
     if (koh && getPlayerAbility(player) === '衛生兵') return MEDIC_SCOUT_REINFORCE_INTERVAL;
     return SCOUT_REINFORCE_INTERVAL;
+}
+
+function getScoutLimit(player) {
+    const koh = getKohUnit(player);
+    if (koh && getPlayerAbility(player) === '衛生兵') return MEDIC_SCOUT_LIMIT_PER_PLAYER;
+    return DEFAULT_SCOUT_LIMIT_PER_PLAYER;
 }
 
 // --- WIN / LOSE ---

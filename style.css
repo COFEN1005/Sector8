@@ -442,6 +442,12 @@ header {
     display: none !important;
 }
 
+#game-over-overlay.replay-active #game-over-title,
+#game-over-overlay.replay-active #game-over-subtitle,
+#game-over-overlay.replay-active #game-summary-panel {
+    display: none !important;
+}
+
 #game-over-overlay.replay-active .replay-viewer {
     flex: 1 1 auto;
     min-height: 0;
