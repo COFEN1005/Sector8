@@ -1,362 +1,693 @@
-const MAP_SIZES = { area1: { rows: 11, cols: 11 }, area2: { rows: 11, cols: 11 }, area3: { rows: 11, cols: 11 } };
-const STORAGE_KEY = 'sector8_map_editor_state_v1';
 const MAP_ORDER = ['area1', 'area2', 'area3'];
-const TOOL_LABELS = {
-    wall: 'WALL',
-    teleport: 'TELEPORT',
-    core: 'CORE',
-    erase: 'ERASE'
+const MAP_LABELS = {
+    area1: 'AREA 1',
+    area2: 'AREA 2',
+    area3: 'AREA 3'
+};
+const MAP_SIZES = {
+    area1: { rows: 11, cols: 11 },
+    area2: { rows: 11, cols: 11 },
+    area3: { rows: 11, cols: 11 }
+};
+const PORTAL_COLS = [0, 1, 9, 10];
+const CORE_COLS = [4, 5, 6];
+const VALID_TERRAINS = new Set(['wall', 'teleport', 'core']);
+const VALID_APPLY_MODES = new Set(['terrain', 'height', 'both']);
+const STORAGE_KEY = 'sector8-map-editor-v3';
+const MAX_HEIGHT = 3;
+const EXPORT_VERSION = 2;
+
+const dom = {
+    board: document.getElementById('board'),
+    activeMapLabel: document.getElementById('active-map-label'),
+    statusLine: document.getElementById('status-line'),
+    exportJson: document.getElementById('export-json'),
+    exportJs: document.getElementById('export-js'),
+    importText: document.getElementById('import-text'),
+    statWall: document.getElementById('stat-wall'),
+    statTeleport: document.getElementById('stat-teleport'),
+    statCore: document.getElementById('stat-core'),
+    statHigh: document.getElementById('stat-high'),
+    statPeak: document.getElementById('stat-peak'),
+    statChanged: document.getElementById('stat-changed'),
+    statWarnings: document.getElementById('stat-warnings'),
+    btnNewPreset: document.getElementById('btn-new-preset'),
+    btnUndo: document.getElementById('btn-undo'),
+    btnRedo: document.getElementById('btn-redo'),
+    btnExportJson: document.getElementById('btn-export-json'),
+    btnExportJs: document.getElementById('btn-export-js'),
+    btnImport: document.getElementById('btn-import'),
+    btnCopyJson: document.getElementById('btn-copy-json'),
+    btnCopyJs: document.getElementById('btn-copy-js'),
+    btnDownload: document.getElementById('btn-download')
 };
 
-const state = loadState() || createBlankState();
-let activeMap = 'area1';
-let activeTool = 'wall';
+let state = loadState();
 let history = [];
 let future = [];
-let painting = false;
-let lastPaintKey = null;
+let strokeActive = false;
+let strokeSnapshotTaken = false;
+let statusTimer = null;
 
-function createBlankMap() {
-    return Array.from({ length: 11 }, () => Array.from({ length: 11 }, () => null));
+function clamp(value, min, max) {
+    return Math.min(max, Math.max(min, value));
 }
 
-function createBlankState() {
-    return {
-        version: 1,
-        maps: {
-            area1: createBlankMap(),
-            area2: createBlankMap(),
-            area3: createBlankMap()
+function deepClone(value) {
+    return JSON.parse(JSON.stringify(value));
+}
+
+function makeGrid() {
+    const { rows, cols } = MAP_SIZES.area1;
+    return Array.from({ length: rows }, () => (
+        Array.from({ length: cols }, () => ({ terrain: null, height: 0 }))
+    ));
+}
+
+function seedAnchors(mapName, grid) {
+    if (mapName === 'area1' || mapName === 'area2') {
+        const topRow = 0;
+        PORTAL_COLS.forEach(col => {
+            grid[topRow][col].terrain = 'teleport';
+        });
+    }
+
+    if (mapName === 'area2' || mapName === 'area3') {
+        const bottomRow = 10;
+        PORTAL_COLS.forEach(col => {
+            grid[bottomRow][col].terrain = 'teleport';
+        });
+    }
+
+    if (mapName === 'area1') {
+        const row = 10;
+        CORE_COLS.forEach(col => {
+            grid[row][col].terrain = 'core';
+        });
+    }
+
+    if (mapName === 'area3') {
+        const row = 0;
+        CORE_COLS.forEach(col => {
+            grid[row][col].terrain = 'core';
+        });
+    }
+}
+
+function createState(seedAnchorsEnabled = true) {
+    const maps = {};
+    MAP_ORDER.forEach(mapName => {
+        const grid = makeGrid();
+        if (seedAnchorsEnabled) {
+            seedAnchors(mapName, grid);
         }
+        maps[mapName] = grid;
+    });
+
+    return {
+        version: 3,
+        activeMap: 'area1',
+        activeTool: 'wall',
+        activeHeight: 0,
+        applyMode: 'both',
+        maps
     };
+}
+
+function normalizeTerrain(value) {
+    return VALID_TERRAINS.has(value) ? value : null;
+}
+
+function normalizeHeight(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return 0;
+    return clamp(Math.trunc(n), 0, MAX_HEIGHT);
+}
+
+function normalizeCell(raw) {
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+        return {
+            terrain: normalizeTerrain(raw.terrain),
+            height: normalizeHeight(raw.height ?? raw.h ?? 0)
+        };
+    }
+
+    if (typeof raw === 'string') {
+        if (VALID_TERRAINS.has(raw)) {
+            return { terrain: raw, height: 0 };
+        }
+
+        const maybeHeight = Number(raw);
+        if (Number.isFinite(maybeHeight)) {
+            return { terrain: null, height: clamp(Math.trunc(maybeHeight), 0, MAX_HEIGHT) };
+        }
+    }
+
+    return { terrain: null, height: 0 };
+}
+
+function normalizeGrid(source) {
+    const grid = makeGrid();
+
+    if (Array.isArray(source)) {
+        for (let row = 0; row < grid.length; row += 1) {
+            const sourceRow = source[row] || [];
+            for (let col = 0; col < grid[row].length; col += 1) {
+                grid[row][col] = normalizeCell(sourceRow[col]);
+            }
+        }
+        return grid;
+    }
+
+    if (source && typeof source === 'object' && Array.isArray(source.cells)) {
+        return normalizeGrid(source.cells);
+    }
+
+    return grid;
 }
 
 function loadState() {
     try {
         const raw = localStorage.getItem(STORAGE_KEY);
-        if (!raw) return null;
+        if (!raw) return createState(true);
         const parsed = JSON.parse(raw);
-        if (!parsed?.maps) return null;
         return normalizeState(parsed);
     } catch {
-        return null;
+        return createState(true);
     }
 }
 
-function normalizeState(input) {
-    const next = createBlankState();
+function normalizeState(raw) {
+    const next = createState(false);
+    if (!raw || typeof raw !== 'object') {
+        return next;
+    }
+
+    if (MAP_ORDER.includes(raw.activeMap)) {
+        next.activeMap = raw.activeMap;
+    }
+
+    if (typeof raw.activeTool === 'string' && (VALID_TERRAINS.has(raw.activeTool) || raw.activeTool === 'erase')) {
+        next.activeTool = raw.activeTool;
+    }
+
+    if (Number.isFinite(Number(raw.activeHeight))) {
+        next.activeHeight = clamp(Math.trunc(Number(raw.activeHeight)), 0, MAX_HEIGHT);
+    }
+
+    if (VALID_APPLY_MODES.has(raw.applyMode)) {
+        next.applyMode = raw.applyMode;
+    }
+
     MAP_ORDER.forEach(mapName => {
-        const cells = input.maps?.[mapName];
-        if (!Array.isArray(cells)) return;
-        for (let r = 0; r < 11; r++) {
-            for (let c = 0; c < 11; c++) {
-                const value = cells[r]?.[c];
-                next.maps[mapName][r][c] = value === 'wall' || value === 'teleport' || value === 'core' ? value : null;
-            }
+        const mapSource = getMapSource(raw, mapName);
+        if (mapSource) {
+            next.maps[mapName] = normalizeGrid(mapSource);
         }
     });
+
     return next;
+}
+
+function getMapSource(raw, mapName) {
+    if (!raw || typeof raw !== 'object') return null;
+
+    const direct = raw[mapName];
+    if (Array.isArray(direct) || (direct && typeof direct === 'object' && Array.isArray(direct.cells))) {
+        return direct;
+    }
+
+    if (raw.maps && typeof raw.maps === 'object') {
+        const nested = raw.maps[mapName];
+        if (Array.isArray(nested) || (nested && typeof nested === 'object' && Array.isArray(nested.cells))) {
+            return nested;
+        }
+    }
+
+    return null;
 }
 
 function saveState() {
     try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    } catch {}
+    } catch {
+        // ignore storage quota issues
+    }
 }
 
-function isLegalTeleportCell(mapName, row, col) {
-    const legalCols = [0, 1, 9, 10];
-    if (!legalCols.includes(col)) return false;
+function getCell(mapName, row, col) {
+    return state.maps[mapName]?.[row]?.[col] || null;
+}
+
+function isTeleportSlot(mapName, row, col) {
+    if (!PORTAL_COLS.includes(col)) return false;
     if (mapName === 'area1') return row === 0;
     if (mapName === 'area2') return row === 0 || row === 10;
-    if (mapName === 'area3') return row === 10;
+    return row === 10;
+}
+
+function isCoreSlot(mapName, row, col) {
+    if (!CORE_COLS.includes(col)) return false;
+    if (mapName === 'area1') return row === 10;
+    if (mapName === 'area3') return row === 0;
     return false;
 }
 
-function isLegalCoreCell(mapName, row, col) {
-    if (mapName === 'area1') return row === 10 && col >= 4 && col <= 6;
-    if (mapName === 'area3') return row === 0 && col >= 4 && col <= 6;
-    return false;
+function getTerrainGlyph(terrain) {
+    if (terrain === 'wall') return 'W';
+    if (terrain === 'teleport') return 'T';
+    if (terrain === 'core') return 'C';
+    return '';
 }
 
-function getCellType(mapName, row, col) {
-    return state.maps[mapName][row][col];
+function getTerrainLabel(terrain) {
+    if (terrain === 'wall') return 'WALL';
+    if (terrain === 'teleport') return 'TELEPORT';
+    if (terrain === 'core') return 'CORE';
+    return 'EMPTY';
 }
 
-function setCellType(mapName, row, col, type) {
-    const current = getCellType(mapName, row, col);
-    if (current === type) return false;
+function getMapStats(mapName) {
+    const map = state.maps[mapName];
+    const stats = {
+        wall: 0,
+        teleport: 0,
+        core: 0,
+        high: 0,
+        peak: 0,
+        changed: 0,
+        warnings: 0
+    };
 
-    if (type === 'teleport' && !isLegalTeleportCell(mapName, row, col)) {
-        setStatus('Teleport はこのマスに置けません。');
-        return false;
+    for (let row = 0; row < map.length; row += 1) {
+        for (let col = 0; col < map[row].length; col += 1) {
+            const cell = map[row][col];
+            if (cell.terrain === 'wall') stats.wall += 1;
+            if (cell.terrain === 'teleport') stats.teleport += 1;
+            if (cell.terrain === 'core') stats.core += 1;
+            if (cell.height > 0) stats.high += 1;
+            if (cell.height === MAX_HEIGHT) stats.peak += 1;
+            if (cell.height > 0 || cell.terrain) stats.changed += 1;
+            if (
+                (cell.terrain === 'teleport' && !isTeleportSlot(mapName, row, col)) ||
+                (cell.terrain === 'core' && !isCoreSlot(mapName, row, col))
+            ) {
+                stats.warnings += 1;
+            }
+        }
     }
-    if (type === 'core' && !isLegalCoreCell(mapName, row, col)) {
-        setStatus('Core はこのマスに置けません。');
-        return false;
+
+    return stats;
+}
+
+function captureHistory() {
+    history.push(deepClone(state.maps));
+    if (history.length > 64) {
+        history.shift();
     }
-
-    pushHistory();
-    state.maps[mapName][row][col] = type;
     future = [];
-    saveState();
-    renderAll();
-    return true;
 }
 
-function clearCell(mapName, row, col) {
-    if (!getCellType(mapName, row, col)) return false;
-    pushHistory();
-    state.maps[mapName][row][col] = null;
-    future = [];
-    saveState();
-    renderAll();
-    return true;
-}
-
-function pushHistory() {
-    history.push(structuredClone(state));
-    if (history.length > 40) history.shift();
+function restoreMaps(snapshot) {
+    state.maps = deepClone(snapshot);
+    persistAndRender();
 }
 
 function undo() {
-    if (!history.length) return;
-    future.push(structuredClone(state));
-    const prev = history.pop();
-    restoreState(prev);
+    if (!history.length) {
+        announce('これ以上戻せません');
+        return;
+    }
+    future.push(deepClone(state.maps));
+    restoreMaps(history.pop());
 }
 
 function redo() {
-    if (!future.length) return;
-    history.push(structuredClone(state));
-    const next = future.pop();
-    restoreState(next);
+    if (!future.length) {
+        announce('やり直せる操作がありません');
+        return;
+    }
+    history.push(deepClone(state.maps));
+    restoreMaps(future.pop());
 }
 
-function restoreState(next) {
-    const normalized = normalizeState(next);
-    state.version = normalized.version;
-    state.maps = normalized.maps;
+function setActiveMap(mapName) {
+    if (!MAP_ORDER.includes(mapName)) return;
+    state.activeMap = mapName;
     saveState();
     renderAll();
 }
 
-function paintCell(mapName, row, col) {
-    if (activeTool === 'erase') {
-        clearCell(mapName, row, col);
-        return;
+function setActiveTool(tool) {
+    if (!VALID_TERRAINS.has(tool) && tool !== 'erase') return;
+    state.activeTool = tool;
+    saveState();
+    renderToolbar();
+    renderStatus();
+}
+
+function setActiveHeight(height) {
+    state.activeHeight = clamp(Number(height) || 0, 0, MAX_HEIGHT);
+    saveState();
+    renderToolbar();
+    renderStatus();
+}
+
+function setApplyMode(mode) {
+    if (!VALID_APPLY_MODES.has(mode)) return;
+    state.applyMode = mode;
+    saveState();
+    renderToolbar();
+    renderStatus();
+}
+
+function createBlankPreset() {
+    history.push(deepClone(state.maps));
+    if (history.length > 64) {
+        history.shift();
     }
-    if (activeTool === 'wall') {
-        setCellType(mapName, row, col, 'wall');
-        return;
+    future = [];
+    state = createState(true);
+    saveState();
+    renderAll();
+    announce('新しい固定マップを作成しました');
+}
+
+function paintCell(row, col) {
+    const cell = getCell(state.activeMap, row, col);
+    if (!cell) return false;
+
+    const nextTerrain = state.applyMode !== 'height'
+        ? (state.activeTool === 'erase' ? null : state.activeTool)
+        : cell.terrain;
+    const nextHeight = state.applyMode !== 'terrain'
+        ? clamp(state.activeHeight, 0, MAX_HEIGHT)
+        : cell.height;
+
+    const changed = cell.terrain !== nextTerrain || cell.height !== nextHeight;
+    if (!changed) return false;
+
+    if (!strokeSnapshotTaken) {
+        captureHistory();
+        strokeSnapshotTaken = true;
     }
-    if (activeTool === 'teleport') {
-        setCellType(mapName, row, col, 'teleport');
-        return;
+
+    if (state.applyMode !== 'height') {
+        cell.terrain = nextTerrain;
     }
-    if (activeTool === 'core') {
-        setCellType(mapName, row, col, 'core');
+    if (state.applyMode !== 'terrain') {
+        cell.height = nextHeight;
     }
+
+    saveState();
+    renderAll(false);
+    return true;
+}
+
+function beginStroke() {
+    strokeActive = true;
+    strokeSnapshotTaken = false;
+}
+
+function endStroke() {
+    strokeActive = false;
+    strokeSnapshotTaken = false;
+}
+
+function handleBoardPointerDown(event) {
+    const cellEl = event.target.closest('.cell');
+    if (!cellEl || event.button !== 0) return;
+    event.preventDefault();
+    beginStroke();
+    paintCell(Number(cellEl.dataset.row), Number(cellEl.dataset.col));
+}
+
+function handleBoardPointerMove(event) {
+    if (!strokeActive || event.buttons !== 1) return;
+    const cellEl = event.target.closest('.cell');
+    if (!cellEl) return;
+    event.preventDefault();
+    paintCell(Number(cellEl.dataset.row), Number(cellEl.dataset.col));
+}
+
+function handleBoardContextMenu(event) {
+    event.preventDefault();
+}
+
+function renderToolbar() {
+    document.querySelectorAll('[data-map]').forEach(button => {
+        button.classList.toggle('active', button.dataset.map === state.activeMap);
+    });
+
+    document.querySelectorAll('[data-tool]').forEach(button => {
+        button.classList.toggle('active', button.dataset.tool === state.activeTool);
+    });
+
+    document.querySelectorAll('[data-height]').forEach(button => {
+        button.classList.toggle('active', Number(button.dataset.height) === state.activeHeight);
+    });
+
+    document.querySelectorAll('[data-apply-mode]').forEach(button => {
+        button.classList.toggle('active', button.dataset.applyMode === state.applyMode);
+    });
+
+    dom.activeMapLabel.textContent = MAP_LABELS[state.activeMap];
 }
 
 function renderBoard() {
-    const board = document.getElementById('board');
-    board.innerHTML = '';
-    board.style.gridTemplateColumns = 'repeat(11, minmax(0, 1fr))';
-    const map = state.maps[activeMap];
+    const map = state.maps[state.activeMap];
+    const fragment = document.createDocumentFragment();
 
-    for (let r = 0; r < 11; r++) {
-        for (let c = 0; c < 11; c++) {
-            const cell = document.createElement('button');
-            cell.type = 'button';
-            cell.className = 'cell';
-            cell.dataset.row = String(r);
-            cell.dataset.col = String(c);
-            const cellType = map[r][c];
-            if (cellType) cell.classList.add(cellType);
-            if ((activeTool === 'teleport' && isLegalTeleportCell(activeMap, r, c)) || (activeTool === 'core' && isLegalCoreCell(activeMap, r, c))) {
-                cell.classList.add('legal');
+    for (let row = 0; row < map.length; row += 1) {
+        for (let col = 0; col < map[row].length; col += 1) {
+            const cell = map[row][col];
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = [
+                'cell',
+                `height-${cell.height}`,
+                cell.terrain ? `terrain-${cell.terrain}` : 'terrain-empty'
+            ].join(' ');
+            if (
+                (cell.terrain === 'teleport' && !isTeleportSlot(state.activeMap, row, col)) ||
+                (cell.terrain === 'core' && !isCoreSlot(state.activeMap, row, col))
+            ) {
+                button.classList.add('illegal');
             }
-            if ((activeTool === 'teleport' && !isLegalTeleportCell(activeMap, r, c)) || (activeTool === 'core' && !isLegalCoreCell(activeMap, r, c))) {
-                cell.classList.add('locked');
-            }
-            cell.addEventListener('pointerdown', event => {
-                event.preventDefault();
-                painting = true;
-                lastPaintKey = `${r},${c}`;
-                paintCell(activeMap, r, c);
-            });
-            cell.addEventListener('pointerenter', () => {
-                if (!painting) return;
-                const key = `${r},${c}`;
-                if (key === lastPaintKey) return;
-                lastPaintKey = key;
-                paintCell(activeMap, r, c);
-            });
-            board.appendChild(cell);
+            button.dataset.row = String(row);
+            button.dataset.col = String(col);
+            button.setAttribute(
+                'aria-label',
+                `${MAP_LABELS[state.activeMap]} ${row + 1}-${col + 1} ${getTerrainLabel(cell.terrain)} H${cell.height}`
+            );
+            button.title = `${getTerrainLabel(cell.terrain)} / H${cell.height}`;
+            button.innerHTML = `
+                <span class="height-fill"></span>
+                <span class="terrain-glyph">${getTerrainGlyph(cell.terrain)}</span>
+                <span class="height-badge">H${cell.height}</span>
+            `;
+            fragment.appendChild(button);
         }
     }
+
+    dom.board.replaceChildren(fragment);
 }
 
 function renderStats() {
-    const counts = { wall: 0, teleport: 0, core: 0, changed: 0 };
-    MAP_ORDER.forEach(mapName => {
-        state.maps[mapName].forEach(row => row.forEach(cell => {
-            if (cell === 'wall') counts.wall++;
-            if (cell === 'teleport') counts.teleport++;
-            if (cell === 'core') counts.core++;
-        }));
-    });
-    counts.changed = history.length;
-    document.getElementById('stat-wall').textContent = String(counts.wall);
-    document.getElementById('stat-teleport').textContent = String(counts.teleport);
-    document.getElementById('stat-core').textContent = String(counts.core);
-    document.getElementById('stat-changed').textContent = String(counts.changed);
+    const stats = getMapStats(state.activeMap);
+    dom.statWall.textContent = String(stats.wall);
+    dom.statTeleport.textContent = String(stats.teleport);
+    dom.statCore.textContent = String(stats.core);
+    dom.statHigh.textContent = String(stats.high);
+    dom.statPeak.textContent = String(stats.peak);
+    dom.statChanged.textContent = String(stats.changed);
+    dom.statWarnings.textContent = String(stats.warnings);
 }
 
-function buildExportObject() {
+function renderStatus() {
+    const stats = getMapStats(state.activeMap);
+    const toolLabel = state.activeTool === 'erase' ? 'ERASE' : state.activeTool.toUpperCase();
+    const applyLabel = state.applyMode.toUpperCase();
+    const warningPart = stats.warnings > 0 ? ` / WARNINGS ${stats.warnings}` : '';
+    dom.statusLine.textContent = `TOOL ${toolLabel} / HEIGHT H${state.activeHeight} / APPLY ${applyLabel}${warningPart}`;
+}
+
+function serializeExportPayload() {
     const maps = {};
     MAP_ORDER.forEach(mapName => {
-        const walls = [];
-        const teleports = [];
-        const cores = [];
-        const cells = state.maps[mapName].map((row, r) => row.map((cell, c) => {
-            if (cell === 'wall') walls.push([r, c]);
-            if (cell === 'teleport') teleports.push([r, c]);
-            if (cell === 'core') cores.push([r, c]);
-            return cell;
-        }));
-        maps[mapName] = { cells, walls, teleports, cores };
+        maps[mapName] = {
+            rows: MAP_SIZES[mapName].rows,
+            cols: MAP_SIZES[mapName].cols,
+            cells: deepClone(state.maps[mapName]),
+            stats: getMapStats(mapName)
+        };
     });
-    return { version: 1, maps };
+
+    return {
+        version: EXPORT_VERSION,
+        type: 'sector8-fixed-map-preset',
+        createdAt: new Date().toISOString(),
+        rules: {
+            height: {
+                enabled: true,
+                maxLevel: MAX_HEIGHT,
+                visionBonusPerLevel: 1,
+                moveExtraCostPerLevel: 1
+            }
+        },
+        maps
+    };
 }
 
-function updateExportPanels() {
-    const exportObj = buildExportObject();
-    document.getElementById('export-json').value = JSON.stringify(exportObj, null, 2);
-    document.getElementById('export-js').value = `const FIXED_MAP_CONFIG = ${JSON.stringify(exportObj, null, 2)};`;
+function refreshExports() {
+    const payload = serializeExportPayload();
+    const json = JSON.stringify(payload, null, 2);
+    dom.exportJson.value = json;
+    dom.exportJs.value = [
+        'const SECTOR8_FIXED_MAP_PRESET = ' + json + ';',
+        'if (typeof window !== "undefined") window.SECTOR8_FIXED_MAP_PRESET = SECTOR8_FIXED_MAP_PRESET;'
+    ].join('\n');
 }
 
-function setStatus(text) {
-    document.getElementById('status-line').textContent = text;
+function persistAndRender(refreshBoardOnly = true) {
+    saveState();
+    renderToolbar();
+    renderBoard();
+    renderStats();
+    renderStatus();
+    refreshExports();
+    if (!refreshBoardOnly) {
+        // reserved for future view updates
+    }
 }
 
 function renderAll() {
-    document.getElementById('active-map-label').textContent = activeMap.toUpperCase();
-    renderBoard();
-    renderStats();
-    updateExportPanels();
-    document.querySelectorAll('.map-tab').forEach(btn => btn.classList.toggle('active', btn.dataset.map === activeMap));
-    document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.tool === activeTool));
+    persistAndRender();
 }
 
-function loadImportedJson() {
-    const text = document.getElementById('import-text').value.trim();
+function announce(message, delay = 1600) {
+    dom.statusLine.textContent = message;
+    if (statusTimer) {
+        clearTimeout(statusTimer);
+    }
+    statusTimer = setTimeout(() => {
+        statusTimer = null;
+        renderStatus();
+    }, delay);
+}
+
+async function copyText(text, label) {
+    try {
+        await navigator.clipboard.writeText(text);
+        announce(`${label} をコピーしました`);
+    } catch {
+        announce(`${label} のコピーに失敗しました`);
+    }
+}
+
+async function importFromTextarea() {
+    const text = dom.importText.value.trim();
     if (!text) {
-        setStatus('JSON が空です。');
+        announce('読み込む JSON が空です');
         return;
     }
+
     try {
-        const parsed = normalizeState(JSON.parse(text));
-        pushHistory();
-        state.maps = parsed.maps;
-        saveState();
+        const parsed = JSON.parse(text);
+        history.push(deepClone(state.maps));
+        if (history.length > 64) {
+            history.shift();
+        }
         future = [];
+        state = normalizeState(parsed);
+        saveState();
         renderAll();
-        setStatus('JSON を読み込みました。');
+        announce('JSON を読み込みました');
     } catch {
-        setStatus('JSON の読み込みに失敗しました。');
-    }
-}
-
-function resetAll() {
-    pushHistory();
-    const blank = createBlankState();
-    state.maps = blank.maps;
-    future = [];
-    saveState();
-    renderAll();
-    setStatus('新規マップを作成しました。');
-}
-
-async function copyText(value, label) {
-    try {
-        await navigator.clipboard.writeText(value);
-        setStatus(`${label} をコピーしました。`);
-    } catch {
-        const temp = document.createElement('textarea');
-        temp.value = value;
-        temp.style.position = 'fixed';
-        temp.style.opacity = '0';
-        document.body.appendChild(temp);
-        temp.select();
-        const ok = document.execCommand('copy');
-        document.body.removeChild(temp);
-        setStatus(ok ? `${label} をコピーしました。` : `${label} のコピーに失敗しました。`);
+        announce('JSON の読み込みに失敗しました');
     }
 }
 
 function downloadJson() {
-    const blob = new Blob([JSON.stringify(buildExportObject(), null, 2)], { type: 'application/json' });
+    const payload = serializeExportPayload();
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'sector8-fixed-map.json';
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-    setStatus('JSON を保存しました。');
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = 'sector8-fixed-map-preset.json';
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    announce('JSON をダウンロードしました');
 }
 
-document.addEventListener('pointerup', () => {
-    painting = false;
-    lastPaintKey = null;
-});
-
-document.addEventListener('DOMContentLoaded', () => {
-    document.querySelectorAll('.map-tab').forEach(btn => {
-        btn.addEventListener('click', () => {
-            activeMap = btn.dataset.map;
-            setStatus(`${activeMap.toUpperCase()} を編集中です。`);
-            renderAll();
-        });
+function bindEvents() {
+    document.querySelectorAll('[data-map]').forEach(button => {
+        button.addEventListener('click', () => setActiveMap(button.dataset.map));
     });
 
-    document.querySelectorAll('.tool-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            activeTool = btn.dataset.tool;
-            const hints = {
-                wall: 'WALL を編集中です。',
-                teleport: 'TELEPORT を編集中です。',
-                core: 'CORE を編集中です。',
-                erase: 'ERASE を編集中です。'
-            };
-            setStatus(hints[activeTool] || '編集中です。');
-            renderAll();
-        });
+    document.querySelectorAll('[data-tool]').forEach(button => {
+        button.addEventListener('click', () => setActiveTool(button.dataset.tool));
     });
 
-    document.getElementById('btn-new-preset').addEventListener('click', resetAll);
-    document.getElementById('btn-undo').addEventListener('click', undo);
-    document.getElementById('btn-redo').addEventListener('click', redo);
-    document.getElementById('btn-import').addEventListener('click', loadImportedJson);
-    document.getElementById('btn-copy-json').addEventListener('click', () => copyText(document.getElementById('export-json').value, 'JSON'));
-    document.getElementById('btn-copy-js').addEventListener('click', () => copyText(document.getElementById('export-js').value, 'JS'));
-    document.getElementById('btn-download').addEventListener('click', downloadJson);
-    document.getElementById('board').addEventListener('contextmenu', event => event.preventDefault());
+    document.querySelectorAll('[data-height]').forEach(button => {
+        button.addEventListener('click', () => setActiveHeight(button.dataset.height));
+    });
 
-    window.addEventListener('keydown', event => {
-        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
+    document.querySelectorAll('[data-apply-mode]').forEach(button => {
+        button.addEventListener('click', () => setApplyMode(button.dataset.applyMode));
+    });
+
+    dom.btnNewPreset.addEventListener('click', createBlankPreset);
+    dom.btnUndo.addEventListener('click', undo);
+    dom.btnRedo.addEventListener('click', redo);
+    dom.btnExportJson.addEventListener('click', () => {
+        dom.exportJson.focus();
+        dom.exportJson.select();
+        announce('JSON を更新しました');
+    });
+    dom.btnExportJs.addEventListener('click', () => {
+        dom.exportJs.focus();
+        dom.exportJs.select();
+        announce('JS を更新しました');
+    });
+    dom.btnImport.addEventListener('click', importFromTextarea);
+    dom.btnCopyJson.addEventListener('click', () => copyText(dom.exportJson.value, 'JSON'));
+    dom.btnCopyJs.addEventListener('click', () => copyText(dom.exportJs.value, 'JS'));
+    dom.btnDownload.addEventListener('click', downloadJson);
+
+    dom.board.addEventListener('pointerdown', handleBoardPointerDown);
+    dom.board.addEventListener('pointermove', handleBoardPointerMove);
+    dom.board.addEventListener('contextmenu', handleBoardContextMenu);
+    window.addEventListener('pointerup', endStroke);
+    window.addEventListener('pointercancel', endStroke);
+    window.addEventListener('blur', endStroke);
+
+    document.addEventListener('keydown', event => {
+        if (event.ctrlKey && event.key.toLowerCase() === 'z') {
             event.preventDefault();
-            if (event.shiftKey) redo();
-            else undo();
+            undo();
             return;
         }
-        if (event.key === '1') { activeTool = 'wall'; renderAll(); }
-        if (event.key === '2') { activeTool = 'teleport'; renderAll(); }
-        if (event.key === '3') { activeTool = 'core'; renderAll(); }
-        if (event.key === '4') { activeTool = 'erase'; renderAll(); }
-    });
 
-    renderAll();
-    setStatus('編集を開始できます。');
-});
+        if (event.ctrlKey && event.key.toLowerCase() === 'y') {
+            event.preventDefault();
+            redo();
+            return;
+        }
+
+        const key = event.key;
+        if (key === '1') setActiveTool('wall');
+        if (key === '2') setActiveTool('teleport');
+        if (key === '3') setActiveTool('core');
+        if (key === '4') setActiveTool('erase');
+        if (key === '5') setActiveHeight(0);
+        if (key === '6') setActiveHeight(1);
+        if (key === '7') setActiveHeight(2);
+        if (key === '8') setActiveHeight(3);
+    });
+}
+
+bindEvents();
+renderAll();
