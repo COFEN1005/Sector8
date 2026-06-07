@@ -170,6 +170,7 @@ let currentMatchOpponentStartProfile = null;
 let currentMatchRecord = null;
 let mapSourceMode = 'random';
 let fixedMapPreset = null;
+const REPLAY_FEATURE_ENABLED = true;
 let currentMatchReplay = null;
 let activeMatchSummaryView = null;
 let replayPlaybackActive = false;
@@ -438,6 +439,7 @@ function createMatchRecordBase() {
 }
 
 function createMatchReplayBase() {
+    if (!REPLAY_FEATURE_ENABLED) return null;
     return {
         matchKey: currentMatchKey,
         startedTime: currentMatchStartedAt || Date.now(),
@@ -1427,7 +1429,8 @@ async function submitMatchHistory(reason, winnerId) {
             await restoreAuthSession();
         } catch {}
     }
-    if (!authSession?.token || !authProfile) {
+    const localProfile = authProfile || currentMatchStartProfile;
+    if (!authSession?.token || !localProfile) {
         console.warn('match history skipped: auth profile missing');
         return;
     }
@@ -1440,21 +1443,21 @@ async function submitMatchHistory(reason, winnerId) {
         ? getOnlineDisplayName(localPlayer === 1 ? 2 : 1)
         : (vsAI ? 'AI BOT' : 'PLAYER 2');
     const player1StartProfile = onlineMode
-        ? (localIsPlayer1 ? (currentMatchStartProfile || authProfile) : (currentMatchOpponentStartProfile || null))
-        : (currentMatchStartProfile || authProfile);
+        ? (localIsPlayer1 ? (currentMatchStartProfile || localProfile) : (currentMatchOpponentStartProfile || null))
+        : (currentMatchStartProfile || localProfile);
     const player2StartProfile = onlineMode
-        ? (localIsPlayer1 ? (currentMatchOpponentStartProfile || null) : (currentMatchStartProfile || authProfile))
+        ? (localIsPlayer1 ? (currentMatchOpponentStartProfile || null) : (currentMatchStartProfile || localProfile))
         : (currentMatchRecord?.opponentStartProfile || null);
-    const player1Profile = onlineMode ? (player1StartProfile || null) : authProfile;
+    const player1Profile = onlineMode ? (player1StartProfile || null) : localProfile;
     const player2Profile = onlineMode ? (player2StartProfile || null) : null;
     const summary = buildMatchSummary(isDraw ? 'draw' : reason, isDraw ? null : winnerId);
-    summary.winnerName = isDraw ? 'DRAW' : (viewerWon ? authProfile.name : opponentName);
-    summary.loserName = isDraw ? 'DRAW' : (viewerWon ? opponentName : authProfile.name);
+    summary.winnerName = isDraw ? 'DRAW' : (viewerWon ? localProfile.name : opponentName);
+    summary.loserName = isDraw ? 'DRAW' : (viewerWon ? opponentName : localProfile.name);
     summary.replay = currentMatchReplay;
     activeMatchSummaryView = summary;
     const localStartProfile = localIsPlayer1 ? player1Profile : player2Profile;
     const opponentStartProfile = localIsPlayer1 ? player2Profile : player1Profile;
-    const startRating = Number(localStartProfile?.rating ?? authProfile.rating ?? 0);
+    const startRating = Number(localStartProfile?.rating ?? localProfile.rating ?? 0);
     const opponentStartRating = Number(opponentStartProfile?.rating ?? 0);
     const matchType = getCurrentMatchType();
     const player1RatingDelta = isDraw ? 0 : calculateMatchRatingDelta(matchType, Boolean(player1Won), Number(player1StartProfile?.rating || 0), Number(player2StartProfile?.rating || 0));
@@ -1462,14 +1465,14 @@ async function submitMatchHistory(reason, winnerId) {
     const localRatingDelta = localIsPlayer1 ? player1RatingDelta : player2RatingDelta;
     const opponentRatingDelta = localIsPlayer1 ? player2RatingDelta : player1RatingDelta;
     const localExpGain = matchType === 'rank' && !isDraw ? MATCH_EXP_GAIN : 0;
-    const canPersistMatchHistory = Boolean(authSession?.token && authProfile);
+    const canPersistMatchHistory = Boolean(authSession?.token && localProfile);
     const payload = {
         matchKey: currentMatchKey || `local:${Date.now()}`,
         matchType,
         player1Id: player1Profile?.id ?? null,
         player2Id: player2Profile?.id ?? null,
-        player1Name: player1Profile?.name || (localIsPlayer1 ? authProfile.name : opponentName),
-        player2Name: player2Profile?.name || (localIsPlayer1 ? opponentName : authProfile.name),
+        player1Name: player1Profile?.name || (localIsPlayer1 ? localProfile.name : opponentName),
+        player2Name: player2Profile?.name || (localIsPlayer1 ? opponentName : localProfile.name),
         winner: isDraw ? 'DRAW' : (player1Won ? (player1Profile?.name || 'PLAYER 1') : (player2Profile?.name || 'PLAYER 2')),
         loser: isDraw ? 'DRAW' : (player1Won ? (player2Profile?.name || 'PLAYER 2') : (player1Profile?.name || 'PLAYER 1')),
         result: isDraw ? 'draw' : (player1Won ? 'win' : 'lose'),
@@ -1480,7 +1483,7 @@ async function submitMatchHistory(reason, winnerId) {
         startedTime: currentMatchStartedAt || Date.now(),
         endedTime: Date.now(),
         timeTaken: Math.max(0, Date.now() - (currentMatchStartedAt || Date.now())),
-        surrenderByPlayerId: !isDraw && !viewerWon && reason === 'forfeit' ? authProfile.id : null,
+        surrenderByPlayerId: !isDraw && !viewerWon && reason === 'forfeit' ? localProfile.id : null,
         winnerPlayerId: isDraw ? null : (winnerId === 1 ? (player1Profile?.id || null) : (player2Profile?.id || null)),
         loserPlayerId: isDraw ? null : (winnerId === 1 ? (player2Profile?.id || null) : (player1Profile?.id || null)),
         summaryJson: summary,
@@ -1492,13 +1495,15 @@ async function submitMatchHistory(reason, winnerId) {
             summary.endProfile = profileData;
         } else {
             summary.endProfile = {
-                ...authProfile,
-                rating: Number(authProfile.rating || 0) + Number(localRatingDelta || 0)
+                ...localProfile,
+                rating: Number(localProfile.rating || 0) + Number(localRatingDelta || 0)
             };
         }
         summary.ratingDelta = localRatingDelta;
         summary.expDelta = localExpGain;
-        applyLocalMatchProgress(localRatingDelta, localExpGain);
+        if (authProfile) {
+            applyLocalMatchProgress(localRatingDelta, localExpGain);
+        }
     };
 
     if (!canPersistMatchHistory) {
@@ -1534,7 +1539,7 @@ async function submitMatchHistory(reason, winnerId) {
                 exp: updatedProfile.exp,
                 rating: updatedProfile.rating
             };
-            const beforeProfile = localStartProfile || authProfile;
+            const beforeProfile = localStartProfile || localProfile;
             summary.ratingDelta = Number(updatedProfile.rating || 0) - Number(beforeProfile?.rating || 0);
             summary.expDelta = Number(updatedProfile.exp || 0) - Number(beforeProfile?.exp || 0);
             applyAuthProfile(updatedProfile, authSession.token);
@@ -5661,7 +5666,7 @@ function triggerWin(winnerId, fromOnline = false, reason = 'core') {
     const summary = replayPlaybackActive && activeMatchSummaryView
         ? activeMatchSummaryView
         : buildMatchSummary(reason, winnerId);
-    summary.replay = summary.replay || currentMatchReplay;
+    summary.replay = currentMatchReplay;
     activeMatchSummaryView = summary;
     recordMatchReplaySnapshot('MATCH END');
 
@@ -5707,7 +5712,7 @@ function triggerDraw(fromOnline = false, reason = 'mutual') {
     const summary = replayPlaybackActive && activeMatchSummaryView
         ? activeMatchSummaryView
         : buildMatchSummary('draw', null);
-    summary.replay = summary.replay || currentMatchReplay;
+    summary.replay = currentMatchReplay;
     activeMatchSummaryView = summary;
     recordMatchReplaySnapshot('MATCH DRAW');
 
