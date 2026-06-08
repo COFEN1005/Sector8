@@ -2486,6 +2486,56 @@ body.opponent-turn #turn-indicator {
     box-shadow: var(--shadow-purple);
 }
 
+.impersonation-modal {
+    max-width: 30rem;
+}
+
+.overlay-hint {
+    margin-top: 0.3rem;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    text-align: center;
+}
+
+.impersonation-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.55rem;
+    margin: 1rem 0 0.9rem;
+    max-height: min(60vh, 32rem);
+    overflow-y: auto;
+    padding-right: 0.2rem;
+}
+
+.impersonation-btn {
+    min-height: 3rem;
+    padding: 0.7rem 0.75rem;
+    border: 1px solid rgba(0, 240, 255, 0.24);
+    border-radius: 10px;
+    background:
+        linear-gradient(180deg, rgba(7, 12, 22, 0.95), rgba(10, 15, 26, 0.85));
+    color: var(--text-main);
+    box-shadow:
+        inset 0 0 0 1px rgba(255, 255, 255, 0.03),
+        0 0 0 1px rgba(0, 240, 255, 0.05);
+}
+
+.impersonation-btn:hover,
+.impersonation-btn:focus-visible {
+    border-color: rgba(0, 240, 255, 0.55);
+    box-shadow:
+        0 0 0 1px rgba(0, 240, 255, 0.14),
+        0 0 18px rgba(0, 240, 255, 0.16);
+    transform: translateY(-1px);
+}
+
+.impersonation-label {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    letter-spacing: 0.06em;
+}
+
 /* --- ANIMATIONS & KEYFRAMES --- */
 @keyframes glitch-anim-1 {
     0% { clip-path: inset(40% 0 61% 0); transform: skew(0.3deg); }

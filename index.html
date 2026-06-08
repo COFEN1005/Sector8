@@ -40,13 +40,12 @@
                     <summary class="small-tool-btn">NEWS</summary>
                     <div class="news-menu-panel">
                         <details class="news-item">
-                            <summary>PATCH 0.7.25</summary>
+                            <summary>PATCH 0.7.26</summary>
                             <ul class="news-list">
-                                <li>甲アビリティに「憑依」「儀式」「脳筋」「狂愛」を追加</li>
-                                <li>戦姫のビジュアルを「姫」に変更し、能力一覧と詳細の表記を整理</li>
-                                <li>憑依は好きなコマの見た目に変化し、敵撃破で元の姿に戻るよう実装</li>
-                                <li>儀式は偵察兵を1体破壊して、敵1体を発光させるよう実装</li>
-                                <li>脳筋は直線移動11・視界0、狂愛は次ターン拘束の対象選択能力として実装</li>
+                                <li>憑依をボタン選択式に変更し、見た目と移動・視界を憑依先に寄せるよう調整</li>
+                                <li>各スキルはターンを消費するが、使用したコマは行動済みにならないよう統一</li>
+                                <li>狂愛は相手の次のターン開始時に行動済みへ、脳筋は撃破ごとにマンハッタン視界+1</li>
+                                <li>戦姫のビジュアルを「姫」に変更し、能力一覧と詳細の表記も整理</li>
                             </ul>
                         </details>
                         <details class="news-item">
@@ -403,8 +402,8 @@
                                 </div>
                                 <div class="ability-detail-card">
                                     <h4>脳筋</h4>
-                                    <p>パッシブ型。直線移動11、視界0の突撃型コマ。</p>
-                                    <div class="ability-detail-meta"><span>行動範囲: 直線移動11</span><span>視界範囲: 0</span></div>
+                                    <p>パッシブ型。直線移動11、視界0の突撃型コマ。敵を撃破するたびにマンハッタン視界+1を得る。</p>
+                                    <div class="ability-detail-meta"><span>行動範囲: 直線移動11</span><span>視界範囲: 0+撃破ボーナス</span></div>
                                 </div>
                                 <div class="ability-detail-card">
                                     <h4>狂愛</h4>
@@ -489,8 +488,8 @@
                             <li><strong>戦姫(姫)</strong>: パッシブ型。このコマが敵を4体撃破すると、自コマの丁を全て丙に変える。10体撃破すると、自コマの丙を全て乙に変える。</li>
                             <li><strong>憑依</strong>: 発動型。マンハッタン移動3・視界3。好きなコマの見た目に変化し、敵撃破で元に戻る。1度使うと10ターン再変更できない。</li>
                             <li><strong>儀式</strong>: 発動型。マンハッタン移動2・視界3。自軍の偵察兵を1体破壊し、ランダムな敵1体を10ターン発光させる。</li>
-                            <li><strong>脳筋</strong>: パッシブ型。直線移動11・視界0の突撃型。</li>
-                            <li><strong>狂愛</strong>: 発動型。直線移動3・正方形移動1・マンハッタン視界4。次のターン、視界内の指定対象1体を行動済みにする。CT:5。</li>
+                            <li><strong>脳筋</strong>: パッシブ型。直線移動11・視界0の突撃型。敵を撃破するたびにマンハッタン視界+1。</li>
+                            <li><strong>狂愛</strong>: 発動型。直線移動3・正方形移動1・マンハッタン視界4。相手の次のターン、視界内の指定対象1体を行動済みにする。CT:5。</li>
                             <li><strong>爆破</strong>: 発動、パッシブ型。発動した、もしくは死亡時、周囲2マスの壁、敵味方ユニット、軍旗をすべて破壊する。</li>
                             <li><strong>暗殺者</strong>: パッシブ型。敵撃破時、進行方向から1マス戻る。</li>
                             <li><strong>盲目</strong>: 視界1、移動4の盲目コマ。</li>
@@ -866,9 +865,19 @@
                 <button id="btn-cancel-dir" class="neon-btn danger">CANCEL</button>
             </div>
         </div>
+
+        <!-- IMPERSONATION OVERLAY (憑依) -->
+        <div id="impersonation-overlay" class="overlay hidden">
+            <div class="modal glass-panel mini impersonation-modal">
+                <h3>SELECT DISGUISE FORM</h3>
+                <p class="overlay-hint">ボタンを押して憑依先を選択してください。</p>
+                <div id="impersonation-grid" class="impersonation-grid"></div>
+                <button id="btn-cancel-impersonation" class="neon-btn danger">CANCEL</button>
+            </div>
+        </div>
     </div>
 
-    <div class="patch-badge">PATCH ver.0.7.25</div>
+    <div class="patch-badge">PATCH ver.0.7.26</div>
     <script>
     // Mode tab switching helper (called from inline onclick)
     function setModeTab(mode) {

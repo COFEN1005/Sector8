@@ -35,6 +35,7 @@ const MATCH_EXP_GAIN = 50;
 const KEEPALIVE_WARNING_MS = 10 * 60 * 1000;
 const DEVELOP_MODE_SEQUENCE = '12312321213';
 const ALL_ABILITY_OPTIONS = ['千里眼', '鼓舞', '足跡', '歴戦王', '戦姫', '爆破', '暗殺者', '盲目', '衛生兵', '監視', '迷彩', '煙幕', '憑依', '儀式', '脳筋', '狂愛'];
+const IMPERSONATION_CHOICES = ['core', 'otsu', 'hei', 'tei', 'scout', ...ALL_ABILITY_OPTIONS];
 const USERNAME_STORAGE_KEY = 'sector8_username';
 const ONLINE_SESSION_STORAGE_KEY = 'sector8_online_session';
 const AUTH_SESSION_STORAGE_KEY = 'sector8_auth_session';
@@ -181,6 +182,7 @@ let replayViewerSnapshots = [];
 let replayViewerIndex = 0;
 let replayViewerEntry = null;
 let replayViewerOpen = false;
+let pendingImpersonationUnitId = null;
 
 let selectedUnit = null;
 let previewUnit = null;
@@ -379,6 +381,30 @@ function getUnitVisualType(unit) {
     if (!unit) return null;
     if (unit.type === 'koh' && unit.disguiseType) return unit.disguiseType;
     return unit.type;
+}
+
+function getUnitAbilityContext(unit) {
+    if (!unit) return null;
+    if (unit.type === 'koh' && unit.disguiseType) return unit.disguiseType;
+    if (unit.type === 'koh') return getPlayerAbility(unit.player);
+    return unit.type;
+}
+
+function getDisguisedUnitTypeProfile(disguiseType) {
+    switch (disguiseType) {
+        case 'core':
+            return { moveRange: 0, moveType: 'manhattan', visionRange: 2, visionShape: 'manhattan' };
+        case 'otsu':
+            return { moveRange: 3, moveType: 'straight', visionRange: 3, visionShape: 'manhattan' };
+        case 'hei':
+            return { moveRange: 2, moveType: 'manhattan', visionRange: 2, visionShape: 'manhattan' };
+        case 'tei':
+            return { moveRange: 2, moveType: 'straight', visionRange: 2, visionShape: 'manhattan' };
+        case 'scout':
+            return { moveRange: 1, moveType: 'straight', visionRange: 2, visionShape: 'manhattan' };
+        default:
+            return null;
+    }
 }
 
 function getAbilityDisplayName(ability) {
@@ -1759,6 +1785,7 @@ class Unit {
         this.warPrincessKills = 0;
         this.warPrincessTeiPromoted = false;
         this.warPrincessHeiPromoted = false;
+        this.bruteVisionBonus = 0;
         this.disguiseType = null;
         this.impersonationCooldownUntilTurn = 0;
         this.camouflaged = false;
@@ -1832,7 +1859,10 @@ class Unit {
 
     get abilityDescription() {
         if (this.type === 'koh') {
-            const ability = getPlayerAbility(this.player);
+            if (this.disguiseType && !isImpersonableAbility(this.disguiseType)) {
+                return `【憑依中: ${getImpersonationLabel(this.disguiseType)}】見た目と能力傾向を合わせています。`;
+            }
+            const ability = getUnitAbilityContext(this);
             const descriptions = {
                 '千里眼': '【甲特有: 千里眼 / 発動型】壁を貫通して、選んだ1方向の直線全マスを表示。',
                 '鼓舞': '【甲特有: 鼓舞 / 発動型】周囲1マスの味方に移動+1・視界+1を付与。',
@@ -1848,7 +1878,7 @@ class Unit {
                 '煙幕': '【甲特有: 煙幕 / 発動型】マンハッタン視界3。直線移動4＋周囲1。3×3の煙幕を設置し、煙幕内の敵味方を迷彩状態にする。',
                 '憑依': '【甲特有: 憑依 / 発動型】マンハッタン移動3・視界3。好きなコマの見た目に変えられる。敵撃破で元に戻り、再変更は10ターン後。',
                 '儀式': '【甲特有: 儀式 / 発動型】マンハッタン移動2・視界3。自身の偵察兵を1体破壊し、ランダムな敵1体を10ターン発光させる。',
-                '脳筋': '【甲特有: 脳筋 / パッシブ型】直線移動11・視界0。',
+                '脳筋': '【甲特有: 脳筋 / パッシブ型】直線移動11・視界0。敵を撃破するたびマンハッタン視界+1。',
                 '狂愛': '【甲特有: 狂愛 / 発動型】直線移動3・周囲1・マンハッタン視界4。次の自ターンに、視界内の指定対象1体を行動済みにする。CT:5'
             };
             return descriptions[ability] || `【甲特有: ${getAbilityDisplayName(ability)}】`;
@@ -1865,7 +1895,11 @@ class Unit {
     getMovementRange() {
         let r = this.baseMove;
         if (this.type === 'koh') {
-            const ability = getPlayerAbility(this.player);
+            const disguiseProfile = this.disguiseType && !isImpersonableAbility(this.disguiseType)
+                ? getDisguisedUnitTypeProfile(this.disguiseType)
+                : null;
+            if (disguiseProfile) return disguiseProfile.moveRange;
+            const ability = getUnitAbilityContext(this);
             if (ability === '脳筋') { return 11; }
             if (ability === '憑依') { return 3; }
             if (ability === '儀式') { return 2; }
@@ -1884,7 +1918,11 @@ class Unit {
     getVisionRange() {
         let v = this.baseVision;
         if (this.type === 'koh') {
-            const ability = getPlayerAbility(this.player);
+            const disguiseProfile = this.disguiseType && !isImpersonableAbility(this.disguiseType)
+                ? getDisguisedUnitTypeProfile(this.disguiseType)
+                : null;
+            if (disguiseProfile) return disguiseProfile.visionRange;
+            const ability = getUnitAbilityContext(this);
             if (ability === '脳筋') v = 0;
             if (ability === '憑依') v = 3;
             if (ability === '儀式') v = 3;
@@ -1895,6 +1933,9 @@ class Unit {
             if (ability === '煙幕') v = 3;
             if (ability === '歴戦王') v = 2;
             if (ability === '迷彩' && this.camouflaged) v = 1;
+            if (getPlayerAbility(this.player) === '脳筋') {
+                v += Number(this.bruteVisionBonus || 0);
+            }
         }
         if (this.inspirationTurns > 0) v += 1;
         return v;
@@ -1902,7 +1943,11 @@ class Unit {
 
     getEffectiveMoveType() {
         if (this.type === 'koh') {
-            const ability = getPlayerAbility(this.player);
+            const disguiseProfile = this.disguiseType && !isImpersonableAbility(this.disguiseType)
+                ? getDisguisedUnitTypeProfile(this.disguiseType)
+                : null;
+            if (disguiseProfile) return disguiseProfile.moveType;
+            const ability = getUnitAbilityContext(this);
             if (ability === '脳筋') return 'straight';
             if (ability === '狂愛') return 'love';
             if (ability === '暗殺者') return 'straight';
@@ -1915,7 +1960,11 @@ class Unit {
 
     getVisionShape() {
         if (this.type === 'koh') {
-            const ability = getPlayerAbility(this.player);
+            const disguiseProfile = this.disguiseType && !isImpersonableAbility(this.disguiseType)
+                ? getDisguisedUnitTypeProfile(this.disguiseType)
+                : null;
+            if (disguiseProfile) return disguiseProfile.visionShape;
+            const ability = getUnitAbilityContext(this);
             if (ability === '暗殺者') return 'beam';
             if (ability === '盲目' || ability === '監視' || (ability === '迷彩' && this.camouflaged)) return 'square';
         }
@@ -1952,8 +2001,7 @@ function getAbilityInitial(player) {
     return ability ? ability.charAt(0) : '甲';
 }
 
-function getAbilityClass(player) {
-    const ability = player === 1 ? p1Ability : p2Ability;
+function getAbilityClassByName(ability) {
     const classMap = {
         '千里眼': 'ability-clairvoyance',
         '鼓舞': 'ability-inspire',
@@ -1971,7 +2019,12 @@ function getAbilityClass(player) {
         '脳筋': 'ability-brute',
         '狂愛': 'ability-love'
     };
-    return classMap[ability] || 'ability-unknown';
+    return classMap[ability] || null;
+}
+
+function getAbilityClass(player) {
+    const ability = player === 1 ? p1Ability : p2Ability;
+    return getAbilityClassByName(ability) || 'ability-unknown';
 }
 
 function getPlayerAbility(player) {
@@ -2164,6 +2217,7 @@ function serializeReplayUnit(unit) {
         warPrincessKills: unit.warPrincessKills || 0,
         warPrincessTeiPromoted: Boolean(unit.warPrincessTeiPromoted),
         warPrincessHeiPromoted: Boolean(unit.warPrincessHeiPromoted),
+        bruteVisionBonus: Number(unit.bruteVisionBonus || 0),
         disguiseType: unit.disguiseType || null,
         impersonationCooldownUntilTurn: Number(unit.impersonationCooldownUntilTurn || 0),
         camouflaged: Boolean(unit.camouflaged),
@@ -2244,6 +2298,7 @@ function hydrateReplayUnit(raw) {
     unit.loveCharmTargetId = raw.loveCharmTargetId || null;
     unit.loveCharmResolveTurn = Number(raw.loveCharmResolveTurn || 0);
     unit.loveCharmCooldownUntilTurn = Number(raw.loveCharmCooldownUntilTurn || 0);
+    unit.bruteVisionBonus = Number(raw.bruteVisionBonus || 0);
     return unit;
 }
 
@@ -2367,6 +2422,41 @@ function getReplayEntrySnapshots(entry) {
     return Array.isArray(replay?.snapshots) ? replay.snapshots : [];
 }
 
+function renderImpersonationChoices() {
+    const grid = document.getElementById('impersonation-grid');
+    if (!grid) return;
+    grid.innerHTML = IMPERSONATION_CHOICES.map(form => `
+        <button class="impersonation-btn" type="button" data-form="${form}">
+            <span class="impersonation-label">${getImpersonationLabel(form)}</span>
+        </button>
+    `).join('');
+}
+
+function openImpersonationOverlay(unit) {
+    const overlay = document.getElementById('impersonation-overlay');
+    if (!overlay) return false;
+    pendingImpersonationUnitId = unit?.id || null;
+    renderImpersonationChoices();
+    overlay.classList.remove('hidden');
+    overlay.getBoundingClientRect();
+    return true;
+}
+
+function closeImpersonationOverlay(restoreSelection = false) {
+    const overlay = document.getElementById('impersonation-overlay');
+    overlay?.classList.add('hidden');
+    pendingImpersonationUnitId = null;
+    if (restoreSelection && selectedUnit) {
+        selectActionType('move');
+    }
+}
+
+function consumeTurnWithoutMarkingActed(unit) {
+    if (!unit || isGameOver) return;
+    unit.refreshActedAfterAction = true;
+    completeUnitAction(unit);
+}
+
 function setDevelopModeEnabled(enabled) {
     developModeEnabled = enabled;
     syncAbilitySelectOptions();
@@ -2466,6 +2556,31 @@ function setupUIEventListeners() {
             executeClairvoyance(dir);
         });
     });
+    const impersonationOverlay = document.getElementById('impersonation-overlay');
+    const impersonationGrid = document.getElementById('impersonation-grid');
+    const cancelImpersonationBtn = document.getElementById('btn-cancel-impersonation');
+    if (impersonationGrid) {
+        impersonationGrid.addEventListener('click', (event) => {
+            const button = event.target.closest('button[data-form]');
+            if (!button) return;
+            const form = button.getAttribute('data-form');
+            const unit = units.find(entry => entry.id === pendingImpersonationUnitId) || selectedUnit;
+            if (!unit) {
+                closeImpersonationOverlay();
+                return;
+            }
+            closeImpersonationOverlay(false);
+            executeAbility(unit, null, null, { form });
+        });
+    }
+    if (cancelImpersonationBtn) {
+        cancelImpersonationBtn.addEventListener('click', () => closeImpersonationOverlay(true));
+    }
+    if (impersonationOverlay) {
+        impersonationOverlay.addEventListener('click', (event) => {
+            if (event.target === impersonationOverlay) closeImpersonationOverlay(true);
+        });
+    }
 
     const onlineAbilityChoice = document.getElementById('online-ability-choice');
     if (onlineAbilityChoice) {
@@ -4350,6 +4465,10 @@ function applyWarPrincessKills(unit, killCount) {
         unit.disguiseType = null;
         addConsoleLog(`ABILITY: 憑依解除 - ${unit.name} が敵を撃破し、元の姿に戻った。`, 'ability');
     }
+    if (getPlayerAbility(unit.player) === '脳筋') {
+        unit.bruteVisionBonus = Number(unit.bruteVisionBonus || 0) + killCount;
+        addConsoleLog(`ABILITY: 脳筋 - 撃破数によりマンハッタン視界+${killCount}。`, 'ability');
+    }
     const ability = unit.player === 1 ? p1Ability : p2Ability;
     if (ability !== '戦姫') return;
 
@@ -4643,9 +4762,11 @@ function renderBoard(options = {}) {
                     if (actedUnitIds.has(u.id)) unitEl.classList.add('acted');
                     if (u.type === 'koh') {
                         const abilityName = u.player === 1 ? p1Ability : p2Ability;
-                        const displayAbilityName = getAbilityDisplayName(abilityName);
-                        unitEl.classList.add('koh-ability', getAbilityClass(u.player));
-                        unitEl.setAttribute('data-ability', u.disguiseType ? getImpersonationLabel(u.disguiseType) : displayAbilityName);
+                        const visualAbilityName = u.disguiseType ? getImpersonationLabel(u.disguiseType) : getAbilityDisplayName(abilityName);
+                        const visualAbilityClass = u.disguiseType ? getAbilityClassByName(u.disguiseType) : getAbilityClass(u.player);
+                        unitEl.classList.add('koh-ability');
+                        if (visualAbilityClass) unitEl.classList.add(visualAbilityClass);
+                        unitEl.setAttribute('data-ability', visualAbilityName);
                         if (u.disguiseType) {
                             unitEl.classList.add('disguised');
                             if (!isImpersonableAbility(u.disguiseType) && u.disguiseType !== 'core' && u.disguiseType !== 'otsu' && u.disguiseType !== 'hei' && u.disguiseType !== 'tei' && u.disguiseType !== 'scout') {
@@ -4679,7 +4800,8 @@ function renderBoard(options = {}) {
                     }
                     unitEl.setAttribute('data-rank', u.symbol);
                     const visualName = u.disguiseType ? getImpersonationLabel(u.disguiseType) : u.name;
-                    unitEl.title = `${visualName} (P${u.player})\n移動: ${getUnitMovementSummary(u)}\n視界: ${getVisionShapeLabel(u.getVisionShape())}${u.getVisionRange()}${u.carryingFlagPlayer ? '\n軍旗生存: ' + u.flagSurvivalTurns + '/' + FLAG_SURVIVAL_TURNS : ''}\n${u.abilityDescription}`;
+                    const tooltipAbilityDescription = u.disguiseType ? `憑依中: ${getImpersonationLabel(u.disguiseType)}` : u.abilityDescription;
+                    unitEl.title = `${visualName} (P${u.player})\n移動: ${getUnitMovementSummary(u)}\n視界: ${getVisionShapeLabel(u.getVisionShape())}${u.getVisionRange()}${u.carryingFlagPlayer ? '\n軍旗生存: ' + u.flagSurvivalTurns + '/' + FLAG_SURVIVAL_TURNS : ''}\n${tooltipAbilityDescription}`;
                     if (u.type === 'core') unitEl.classList.add('core');
                     cellEl.appendChild(unitEl);
                 }
@@ -5240,18 +5362,18 @@ function selectActionType(type) {
                 else el.classList.add('highlight-move');
             }
         });
-    } else if (type === 'ability') {
-        if (selectedUnit.type === 'scout') {
-            const warps = getScoutWarpTargets(selectedUnit);
-            warps.forEach(w => {
-                const el = document.querySelector(`.cell[data-row="${w.row}"][data-col="${w.col}"]`);
-                if (el) el.classList.add('highlight-ability');
-            });
-        } else if (selectedUnit.type === 'koh') {
-            const abilityName = getPlayerAbility(selectedUnit.player);
-            if (abilityName === '千里眼') {
-                document.getElementById('direction-overlay').classList.remove('hidden');
-            } else if (abilityName === '煙幕') {
+        } else if (type === 'ability') {
+            if (selectedUnit.type === 'scout') {
+                const warps = getScoutWarpTargets(selectedUnit);
+                warps.forEach(w => {
+                    const el = document.querySelector(`.cell[data-row="${w.row}"][data-col="${w.col}"]`);
+                    if (el) el.classList.add('highlight-ability');
+                });
+            } else if (selectedUnit.type === 'koh') {
+                const abilityName = getPlayerAbility(selectedUnit.player);
+                if (abilityName === '千里眼') {
+                    document.getElementById('direction-overlay').classList.remove('hidden');
+                } else if (abilityName === '煙幕') {
                 if (getSmokeCooldownRemaining(selectedUnit.player) > 0) {
                     showStatusAlert(`煙幕はあと ${getSmokeCooldownRemaining(selectedUnit.player)} ターン使用できません。`, 'warning', 2400);
                     return;
@@ -5265,21 +5387,24 @@ function selectActionType(type) {
                     const el = document.querySelector(`.cell[data-row="${target.row}"][data-col="${target.col}"]`);
                     if (el) el.classList.add('highlight-ability');
                 });
-            } else if (abilityName === '狂愛') {
-                const visibleCells = getUnitVisionCells(selectedUnit);
-                visibleCells.forEach(coord => {
-                    const [row, col] = coord.split(',').map(Number);
-                    const target = boards[selectedUnit.map]?.[row]?.[col]?.unit;
-                    if (!target || target.id === selectedUnit.id || target.type === 'core') return;
-                    const el = document.querySelector(`.cell[data-row="${row}"][data-col="${col}"]`);
-                    if (el) el.classList.add('highlight-ability');
-                });
-            } else if (abilityName === '鼓舞' || abilityName === '爆破' || abilityName === '迷彩' || abilityName === '憑依' || abilityName === '儀式') {
-                executeAbility(selectedUnit, null, null);
-            } else if (abilityName === '脳筋') {
-                showStatusAlert('脳筋はパッシブ能力です。移動で運用してください。', 'system', 2200);
-            }
-            // パッシブ系はアビリティボタンで何もしない
+                } else if (abilityName === '狂愛') {
+                    const visibleCells = getUnitVisionCells(selectedUnit);
+                    visibleCells.forEach(coord => {
+                        const [row, col] = coord.split(',').map(Number);
+                        const target = boards[selectedUnit.map]?.[row]?.[col]?.unit;
+                        if (!target || target.id === selectedUnit.id || target.type === 'core') return;
+                        const el = document.querySelector(`.cell[data-row="${row}"][data-col="${col}"]`);
+                        if (el) el.classList.add('highlight-ability');
+                    });
+                } else if (abilityName === '憑依') {
+                    openImpersonationOverlay(selectedUnit);
+                    return;
+                } else if (abilityName === '鼓舞' || abilityName === '爆破' || abilityName === '迷彩' || abilityName === '儀式') {
+                    executeAbility(selectedUnit, null, null);
+                } else if (abilityName === '脳筋') {
+                    showStatusAlert('脳筋はパッシブ能力です。移動で運用してください。', 'system', 2200);
+                }
+                // パッシブ系はアビリティボタンで何もしない
         }
     }
 }
@@ -5434,14 +5559,6 @@ function executeMove(unit, destRow, destCol) {
 
 function executeAbility(unit, destRow, destCol, actionMeta = {}) {
     const map = unit.map;
-    const keepUnitReadyAfterAbility = () => {
-        calculateVisibility();
-        renderBoard();
-        updateUI();
-        if (selectedUnit?.id === unit.id) {
-            selectActionType('move');
-        }
-    };
 
     if (unit.type === 'scout') {
         const startRow = unit.row, startCol = unit.col;
@@ -5472,7 +5589,7 @@ function executeAbility(unit, destRow, destCol, actionMeta = {}) {
         if (!shouldHideAiActionFeedback(unit.player)) playMoveSfx();
         recordMatchReplayEvent({ kind: 'action', action: { type: 'ability', unitId: unit.id, row: destRow, col: destCol } });
         sendOnlineMessage({ kind: 'action', action: { type: 'ability', unitId: unit.id, row: destRow, col: destCol } });
-        completeUnitAction(unit);
+        consumeTurnWithoutMarkingActed(unit);
         return;
     }
 
@@ -5498,7 +5615,7 @@ function executeAbility(unit, destRow, destCol, actionMeta = {}) {
             if (!shouldHideAiActionFeedback(unit.player)) playMoveSfx();
             recordMatchReplayEvent({ kind: 'action', action: { type: 'ability', unitId: unit.id } });
             sendOnlineMessage({ kind: 'action', action: { type: 'ability', unitId: unit.id } });
-            keepUnitReadyAfterAbility();
+            consumeTurnWithoutMarkingActed(unit);
             return;
 
         } else if (abilityName === '憑依') {
@@ -5506,17 +5623,10 @@ function executeAbility(unit, destRow, destCol, actionMeta = {}) {
                 addConsoleLog(`ERROR: 憑依はあと ${unit.impersonationCooldownUntilTurn - gameTurn} ターン使用できません。`, 'warning');
                 return;
             }
-            const promptText = [
-                '憑依する見た目を入力してください。',
-                '核 / 乙 / 丙 / 丁 / 偵察兵',
-                '千里眼 / 鼓舞 / 足跡 / 歴戦王 / 戦姫(姫)',
-                '爆破 / 暗殺者 / 盲目 / 衛生兵 / 監視 / 迷彩 / 煙幕',
-                '憑依 / 儀式 / 脳筋 / 狂愛(愛)'
-            ].join('\n');
-            const requestedForm = actionMeta.form || window.prompt(promptText, '偵察兵');
+            const requestedForm = actionMeta.form;
             const normalizedForm = normalizeImpersonationForm(requestedForm);
             if (!normalizedForm) {
-                addConsoleLog('ERROR: 憑依の見た目指定が不正です。', 'warning');
+                openImpersonationOverlay(unit);
                 return;
             }
             unit.disguiseType = normalizedForm;
@@ -5525,7 +5635,7 @@ function executeAbility(unit, destRow, destCol, actionMeta = {}) {
             if (!shouldHideAiActionFeedback(unit.player)) playMoveSfx();
             recordMatchReplayEvent({ kind: 'action', action: { type: 'ability', unitId: unit.id, form: normalizedForm } });
             sendOnlineMessage({ kind: 'action', action: { type: 'ability', unitId: unit.id, form: normalizedForm } });
-            keepUnitReadyAfterAbility();
+            consumeTurnWithoutMarkingActed(unit);
             return;
 
         } else if (abilityName === '儀式') {
@@ -5555,7 +5665,7 @@ function executeAbility(unit, destRow, destCol, actionMeta = {}) {
             if (!shouldHideAiActionFeedback(unit.player)) playMoveSfx();
             recordMatchReplayEvent({ kind: 'action', action: { type: 'ability', unitId: unit.id, sacrificeId: sacrifice.id, targetId: target.id } });
             sendOnlineMessage({ kind: 'action', action: { type: 'ability', unitId: unit.id, sacrificeId: sacrifice.id, targetId: target.id } });
-            keepUnitReadyAfterAbility();
+            consumeTurnWithoutMarkingActed(unit);
             return;
 
         } else if (abilityName === '煙幕') {
@@ -5584,7 +5694,7 @@ function executeAbility(unit, destRow, destCol, actionMeta = {}) {
             refreshSmokeCamouflageStates();
             recordMatchReplayEvent({ kind: 'action', action: { type: 'ability', unitId: unit.id, row: destRow, col: destCol } });
             sendOnlineMessage({ kind: 'action', action: { type: 'ability', unitId: unit.id, row: destRow, col: destCol } });
-            keepUnitReadyAfterAbility();
+            consumeTurnWithoutMarkingActed(unit);
             return;
 
         } else if (abilityName === '狂愛') {
@@ -5605,13 +5715,13 @@ function executeAbility(unit, destRow, destCol, actionMeta = {}) {
                 return;
             }
             unit.loveCharmTargetId = targetUnit.id;
-            unit.loveCharmResolveTurn = gameTurn + 1;
+            unit.loveCharmResolveTurn = gameTurn;
             unit.loveCharmCooldownUntilTurn = gameTurn + 5;
-            addConsoleLog(`ABILITY: 甲の「狂愛」発動。${targetUnit.name} を次ターンに拘束対象として記録。`, 'ability');
+            addConsoleLog(`ABILITY: 甲の「狂愛」発動。${targetUnit.name} を相手の次のターンに拘束対象として記録。`, 'ability');
             if (!shouldHideAiActionFeedback(unit.player)) playMoveSfx();
             recordMatchReplayEvent({ kind: 'action', action: { type: 'ability', unitId: unit.id, targetId: targetUnit.id } });
             sendOnlineMessage({ kind: 'action', action: { type: 'ability', unitId: unit.id, targetId: targetUnit.id } });
-            keepUnitReadyAfterAbility();
+            consumeTurnWithoutMarkingActed(unit);
             return;
 
         } else if (abilityName === '迷彩') {
@@ -5621,7 +5731,7 @@ function executeAbility(unit, destRow, destCol, actionMeta = {}) {
             if (!shouldHideAiActionFeedback(unit.player)) playMoveSfx();
             recordMatchReplayEvent({ kind: 'action', action: { type: 'ability', unitId: unit.id } });
             sendOnlineMessage({ kind: 'action', action: { type: 'ability', unitId: unit.id } });
-            keepUnitReadyAfterAbility();
+            consumeTurnWithoutMarkingActed(unit);
             return;
 
         } else if (abilityName === '爆破') {
@@ -5673,7 +5783,7 @@ function executeAbility(unit, destRow, destCol, actionMeta = {}) {
                 addConsoleLog(`SYSTEM: 爆破により消滅: ${destroyedCoords.join(', ')}`, 'destroy');
             recordMatchReplayEvent({ kind: 'action', action: { type: 'ability', unitId: unit.id } });
             sendOnlineMessage({ kind: 'action', action: { type: 'ability', unitId: unit.id } });
-            completeUnitAction(unit);
+            consumeTurnWithoutMarkingActed(unit);
 
         } else {
             // パッシブ系アビリティはターン消費なし（移動が本アクション）
@@ -5702,12 +5812,7 @@ function executeClairvoyance(direction, unitOverride = selectedUnit) {
     if (!shouldHideAiActionFeedback(unit.player)) playMoveSfx();
     recordMatchReplayEvent({ kind: 'action', action: { type: 'clairvoyance', unitId: unit.id, dir: actualDirection } });
     sendOnlineMessage({ kind: 'action', action: { type: 'clairvoyance', unitId: unit.id, dir: actualDirection } });
-    calculateVisibility();
-    renderBoard();
-    updateUI();
-    if (selectedUnit?.id === unit.id) {
-        selectActionType('move');
-    }
+    consumeTurnWithoutMarkingActed(unit);
 }
 
 function executeOtsuBreakthrough(mapName, centerR, centerC) {
@@ -5770,11 +5875,12 @@ function shouldHideAiActionFeedback(player = currentPlayer) {
 function processStartOfTurnEffects(player) {
     const turn = gameTurn;
     units.forEach(unit => {
-        if (unit.player !== player || unit.type !== 'koh') return;
+        if (unit.type !== 'koh') return;
         if (unit.loveCharmResolveTurn === turn && unit.loveCharmTargetId) {
             const target = units.find(entry => entry.id === unit.loveCharmTargetId);
             const canTargetBeCharmed = Boolean(
                 target &&
+                target.player === player &&
                 target.type !== 'core' &&
                 target.map === unit.map &&
                 getUnitVisionCells(unit).has(`${target.row},${target.col}`)
