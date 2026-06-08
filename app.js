@@ -317,6 +317,17 @@ function getUnitTypeLabel(type) {
     }
 }
 
+function getImpersonationLabel(value) {
+    if (!value) return '不明';
+    if (value === '戦姫') return '戦姫(姫)';
+    if (value === '狂愛') return '狂愛(愛)';
+    if (value === 'core' || value === 'otsu' || value === 'hei' || value === 'tei' || value === 'scout') {
+        return getUnitTypeLabel(value);
+    }
+    if (ALL_ABILITY_OPTIONS.includes(value)) return value;
+    return '不明';
+}
+
 function getUnitTypeSymbol(type) {
     switch (type) {
         case 'core': return '核';
@@ -327,6 +338,17 @@ function getUnitTypeSymbol(type) {
         case 'scout': return '偵';
         default: return '?';
     }
+}
+
+function getAbilityVisualSymbol(ability) {
+    if (!ability) return '?';
+    if (ability === '戦姫') return '姫';
+    if (ability === '狂愛') return '愛';
+    return ability.charAt(0);
+}
+
+function isImpersonableAbility(value) {
+    return ALL_ABILITY_OPTIONS.includes(value);
 }
 
 function normalizeImpersonationForm(value) {
@@ -346,9 +368,11 @@ function normalizeImpersonationForm(value) {
         'てい': 'tei',
         '偵': 'scout',
         '偵察兵': 'scout',
-        'scout': 'scout'
+        'scout': 'scout',
+        '姫': '戦姫',
+        '愛': '狂愛'
     };
-    return lookup[text] || lookup[compact] || null;
+    return lookup[text] || lookup[compact] || (ALL_ABILITY_OPTIONS.includes(text) ? text : null);
 }
 
 function getUnitVisualType(unit) {
@@ -367,6 +391,9 @@ function getUnitDisplaySymbol(unit) {
     const visualType = getUnitVisualType(unit);
     if (unit.type === 'koh' && !unit.disguiseType) {
         return getAbilityInitial(unit.player);
+    }
+    if (unit.type === 'koh' && isImpersonableAbility(visualType)) {
+        return getAbilityVisualSymbol(visualType);
     }
     return getUnitTypeSymbol(visualType);
 }
@@ -4618,9 +4645,14 @@ function renderBoard(options = {}) {
                         const abilityName = u.player === 1 ? p1Ability : p2Ability;
                         const displayAbilityName = getAbilityDisplayName(abilityName);
                         unitEl.classList.add('koh-ability', getAbilityClass(u.player));
-                        unitEl.setAttribute('data-ability', u.disguiseType ? getUnitTypeLabel(u.disguiseType) : displayAbilityName);
+                        unitEl.setAttribute('data-ability', u.disguiseType ? getImpersonationLabel(u.disguiseType) : displayAbilityName);
                         if (u.disguiseType) {
-                            unitEl.classList.add('disguised', `disguise-${u.disguiseType}`);
+                            unitEl.classList.add('disguised');
+                            if (!isImpersonableAbility(u.disguiseType) && u.disguiseType !== 'core' && u.disguiseType !== 'otsu' && u.disguiseType !== 'hei' && u.disguiseType !== 'tei' && u.disguiseType !== 'scout') {
+                                unitEl.classList.add('disguise-ability');
+                            } else {
+                                unitEl.classList.add(`disguise-${u.disguiseType}`);
+                            }
                         }
                         if (u.glowUntilTurn > 0 && gameTurn <= u.glowUntilTurn) {
                             unitEl.classList.add('glowing');
@@ -4646,7 +4678,7 @@ function renderBoard(options = {}) {
                         unitEl.appendChild(flagCounter);
                     }
                     unitEl.setAttribute('data-rank', u.symbol);
-                    const visualName = u.disguiseType ? getUnitTypeLabel(u.disguiseType) : u.name;
+                    const visualName = u.disguiseType ? getImpersonationLabel(u.disguiseType) : u.name;
                     unitEl.title = `${visualName} (P${u.player})\n移動: ${getUnitMovementSummary(u)}\n視界: ${getVisionShapeLabel(u.getVisionShape())}${u.getVisionRange()}${u.carryingFlagPlayer ? '\n軍旗生存: ' + u.flagSurvivalTurns + '/' + FLAG_SURVIVAL_TURNS : ''}\n${u.abilityDescription}`;
                     if (u.type === 'core') unitEl.classList.add('core');
                     cellEl.appendChild(unitEl);
@@ -5474,7 +5506,13 @@ function executeAbility(unit, destRow, destCol, actionMeta = {}) {
                 addConsoleLog(`ERROR: 憑依はあと ${unit.impersonationCooldownUntilTurn - gameTurn} ターン使用できません。`, 'warning');
                 return;
             }
-            const promptText = '憑依する見た目を入力してください。\n核 / 乙 / 丙 / 丁 / 偵察兵';
+            const promptText = [
+                '憑依する見た目を入力してください。',
+                '核 / 乙 / 丙 / 丁 / 偵察兵',
+                '千里眼 / 鼓舞 / 足跡 / 歴戦王 / 戦姫(姫)',
+                '爆破 / 暗殺者 / 盲目 / 衛生兵 / 監視 / 迷彩 / 煙幕',
+                '憑依 / 儀式 / 脳筋 / 狂愛(愛)'
+            ].join('\n');
             const requestedForm = actionMeta.form || window.prompt(promptText, '偵察兵');
             const normalizedForm = normalizeImpersonationForm(requestedForm);
             if (!normalizedForm) {
@@ -5483,7 +5521,7 @@ function executeAbility(unit, destRow, destCol, actionMeta = {}) {
             }
             unit.disguiseType = normalizedForm;
             unit.impersonationCooldownUntilTurn = gameTurn + 10;
-            addConsoleLog(`ABILITY: 甲の「憑依」発動。${getUnitTypeLabel(normalizedForm)} の姿に変化。`, 'ability');
+            addConsoleLog(`ABILITY: 甲の「憑依」発動。${getImpersonationLabel(normalizedForm)} の姿に変化。`, 'ability');
             if (!shouldHideAiActionFeedback(unit.player)) playMoveSfx();
             recordMatchReplayEvent({ kind: 'action', action: { type: 'ability', unitId: unit.id, form: normalizedForm } });
             sendOnlineMessage({ kind: 'action', action: { type: 'ability', unitId: unit.id, form: normalizedForm } });

@@ -389,6 +389,15 @@ function removeTeleportGroup(group) {
     });
 }
 
+function getTeleportMirrorCell(mapName, row, col) {
+    if (!PORTAL_COLS.includes(col)) return null;
+    if (mapName === 'area1' && row === 0) return { mapName: 'area2', row: 0, col };
+    if (mapName === 'area2' && row === 0) return { mapName: 'area1', row: 0, col };
+    if (mapName === 'area2' && row === 10) return { mapName: 'area3', row: 10, col };
+    if (mapName === 'area3' && row === 10) return { mapName: 'area2', row: 10, col };
+    return null;
+}
+
 function isTeleportSlot(mapName, row, col) {
     if (!PORTAL_COLS.includes(col)) return false;
     if (mapName === 'area1') return row === 0;
@@ -583,14 +592,33 @@ function paintCell(mapName, row, col) {
         }
 
         if (targetTerrain === 'teleport') {
-            if (cell.terrain !== 'teleport') {
-                const chosenGroup = allocateTeleportGroup();
-                nextTerrain = 'teleport';
-                nextTeleportGroup = chosenGroup;
-            } else {
-                nextTerrain = 'teleport';
-                nextTeleportGroup = cell.teleportGroup;
-            }
+            const mirror = getTeleportMirrorCell(mapName, row, col);
+            const linkedCells = [
+                { mapName, row, col, cell },
+                mirror ? { mapName: mirror.mapName, row: mirror.row, col: mirror.col, cell: getCell(mirror.mapName, mirror.row, mirror.col) } : null
+            ].filter(Boolean);
+            const existingGroups = linkedCells
+                .map(entry => entry.cell?.terrain === 'teleport' ? Number(entry.cell.teleportGroup) || null : null)
+                .filter(Boolean);
+            const chosenGroup = existingGroups[0] || allocateTeleportGroup();
+
+            linkedCells.forEach(entry => {
+                const targetCell = entry.cell;
+                if (!targetCell) return;
+                if (targetCell.terrain === 'teleport' && Number(targetCell.teleportGroup) !== chosenGroup) {
+                    removeTeleportGroup(targetCell.teleportGroup);
+                }
+            });
+
+            linkedCells.forEach(entry => {
+                const targetCell = entry.cell;
+                if (!targetCell) return;
+                targetCell.terrain = 'teleport';
+                targetCell.teleportGroup = chosenGroup;
+            });
+
+            nextTerrain = 'teleport';
+            nextTeleportGroup = chosenGroup;
         } else if (targetTerrain !== 'teleport') {
             nextTerrain = targetTerrain;
             nextTeleportGroup = null;
