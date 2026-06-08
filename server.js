@@ -528,8 +528,16 @@ const server = http.createServer(async (req, res) => {
                     const result = String(body.result || '');
                     const isDraw = result === 'draw';
                     const player1Won = result === 'win';
-                    let player1Profile = player1Id ? await accountStore.getPlayerById(player1Id) : null;
-                    let player2Profile = player2Id ? await accountStore.getPlayerById(player2Id) : null;
+                    const resolveMatchProfile = async (id, name) => {
+                        const resolvedById = id ? await accountStore.getPlayerById(id) : null;
+                        if (resolvedById) return resolvedById;
+                        const cleanedName = sanitizeDisplayName(name || '');
+                        if (!cleanedName) return null;
+                        return accountStore.getPlayerByName(cleanedName);
+                    };
+
+                    let player1Profile = await resolveMatchProfile(player1Id, body.player1Name);
+                    let player2Profile = await resolveMatchProfile(player2Id, body.player2Name);
                     const player1StartRating = Number(body.player1StartRating || player1Profile?.rating || 0);
                     const player2StartRating = Number(body.player2StartRating || player2Profile?.rating || 0);
                     const player1StartLevel = Number(body.player1Level || player1Profile?.level || 1);
@@ -575,8 +583,8 @@ const server = http.createServer(async (req, res) => {
                         player2Id: player2Profile?.id || player2Id,
                         player1Name: body.player1Name || player1Profile?.name || 'PLAYER 1',
                         player2Name: body.player2Name || player2Profile?.name || 'PLAYER 2',
-                        winner: body.winner || (isDraw ? 'DRAW' : (winnerPlayerId === player1Profile?.id ? (player1Profile?.name || 'PLAYER 1') : (player2Profile?.name || 'PLAYER 2'))),
-                        loser: body.loser || (isDraw ? 'DRAW' : (loserPlayerId === player1Profile?.id ? (player1Profile?.name || 'PLAYER 1') : (player2Profile?.name || 'PLAYER 2'))),
+                        winner: body.winner || (isDraw ? 'DRAW' : (winnerPlayerId === (player1Profile?.id || player1Id) ? (player1Profile?.name || 'PLAYER 1') : (player2Profile?.name || 'PLAYER 2'))),
+                        loser: body.loser || (isDraw ? 'DRAW' : (loserPlayerId === (player1Profile?.id || player1Id) ? (player1Profile?.name || 'PLAYER 1') : (player2Profile?.name || 'PLAYER 2'))),
                         result: body.result || 'win',
                         player1RatingDelta,
                         player2RatingDelta,
@@ -588,8 +596,8 @@ const server = http.createServer(async (req, res) => {
                         endedTime: body.endedTime,
                         timeTaken: body.timeTaken,
                         surrenderByPlayerId: body.surrenderByPlayerId || null,
-                        winnerPlayerId: isDraw ? null : (winnerPlayerId || null),
-                        loserPlayerId: isDraw ? null : (loserPlayerId || null)
+                        winnerPlayerId: isDraw ? null : (winnerPlayerId || (player1Won ? (player1Profile?.id || player1Id) : (player2Profile?.id || player2Id)) || null),
+                        loserPlayerId: isDraw ? null : (loserPlayerId || (!player1Won ? (player1Profile?.id || player1Id) : (player2Profile?.id || player2Id)) || null)
                     });
                     return sendJson(res, 200, {
                         ok: true,

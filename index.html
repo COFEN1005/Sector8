@@ -40,6 +40,16 @@
                     <summary class="small-tool-btn">NEWS</summary>
                     <div class="news-menu-panel">
                         <details class="news-item">
+                            <summary>PATCH 0.7.25</summary>
+                            <ul class="news-list">
+                                <li>甲アビリティに「憑依」「儀式」「脳筋」「狂愛」を追加</li>
+                                <li>戦姫のビジュアルを「姫」に変更し、能力一覧と詳細の表記を整理</li>
+                                <li>憑依は好きなコマの見た目に変化し、敵撃破で元の姿に戻るよう実装</li>
+                                <li>儀式は偵察兵を1体破壊して、敵1体を発光させるよう実装</li>
+                                <li>脳筋は直線移動11・視界0、狂愛は次ターン拘束の対象選択能力として実装</li>
+                            </ul>
+                        </details>
+                        <details class="news-item">
                             <summary>PATCH 0.7.24</summary>
                             <ul class="news-list">
                                 <li>軍旗を持つユニットが敵軍旗マスと重なっても、敵軍旗が見えるよう表示順を修正</li>
@@ -377,9 +387,29 @@
                                     <div class="ability-detail-meta"><span>行動範囲: 再行動時は直線移動2</span><span>視界範囲: 甲の基本視界</span></div>
                                 </div>
                                 <div class="ability-detail-card">
-                                    <h4>戦姫</h4>
+                                    <h4>戦姫(姫)</h4>
                                     <p>パッシブ型。敵を4体撃破すると自軍の丁を全て丙へ、10体撃破すると自軍の丙を全て乙へ変える。</p>
                                     <div class="ability-detail-meta"><span>行動範囲: なし</span><span>視界範囲: 甲の基本視界</span></div>
+                                </div>
+                                <div class="ability-detail-card">
+                                    <h4>憑依</h4>
+                                    <p>発動型。マンハッタン移動3、視界3。好きなコマの見た目に変えられる。敵撃破で元の姿に戻り、一度変更したら10ターンは再変更できない。</p>
+                                    <div class="ability-detail-meta"><span>行動範囲: マンハッタン移動3</span><span>視界範囲: マンハッタン視界3</span></div>
+                                </div>
+                                <div class="ability-detail-card">
+                                    <h4>儀式</h4>
+                                    <p>発動型。マンハッタン移動2、視界3。自軍の偵察兵を1体破壊し、ランダムな敵1体を10ターン発光させる。</p>
+                                    <div class="ability-detail-meta"><span>行動範囲: マンハッタン移動2</span><span>視界範囲: マンハッタン視界3</span></div>
+                                </div>
+                                <div class="ability-detail-card">
+                                    <h4>脳筋</h4>
+                                    <p>パッシブ型。直線移動11、視界0の突撃型コマ。</p>
+                                    <div class="ability-detail-meta"><span>行動範囲: 直線移動11</span><span>視界範囲: 0</span></div>
+                                </div>
+                                <div class="ability-detail-card">
+                                    <h4>狂愛</h4>
+                                    <p>発動型。直線移動3、正方形移動1、マンハッタン視界4。次のターン、視界内の指定対象1体を行動済み状態にする。CT:5。</p>
+                                    <div class="ability-detail-meta"><span>行動範囲: 直線移動3＋正方形移動1</span><span>視界範囲: マンハッタン視界4</span></div>
                                 </div>
                                 <div class="ability-detail-card">
                                     <h4>爆破</h4>
@@ -456,7 +486,11 @@
                             <li><strong>鼓舞</strong>: 発動型。周囲1マスの味方の視界と移動を+1する。</li>
                             <li><strong>足跡</strong>: このコマの視界を2ターン前まで保存する。</li>
                             <li><strong>歴戦王</strong>: パッシブ型。敵撃破時、行動済みを解除する。解除後の移動は自陣側を除く直線移動2になる。</li>
-                            <li><strong>戦姫</strong>: パッシブ型。このコマが敵を4体撃破すると、自コマの丁を全て丙に変える。10体撃破すると、自コマの丙を全て乙に変える。</li>
+                            <li><strong>戦姫(姫)</strong>: パッシブ型。このコマが敵を4体撃破すると、自コマの丁を全て丙に変える。10体撃破すると、自コマの丙を全て乙に変える。</li>
+                            <li><strong>憑依</strong>: 発動型。マンハッタン移動3・視界3。好きなコマの見た目に変化し、敵撃破で元に戻る。1度使うと10ターン再変更できない。</li>
+                            <li><strong>儀式</strong>: 発動型。マンハッタン移動2・視界3。自軍の偵察兵を1体破壊し、ランダムな敵1体を10ターン発光させる。</li>
+                            <li><strong>脳筋</strong>: パッシブ型。直線移動11・視界0の突撃型。</li>
+                            <li><strong>狂愛</strong>: 発動型。直線移動3・正方形移動1・マンハッタン視界4。次のターン、視界内の指定対象1体を行動済みにする。CT:5。</li>
                             <li><strong>爆破</strong>: 発動、パッシブ型。発動した、もしくは死亡時、周囲2マスの壁、敵味方ユニット、軍旗をすべて破壊する。</li>
                             <li><strong>暗殺者</strong>: パッシブ型。敵撃破時、進行方向から1マス戻る。</li>
                             <li><strong>盲目</strong>: 視界1、移動4の盲目コマ。</li>
@@ -597,6 +631,10 @@
                                 <option value="足跡" selected>足跡</option>
                                 <option value="歴戦王">歴戦王</option>
                                 <option value="戦姫">戦姫</option>
+                                <option value="憑依">憑依</option>
+                                <option value="儀式">儀式</option>
+                                <option value="脳筋">脳筋</option>
+                                <option value="狂愛">狂愛</option>
                                 <option value="爆破">爆破</option>
                                 <option value="暗殺者">暗殺者</option>
                                 <option value="盲目">盲目</option>
@@ -614,6 +652,10 @@
                                     <option value="足跡">足跡</option>
                                     <option value="歴戦王" selected>歴戦王</option>
                                     <option value="戦姫">戦姫</option>
+                                    <option value="憑依">憑依</option>
+                                    <option value="儀式">儀式</option>
+                                    <option value="脳筋">脳筋</option>
+                                    <option value="狂愛">狂愛</option>
                                     <option value="爆破">爆破</option>
                                     <option value="暗殺者">暗殺者</option>
                                     <option value="盲目">盲目</option>
@@ -708,6 +750,10 @@
                                 <option value="足跡" selected>足跡</option>
                                 <option value="歴戦王">歴戦王</option>
                                 <option value="戦姫">戦姫</option>
+                                <option value="憑依">憑依</option>
+                                <option value="儀式">儀式</option>
+                                <option value="脳筋">脳筋</option>
+                                <option value="狂愛">狂愛</option>
                                 <option value="爆破">爆破</option>
                                 <option value="暗殺者">暗殺者</option>
                                 <option value="盲目">盲目</option>
@@ -822,7 +868,7 @@
         </div>
     </div>
 
-    <div class="patch-badge">PATCH ver.0.7.24</div>
+    <div class="patch-badge">PATCH ver.0.7.25</div>
     <script>
     // Mode tab switching helper (called from inline onclick)
     function setModeTab(mode) {

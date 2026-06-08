@@ -1643,6 +1643,31 @@ details li {
 .unit.ability-medic { box-shadow: 0 0 14px rgba(32, 201, 151, 0.38), inset 0 0 10px rgba(32, 201, 151, 0.14); }
 .unit.ability-watch { box-shadow: 0 0 14px rgba(255, 214, 10, 0.38), inset 0 0 10px rgba(255, 214, 10, 0.14); }
 .unit.ability-camouflage { box-shadow: 0 0 14px rgba(124, 196, 102, 0.38), inset 0 0 10px rgba(124, 196, 102, 0.14); }
+.unit.ability-possession { box-shadow: 0 0 14px rgba(174, 92, 255, 0.42), inset 0 0 10px rgba(174, 92, 255, 0.16); }
+.unit.ability-ritual { box-shadow: 0 0 14px rgba(0, 194, 168, 0.42), inset 0 0 10px rgba(0, 194, 168, 0.16); }
+.unit.ability-brute { box-shadow: 0 0 14px rgba(255, 124, 0, 0.44), inset 0 0 10px rgba(255, 124, 0, 0.18); }
+.unit.ability-love { box-shadow: 0 0 14px rgba(255, 79, 156, 0.46), inset 0 0 10px rgba(255, 79, 156, 0.18); }
+
+.unit.disguised {
+    filter: saturate(0.92) brightness(0.96);
+    border-style: dashed;
+}
+
+.unit.disguise-core { box-shadow: 0 0 16px rgba(255, 221, 102, 0.48), inset 0 0 10px rgba(255, 221, 102, 0.16); }
+.unit.disguise-otsu { box-shadow: 0 0 16px rgba(255, 139, 102, 0.46), inset 0 0 10px rgba(255, 139, 102, 0.16); }
+.unit.disguise-hei { box-shadow: 0 0 16px rgba(76, 201, 240, 0.42), inset 0 0 10px rgba(76, 201, 240, 0.16); }
+.unit.disguise-tei { box-shadow: 0 0 16px rgba(255, 255, 255, 0.32), inset 0 0 10px rgba(255, 255, 255, 0.14); }
+.unit.disguise-scout { box-shadow: 0 0 16px rgba(64, 255, 165, 0.42), inset 0 0 10px rgba(64, 255, 165, 0.16); }
+
+.unit.glowing {
+    animation: unit-glow-pulse 1.2s ease-in-out infinite;
+    box-shadow: 0 0 18px rgba(255, 244, 102, 0.62), inset 0 0 10px rgba(255, 244, 102, 0.22);
+}
+
+@keyframes unit-glow-pulse {
+    0%, 100% { filter: brightness(1); }
+    50% { filter: brightness(1.18); }
+}
 
 .kill-counter {
     position: absolute;
