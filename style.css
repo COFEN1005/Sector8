@@ -1702,6 +1702,7 @@ details li {
     line-height: 1;
     box-shadow: 0 0 8px rgba(255, 183, 0, 0.35);
     pointer-events: none;
+    z-index: 22;
 }
 
 .military-flag {
@@ -1716,6 +1717,7 @@ details li {
     box-shadow: 0 0 8px rgba(255, 183, 0, 0.28);
     z-index: 2;
     pointer-events: none;
+    z-index: 20;
 }
 
 .military-flag::before {

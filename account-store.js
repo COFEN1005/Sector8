@@ -619,6 +619,10 @@ function createSupabaseStore() {
       ended_time: endedTime,
       time_taken: Number(entry.timeTaken || Math.max(0, endedTime - startedTime)),
       surrender_by_player_id: entry.surrenderByPlayerId || null,
+      winner_player_id: entry.winnerPlayerId || null,
+      loser_player_id: entry.loserPlayerId || null,
+      player1_start_rating: Number(entry.player1StartRating || 0),
+      player2_start_rating: Number(entry.player2StartRating || 0),
       created_at: ts,
       summary_json: entry.summaryJson || null,
       replay_json: entry.replayJson || null

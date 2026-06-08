@@ -40,6 +40,15 @@
                     <summary class="small-tool-btn">NEWS</summary>
                     <div class="news-menu-panel">
                         <details class="news-item">
+                            <summary>PATCH 0.7.24</summary>
+                            <ul class="news-list">
+                                <li>軍旗を持つユニットが敵軍旗マスと重なっても、敵軍旗が見えるよう表示順を修正</li>
+                                <li>甲の発動型スキル使用後も行動済みにならないよう修正</li>
+                                <li>対戦履歴とレート保存を、player1 / player2 の実際の役割に合わせて Supabase へ記録するよう修正</li>
+                                <li>対戦後サマリーと対戦履歴の開始レート・勝敗ID保存を安定化</li>
+                            </ul>
+                        </details>
+                        <details class="news-item">
                             <summary>PATCH 0.7.23</summary>
                             <ul class="news-list">
                                 <li>衛生兵の偵察兵補充を7ターン周期に変更し、右上にターン経過カウンターを表示するよう修正</li>
@@ -813,7 +822,7 @@
         </div>
     </div>
 
-    <div class="patch-badge">PATCH ver.0.7.23</div>
+    <div class="patch-badge">PATCH ver.0.7.24</div>
     <script>
     // Mode tab switching helper (called from inline onclick)
     function setModeTab(mode) {

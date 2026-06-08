@@ -1426,11 +1426,16 @@ async function submitMatchHistory(reason, winnerId) {
     const localProfile = authProfile || currentMatchStartProfile;
     if (!authSession?.token || !localProfile || replayPlaybackActive) return;
     const viewerSide = onlineMode && localPlayer ? localPlayer : 1;
+    const localIsPlayer1 = !onlineMode || viewerSide === 1;
     const isDraw = winnerId == null || reason === 'draw';
     const viewerWon = isDraw ? null : winnerId === viewerSide;
     const opponentName = onlineMode
         ? getOnlineDisplayName(localPlayer === 1 ? 2 : 1)
         : (vsAI ? 'AI BOT' : 'PLAYER 2');
+    const player1Profile = localIsPlayer1 ? (currentMatchStartProfile || localProfile) : (currentMatchOpponentStartProfile || null);
+    const player2Profile = localIsPlayer1 ? (currentMatchOpponentStartProfile || null) : (currentMatchStartProfile || localProfile);
+    const player1StartRating = Number(player1Profile?.rating ?? 0);
+    const player2StartRating = Number(player2Profile?.rating ?? 0);
     const summary = buildMatchSummary(isDraw ? 'draw' : reason, isDraw ? null : winnerId);
     summary.winnerName = isDraw ? 'DRAW' : (viewerWon ? localProfile.name : opponentName);
     summary.loserName = isDraw ? 'DRAW' : (viewerWon ? opponentName : localProfile.name);
@@ -1438,30 +1443,32 @@ async function submitMatchHistory(reason, winnerId) {
     activeMatchSummaryView = summary;
     const payload = {
         matchKey: currentMatchKey || `local:${Date.now()}`,
-        player1Id: localProfile.id,
-        player1Name: localProfile.name,
-        player2Name: opponentName,
-        winner: isDraw ? 'DRAW' : (viewerWon ? localProfile.name : opponentName),
-        loser: isDraw ? 'DRAW' : (viewerWon ? opponentName : localProfile.name),
-        result: isDraw ? 'draw' : (viewerWon ? 'win' : 'lose'),
+        player1Id: player1Profile?.id ?? localProfile.id,
+        player2Id: player2Profile?.id ?? null,
+        player1Name: player1Profile?.name || (localIsPlayer1 ? localProfile.name : opponentName),
+        player2Name: player2Profile?.name || (localIsPlayer1 ? opponentName : localProfile.name),
+        winner: isDraw ? 'DRAW' : (winnerId === 1 ? (player1Profile?.name || 'PLAYER 1') : (player2Profile?.name || 'PLAYER 2')),
+        loser: isDraw ? 'DRAW' : (winnerId === 1 ? (player2Profile?.name || 'PLAYER 2') : (player1Profile?.name || 'PLAYER 1')),
+        result: isDraw ? 'draw' : (winnerId === 1 ? 'win' : 'lose'),
         matchType: getCurrentMatchType(),
-        player1Level: localProfile.level,
-        player2Level: 1,
-        player1StartRating: currentMatchRecord?.startProfile?.rating ?? localProfile.rating ?? 0,
-        player2StartRating: currentMatchRecord?.opponentStartProfile?.rating ?? null,
+        player1Level: player1Profile?.level ?? 1,
+        player2Level: player2Profile?.level ?? 1,
+        player1StartRating,
+        player2StartRating,
         startedTime: currentMatchStartedAt || Date.now(),
         endedTime: Date.now(),
         timeTaken: Math.max(0, Date.now() - (currentMatchStartedAt || Date.now())),
-        surrenderByPlayerId: !isDraw && !viewerWon && reason === 'forfeit' ? localProfile.id : null,
-        winnerPlayerId: isDraw ? null : winnerId,
-        loserPlayerId: isDraw ? null : (viewerWon ? null : localProfile.id),
+        surrenderByPlayerId: !isDraw && !viewerWon && reason === 'forfeit' ? (localProfile.id || null) : null,
+        winnerPlayerId: isDraw ? null : (winnerId === 1 ? (player1Profile?.id || null) : (player2Profile?.id || null)),
+        loserPlayerId: isDraw ? null : (winnerId === 1 ? (player2Profile?.id || null) : (player1Profile?.id || null)),
         summaryJson: summary,
         replayJson: currentMatchReplay
     };
     try {
         const result = await apiRequest('/api/matches', { method: 'POST', body: payload, auth: true });
-        if (result.player1) {
-            const endProfile = result.player1;
+        const updatedProfile = localIsPlayer1 ? (result.player1 || result.player2) : (result.player2 || result.player1);
+        if (updatedProfile) {
+            const endProfile = updatedProfile;
             summary.endProfile = {
                 id: endProfile.id,
                 playerId: endProfile.playerId,
@@ -1470,9 +1477,9 @@ async function submitMatchHistory(reason, winnerId) {
                 exp: endProfile.exp,
                 rating: endProfile.rating
             };
-            summary.ratingDelta = Number(endProfile.rating || 0) - Number(currentMatchStartProfile?.rating || localProfile.rating || 0);
-            summary.expDelta = Number(endProfile.exp || 0) - Number(currentMatchStartProfile?.exp || localProfile.exp || 0);
-            if (authProfile) applyAuthProfile(result.player1, authSession.token);
+            summary.ratingDelta = Number(endProfile.rating || 0) - Number(player1Profile?.id === localProfile.id ? player1StartRating : player2StartRating);
+            summary.expDelta = Number(endProfile.exp || 0) - Number((player1Profile?.id === localProfile.id ? player1Profile?.exp : player2Profile?.exp) ?? localProfile.exp ?? 0);
+            applyAuthProfile(updatedProfile, authSession.token);
         }
         if (!document.getElementById('menu-panel')?.classList.contains('hidden')) {
             loadMatchHistory({ force: true }).catch(() => {});
@@ -4488,6 +4495,7 @@ function renderBoard(options = {}) {
                 if (index > 0) flagEl.classList.add(`stacked-${index}`);
                 flagEl.title = `Player ${flag.player} の軍旗`;
                 flagEl.style.transform = index > 0 ? `translate(${index * 0.12}rem, ${index * -0.12}rem)` : '';
+                flagEl.style.zIndex = String(20 + index);
                 cellEl.appendChild(flagEl);
             });
 
@@ -4498,6 +4506,7 @@ function renderBoard(options = {}) {
                 if (!isHiddenByFog) {
                     const unitEl = document.createElement('div');
                     unitEl.className = `unit player-${u.player} ${u.type}`;
+                    unitEl.style.zIndex = '10';
                     if (u.inspirationTurns > 0) unitEl.classList.add('inspired');
                     if (actedUnitIds.has(u.id)) unitEl.classList.add('acted');
                     if (u.type === 'koh') {
@@ -5196,6 +5205,14 @@ function executeMove(unit, destRow, destCol) {
 
 function executeAbility(unit, destRow, destCol) {
     const map = unit.map;
+    const keepUnitReadyAfterAbility = () => {
+        calculateVisibility();
+        renderBoard();
+        updateUI();
+        if (selectedUnit?.id === unit.id) {
+            selectActionType('move');
+        }
+    };
 
     if (unit.type === 'scout') {
         const startRow = unit.row, startCol = unit.col;
@@ -5252,7 +5269,8 @@ function executeAbility(unit, destRow, destCol) {
             if (!shouldHideAiActionFeedback(unit.player)) playMoveSfx();
             recordMatchReplayEvent({ kind: 'action', action: { type: 'ability', unitId: unit.id } });
             sendOnlineMessage({ kind: 'action', action: { type: 'ability', unitId: unit.id } });
-            completeUnitAction(unit);
+            keepUnitReadyAfterAbility();
+            return;
 
         } else if (abilityName === '煙幕') {
             if (getSmokeCooldownRemaining(unit.player) > 0) {
@@ -5280,7 +5298,8 @@ function executeAbility(unit, destRow, destCol) {
             refreshSmokeCamouflageStates();
             recordMatchReplayEvent({ kind: 'action', action: { type: 'ability', unitId: unit.id, row: destRow, col: destCol } });
             sendOnlineMessage({ kind: 'action', action: { type: 'ability', unitId: unit.id, row: destRow, col: destCol } });
-            completeUnitAction(unit);
+            keepUnitReadyAfterAbility();
+            return;
 
         } else if (abilityName === '迷彩') {
             unit.manualCamouflage = true;
@@ -5289,7 +5308,8 @@ function executeAbility(unit, destRow, destCol) {
             if (!shouldHideAiActionFeedback(unit.player)) playMoveSfx();
             recordMatchReplayEvent({ kind: 'action', action: { type: 'ability', unitId: unit.id } });
             sendOnlineMessage({ kind: 'action', action: { type: 'ability', unitId: unit.id } });
-            completeUnitAction(unit);
+            keepUnitReadyAfterAbility();
+            return;
 
         } else if (abilityName === '爆破') {
             addConsoleLog(`ABILITY: 甲の「爆破」自滅シークエンス開始！`, 'destroy');
@@ -5369,7 +5389,12 @@ function executeClairvoyance(direction, unitOverride = selectedUnit) {
     if (!shouldHideAiActionFeedback(unit.player)) playMoveSfx();
     recordMatchReplayEvent({ kind: 'action', action: { type: 'clairvoyance', unitId: unit.id, dir: actualDirection } });
     sendOnlineMessage({ kind: 'action', action: { type: 'clairvoyance', unitId: unit.id, dir: actualDirection } });
-    completeUnitAction(unit);
+    calculateVisibility();
+    renderBoard();
+    updateUI();
+    if (selectedUnit?.id === unit.id) {
+        selectActionType('move');
+    }
 }
 
 function executeOtsuBreakthrough(mapName, centerR, centerC) {
