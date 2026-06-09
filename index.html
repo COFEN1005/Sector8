@@ -40,12 +40,12 @@
                     <summary class="small-tool-btn">NEWS</summary>
                     <div class="news-menu-panel">
                         <details class="news-item">
-                            <summary>PATCH 0.7.26</summary>
+                            <summary>PATCH 0.7.27</summary>
                             <ul class="news-list">
-                                <li>憑依をボタン選択式に変更し、見た目と移動・視界を憑依先に寄せるよう調整</li>
+                                <li>狂愛の移動を直線2に調整し、表示も「愛」に統一</li>
+                                <li>憑依はボタン選択式のまま、見た目と移動・視界を憑依先に寄せるよう調整</li>
                                 <li>各スキルはターンを消費するが、使用したコマは行動済みにならないよう統一</li>
-                                <li>狂愛は相手の次のターン開始時に行動済みへ、脳筋は撃破ごとにマンハッタン視界+1</li>
-                                <li>戦姫のビジュアルを「姫」に変更し、能力一覧と詳細の表記も整理</li>
+                                <li>脳筋は撃破ごとにマンハッタン視界+1、戦姫のビジュアルは「姫」に整理</li>
                             </ul>
                         </details>
                         <details class="news-item">
@@ -407,8 +407,8 @@
                                 </div>
                                 <div class="ability-detail-card">
                                     <h4>狂愛</h4>
-                                    <p>発動型。直線移動3、正方形移動1、マンハッタン視界4。次のターン、視界内の指定対象1体を行動済み状態にする。CT:5。</p>
-                                    <div class="ability-detail-meta"><span>行動範囲: 直線移動3＋正方形移動1</span><span>視界範囲: マンハッタン視界4</span></div>
+                                    <p>発動型。直線移動2、マンハッタン視界4。相手の次のターン開始時、視界内の指定対象1体を行動済み状態にする。CT:5。</p>
+                                    <div class="ability-detail-meta"><span>行動範囲: 直線移動2</span><span>視界範囲: マンハッタン視界4</span></div>
                                 </div>
                                 <div class="ability-detail-card">
                                     <h4>爆破</h4>
@@ -489,7 +489,7 @@
                             <li><strong>憑依</strong>: 発動型。マンハッタン移動3・視界3。好きなコマの見た目に変化し、敵撃破で元に戻る。1度使うと10ターン再変更できない。</li>
                             <li><strong>儀式</strong>: 発動型。マンハッタン移動2・視界3。自軍の偵察兵を1体破壊し、ランダムな敵1体を10ターン発光させる。</li>
                             <li><strong>脳筋</strong>: パッシブ型。直線移動11・視界0の突撃型。敵を撃破するたびにマンハッタン視界+1。</li>
-                            <li><strong>狂愛</strong>: 発動型。直線移動3・正方形移動1・マンハッタン視界4。相手の次のターン、視界内の指定対象1体を行動済みにする。CT:5。</li>
+                            <li><strong>狂愛</strong>: 発動型。直線移動2・マンハッタン視界4。相手の次のターン開始時、視界内の指定対象1体を行動済みにする。CT:5。</li>
                             <li><strong>爆破</strong>: 発動、パッシブ型。発動した、もしくは死亡時、周囲2マスの壁、敵味方ユニット、軍旗をすべて破壊する。</li>
                             <li><strong>暗殺者</strong>: パッシブ型。敵撃破時、進行方向から1マス戻る。</li>
                             <li><strong>盲目</strong>: 視界1、移動4の盲目コマ。</li>
@@ -721,12 +721,12 @@
                 <div id="game-info-panel" class="hub-section hidden">
                     <div class="deck-info">
                         <div class="deck-row">
-                            <span>P1 ALIVE UNITS:</span>
-                            <span id="p1-units-count" class="text-cyan">14/14</span>
+                            <span>P1 撃破数:</span>
+                            <span id="p1-units-count" class="text-cyan">0</span>
                         </div>
                         <div class="deck-row">
-                            <span>P2 ALIVE UNITS:</span>
-                            <span id="p2-units-count" class="text-magenta">14/14</span>
+                            <span>P2 撃破数:</span>
+                            <span id="p2-units-count" class="text-magenta">0</span>
                         </div>
                         <div class="deck-row">
                             <span>P1 AREA 2:</span>
@@ -877,7 +877,7 @@
         </div>
     </div>
 
-    <div class="patch-badge">PATCH ver.0.7.26</div>
+    <div class="patch-badge">PATCH ver.0.7.27</div>
     <script>
     // Mode tab switching helper (called from inline onclick)
     function setModeTab(mode) {

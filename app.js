@@ -1879,7 +1879,7 @@ class Unit {
                 '憑依': '【甲特有: 憑依 / 発動型】マンハッタン移動3・視界3。好きなコマの見た目に変えられる。敵撃破で元に戻り、再変更は10ターン後。',
                 '儀式': '【甲特有: 儀式 / 発動型】マンハッタン移動2・視界3。自身の偵察兵を1体破壊し、ランダムな敵1体を10ターン発光させる。',
                 '脳筋': '【甲特有: 脳筋 / パッシブ型】直線移動11・視界0。敵を撃破するたびマンハッタン視界+1。',
-                '狂愛': '【甲特有: 狂愛 / 発動型】直線移動3・周囲1・マンハッタン視界4。次の自ターンに、視界内の指定対象1体を行動済みにする。CT:5'
+                '狂愛': '【甲特有: 狂愛 / 発動型】直線移動3・マンハッタン視界4。相手の次のターン開始時に、視界内の指定対象1体を行動済みにする。CT:5'
             };
             return descriptions[ability] || `【甲特有: ${getAbilityDisplayName(ability)}】`;
         }
@@ -1903,7 +1903,7 @@ class Unit {
             if (ability === '脳筋') { return 11; }
             if (ability === '憑依') { return 3; }
             if (ability === '儀式') { return 2; }
-            if (ability === '狂愛') { return 3; }
+            if (ability === '狂愛') { return 2; }
             if (ability === '暗殺者') { return 5; }
             if (ability === '盲目') { return 4; }
             if (ability === '監視') { return 1; }
@@ -1949,7 +1949,7 @@ class Unit {
             if (disguiseProfile) return disguiseProfile.moveType;
             const ability = getUnitAbilityContext(this);
             if (ability === '脳筋') return 'straight';
-            if (ability === '狂愛') return 'love';
+            if (ability === '狂愛') return 'straight';
             if (ability === '暗殺者') return 'straight';
             if (ability === '監視') return 'square';
             if (ability === '煙幕') return 'smoke';
@@ -1998,6 +1998,7 @@ window.addEventListener('resize', applyDeviceProfile);
 function getAbilityInitial(player) {
     const ability = player === 1 ? p1Ability : p2Ability;
     if (ability === '戦姫') return '姫';
+    if (ability === '狂愛') return '愛';
     return ability ? ability.charAt(0) : '甲';
 }
 
@@ -2145,7 +2146,7 @@ function getUnitMovementSummary(unit) {
         if (ability === '脳筋') return '直線11';
         if (ability === '憑依') return 'マンハッタン3';
         if (ability === '儀式') return 'マンハッタン2';
-        if (ability === '狂愛') return '直線3＋正方形1';
+        if (ability === '狂愛') return '直線2';
         if (ability === '煙幕') return '直線4＋正方形1';
     }
     return `${getMoveTypeLabel(unit.getEffectiveMoveType())}${unit.getMovementRange()}`;
@@ -4902,7 +4903,6 @@ function getMoveTypeLabel(moveType) {
     if (moveType === 'straight') return '直線';
     if (moveType === 'square') return '周囲';
     if (moveType === 'smoke') return '混成';
-    if (moveType === 'love') return '混成';
     return 'マンハッタン';
 }
 
@@ -5589,7 +5589,7 @@ function executeAbility(unit, destRow, destCol, actionMeta = {}) {
         if (!shouldHideAiActionFeedback(unit.player)) playMoveSfx();
         recordMatchReplayEvent({ kind: 'action', action: { type: 'ability', unitId: unit.id, row: destRow, col: destCol } });
         sendOnlineMessage({ kind: 'action', action: { type: 'ability', unitId: unit.id, row: destRow, col: destCol } });
-        consumeTurnWithoutMarkingActed(unit);
+        completeUnitAction(unit);
         return;
     }
 
@@ -6200,11 +6200,11 @@ function updateUI() {
         playerDotEl.style.boxShadow = '0 0 10px var(--neon-magenta)';
     }
 
-    const totalUnits = 9 + 7; // home lineup 9 + area2 frontline 7
-    const p1Count = units.filter(u => u.player === 1 && u.type !== 'core').length;
-    const p2Count = units.filter(u => u.player === 2 && u.type !== 'core').length;
-    document.getElementById('p1-units-count').textContent = `${p1Count} / ${totalUnits}`;
-    document.getElementById('p2-units-count').textContent = `${p2Count} / ${totalUnits}`;
+    const captures = currentMatchRecord?.captures || [];
+    const p1Kills = captures.filter(entry => Number(entry.attackerPlayer) === 1).length;
+    const p2Kills = captures.filter(entry => Number(entry.attackerPlayer) === 2).length;
+    document.getElementById('p1-units-count').textContent = `${p1Kills}`;
+    document.getElementById('p2-units-count').textContent = `${p2Kills}`;
     updateMapLabels();
     updateModeVisibility();
     updateLobbyPlayerCard();
