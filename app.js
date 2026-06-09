@@ -21,6 +21,7 @@ const MAP_SIZES = {
 };
 const FIXED_MAP_PRESET_STORAGE_KEY = 'sector8-fixed-map-preset-v1';
 const MAP_SOURCE_STORAGE_KEY = 'sector8-map-source-mode-v1';
+const FIXED_MAP_BUNDLE_URL = 'sector8-map1.json';
 
 const PORTAL_COLS = [0, 1, 9, 10];
 const WALLS_PER_MAP = 12;
@@ -1973,13 +1974,14 @@ class Unit {
 }
 
 // --- INITIALIZATION ---
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     applyDeviceProfile();
     loadSavedUsername();
     loadSavedAuthSession();
     loadSavedOnlineSession();
     loadSavedUiSettings();
     refreshMapSourceModeFromStorage();
+    await preloadBundledFixedMapPreset();
     syncAbilitySelectOptions();
     setupUIEventListeners();
     setupMapTabs();
@@ -2466,6 +2468,10 @@ function setDevelopModeEnabled(enabled) {
     const debugTab = document.getElementById('tab-mode-debug');
     if (debugTab) debugTab.classList.toggle('hidden', !enabled);
     syncDevToolsVisibility();
+    updateMapSourceUI();
+    if (enabled && !fixedMapPreset) {
+        preloadBundledFixedMapPreset().catch(() => {});
+    }
     if (!enabled) setDevTargetPlayer(null);
 }
 
@@ -4014,13 +4020,17 @@ function saveFixedMapPreset(preset) {
 }
 
 function setMapSourceMode(mode) {
+    if (mode === 'fixed' && !developModeEnabled) {
+        showStatusAlert('固定マップはデバッグモードでのみ使えます。', 'warning', 2500);
+        return;
+    }
     mapSourceMode = mode === 'fixed' ? 'fixed' : 'random';
     try { localStorage.setItem(MAP_SOURCE_STORAGE_KEY, mapSourceMode); } catch {}
     updateMapSourceUI();
 }
 
 function shouldUseFixedMap() {
-    return mapSourceMode === 'fixed' && Boolean(fixedMapPreset);
+    return developModeEnabled && mapSourceMode === 'fixed' && Boolean(fixedMapPreset);
 }
 
 function applyFixedMapPresetToBoards() {
@@ -4062,9 +4072,22 @@ function updateMapSourceUI() {
     if (randomBtn) randomBtn.classList.toggle('active', mapSourceMode === 'random');
     if (fixedBtn) fixedBtn.classList.toggle('active', mapSourceMode === 'fixed');
     if (status) {
-        status.textContent = mapSourceMode === 'fixed'
+        const fixedActive = developModeEnabled && mapSourceMode === 'fixed';
+        status.textContent = fixedActive
             ? (fixedMapPreset ? 'FIXED MAP READY' : 'FIXED MAP NOT LOADED')
             : 'RANDOM MAP MODE';
+    }
+}
+
+async function preloadBundledFixedMapPreset() {
+    if (fixedMapPreset) return fixedMapPreset;
+    try {
+        const response = await fetch(FIXED_MAP_BUNDLE_URL, { cache: 'no-store' });
+        if (!response.ok) return null;
+        const parsed = await response.json();
+        return saveFixedMapPreset(parsed);
+    } catch {
+        return null;
     }
 }
 
@@ -4077,7 +4100,9 @@ async function importMapPresetFromFile(file) {
         showStatusAlert('固定マップの読み込みに失敗しました。', 'warning', 3000);
         return;
     }
-    setMapSourceMode('fixed');
+    if (developModeEnabled) {
+        setMapSourceMode('fixed');
+    }
     showStatusAlert('固定マップを読み込みました。', 'success', 2500);
 }
 
