@@ -15,7 +15,7 @@
             <div class="editor-header-copy">
                 <div class="editor-kicker">SECTOR-8 / MAP LAB</div>
                 <h1>固定マップエディタ</h1>
-                <p>3つのエリアを縦に並べて編集する固定マップ専用の画面です。高低差は 0 / 1 の2段階、テレポートは自動採番の2点1組で管理し、エリアをまたぐ接続も線で見えるようにしています。</p>
+                <p>3つのエリアを縦に並べて編集する固定マップ専用の画面です。テレポートは 2点1組で管理し、同じエリア内でもエリアをまたぐ接続でも線で見えるようにしています。</p>
             </div>
             <div class="editor-header-actions">
                 <button id="btn-new-preset" class="editor-btn secondary" type="button">NEW</button>
@@ -55,37 +55,13 @@
                         <div><span>PAIR</span><strong id="teleport-pair-label">T1</strong></div>
                         <div><span>NEXT</span><strong id="teleport-next-label">T1</strong></div>
                     </div>
-                    <p class="help-text">同じ番号の2点がひと組です。片方を消すと、同じ番号の相方もまとめて消えます。</p>
-                </section>
-
-                <section class="editor-block">
-                    <h2>HEIGHT</h2>
-                    <div class="height-grid">
-                        <button class="height-btn active" data-height="0" type="button">H0 FLAT</button>
-                        <button class="height-btn" data-height="1" type="button">H1 HIGH</button>
-                    </div>
-                    <div class="height-legend">
-                        <span><i class="legend-swatch h0"></i>FLAT</span>
-                        <span><i class="legend-swatch h1"></i>HIGH</span>
-                    </div>
-                </section>
-
-                <section class="editor-block">
-                    <h2>APPLY TARGET</h2>
-                    <div class="target-grid">
-                        <button class="target-btn" data-apply-mode="terrain" type="button">TERRAIN</button>
-                        <button class="target-btn active" data-apply-mode="both" type="button">BOTH</button>
-                        <button class="target-btn" data-apply-mode="height" type="button">HEIGHT</button>
-                    </div>
-                    <p class="help-text">`BOTH` なら地形と高さを同時に塗ります。`HEIGHT` だけなら地形を残して段差だけ変えられます。</p>
+                    <p class="help-text">同じ番号の2点がひと組です。片方を消すと、同じ番号の相方もまとめて消えます。エリア内に2つ置いても、エリアをまたいでも大丈夫です。</p>
                 </section>
 
                 <section class="editor-block stats-grid">
                     <div><span>WALL</span><strong id="stat-wall">0</strong></div>
                     <div><span>TELEPORT</span><strong id="stat-teleport">0</strong></div>
                     <div><span>CORE</span><strong id="stat-core">0</strong></div>
-                    <div><span>ELEVATED</span><strong id="stat-high">0</strong></div>
-                    <div><span>H1</span><strong id="stat-peak">0</strong></div>
                     <div><span>CHANGED</span><strong id="stat-changed">0</strong></div>
                     <div><span>WARNINGS</span><strong id="stat-warnings">0</strong></div>
                 </section>
@@ -111,10 +87,6 @@
                     <div>
                         <div class="stage-label">VERTICAL MAP STACK</div>
                         <div id="status-line" class="status-line">3つのエリアを上下に並べて編集できます</div>
-                    </div>
-                    <div class="height-summary">
-                        <span><i class="summary-swatch h0"></i>H0</span>
-                        <span><i class="summary-swatch h1"></i>H1</span>
                     </div>
                 </div>
 
@@ -160,7 +132,6 @@
                     <span>2: TELEPORT</span>
                     <span>3: CORE</span>
                     <span>4: ERASE</span>
-                    <span>5-6: H0 / H1</span>
                     <span>CTRL+Z / CTRL+Y</span>
                 </div>
             </section>

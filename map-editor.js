@@ -17,11 +17,9 @@ const MAP_SIZES = {
 const PORTAL_COLS = [0, 1, 9, 10];
 const CORE_COLS = [4, 5, 6];
 const VALID_TERRAINS = new Set(['wall', 'teleport', 'core']);
-const VALID_APPLY_MODES = new Set(['terrain', 'height', 'both']);
 const STORAGE_KEY = 'sector8-map-editor-v5';
 const PRESET_STORAGE_KEY = 'sector8-fixed-map-preset-v1';
-const MAX_HEIGHT = 1;
-const EXPORT_VERSION = 4;
+const EXPORT_VERSION = 5;
 
 const dom = {
     mapStack: document.getElementById('map-stack'),
@@ -35,8 +33,6 @@ const dom = {
     statWall: document.getElementById('stat-wall'),
     statTeleport: document.getElementById('stat-teleport'),
     statCore: document.getElementById('stat-core'),
-    statHigh: document.getElementById('stat-high'),
-    statPeak: document.getElementById('stat-peak'),
     statChanged: document.getElementById('stat-changed'),
     statWarnings: document.getElementById('stat-warnings'),
     btnNewPreset: document.getElementById('btn-new-preset'),
@@ -83,7 +79,7 @@ function deepClone(value) {
 function makeGrid() {
     const { rows, cols } = MAP_SIZES.area1;
     return Array.from({ length: rows }, () => (
-        Array.from({ length: cols }, () => ({ terrain: null, height: 0, teleportGroup: null }))
+        Array.from({ length: cols }, () => ({ terrain: null, teleportGroup: null }))
     ));
 }
 
@@ -101,8 +97,6 @@ function createState(seedAnchorsEnabled = true) {
         version: EXPORT_VERSION,
         activeMap: 'area1',
         activeTool: 'wall',
-        activeHeight: 0,
-        applyMode: 'both',
         maps
     };
 }
@@ -143,12 +137,6 @@ function normalizeTerrain(value) {
     return VALID_TERRAINS.has(value) ? value : null;
 }
 
-function normalizeHeight(value) {
-    const n = Number(value);
-    if (!Number.isFinite(n)) return 0;
-    return clamp(Math.trunc(n), 0, MAX_HEIGHT);
-}
-
 function normalizeTeleportGroup(value) {
     const n = Number(value);
     if (!Number.isFinite(n)) return null;
@@ -159,23 +147,17 @@ function normalizeCell(raw) {
     if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
         return {
             terrain: normalizeTerrain(raw.terrain),
-            height: normalizeHeight(raw.height ?? raw.h ?? 0),
             teleportGroup: normalizeTeleportGroup(raw.teleportGroup ?? raw.link ?? raw.teleportId ?? null)
         };
     }
 
     if (typeof raw === 'string') {
         if (VALID_TERRAINS.has(raw)) {
-            return { terrain: raw, height: 0, teleportGroup: raw === 'teleport' ? 1 : null };
-        }
-
-        const maybeHeight = Number(raw);
-        if (Number.isFinite(maybeHeight)) {
-            return { terrain: null, height: clamp(Math.trunc(maybeHeight), 0, MAX_HEIGHT), teleportGroup: null };
+            return { terrain: raw, teleportGroup: raw === 'teleport' ? 1 : null };
         }
     }
 
-    return { terrain: null, height: 0, teleportGroup: null };
+    return { terrain: null, teleportGroup: null };
 }
 
 function normalizeGrid(source) {
@@ -300,14 +282,6 @@ function normalizeState(raw) {
         next.activeTool = raw.activeTool;
     }
 
-    if (Number.isFinite(Number(raw.activeHeight))) {
-        next.activeHeight = clamp(Math.trunc(Number(raw.activeHeight)), 0, MAX_HEIGHT);
-    }
-
-    if (VALID_APPLY_MODES.has(raw.applyMode)) {
-        next.applyMode = raw.applyMode;
-    }
-
     MAP_ORDER.forEach(mapName => {
         const mapSource = getMapSource(raw, mapName);
         if (mapSource) {
@@ -361,6 +335,12 @@ function getGlobalTeleportCounts() {
     return counts;
 }
 
+function getOpenTeleportGroup() {
+    return Array.from(getGlobalTeleportCounts().entries())
+        .filter(([group, count]) => group && count > 0 && count < 2)
+        .sort((a, b) => a[0] - b[0])[0]?.[0] || null;
+}
+
 function getNextTeleportGroup() {
     const counts = getGlobalTeleportCounts();
     let group = 1;
@@ -387,22 +367,6 @@ function removeTeleportGroup(group) {
             });
         });
     });
-}
-
-function getTeleportMirrorCell(mapName, row, col) {
-    if (!PORTAL_COLS.includes(col)) return null;
-    if (mapName === 'area1' && row === 0) return { mapName: 'area2', row: 0, col };
-    if (mapName === 'area2' && row === 0) return { mapName: 'area1', row: 0, col };
-    if (mapName === 'area2' && row === 10) return { mapName: 'area3', row: 10, col };
-    if (mapName === 'area3' && row === 10) return { mapName: 'area2', row: 10, col };
-    return null;
-}
-
-function isTeleportSlot(mapName, row, col) {
-    if (!PORTAL_COLS.includes(col)) return false;
-    if (mapName === 'area1') return row === 0;
-    if (mapName === 'area2') return row === 0 || row === 10;
-    return row === 10;
 }
 
 function isCoreSlot(mapName, row, col) {
@@ -432,8 +396,6 @@ function getMapStats(mapName) {
         wall: 0,
         teleport: 0,
         core: 0,
-        high: 0,
-        peak: 0,
         changed: 0,
         warnings: 0
     };
@@ -445,13 +407,8 @@ function getMapStats(mapName) {
             if (cell.terrain === 'wall') stats.wall += 1;
             if (cell.terrain === 'teleport') stats.teleport += 1;
             if (cell.terrain === 'core') stats.core += 1;
-            if (cell.height > 0) stats.high += 1;
-            if (cell.height === MAX_HEIGHT) stats.peak += 1;
-            if (cell.height > 0 || cell.terrain) stats.changed += 1;
-            if (
-                (cell.terrain === 'teleport' && !isTeleportSlot(mapName, row, col)) ||
-                (cell.terrain === 'core' && !isCoreSlot(mapName, row, col))
-            ) {
+            if (cell.terrain) stats.changed += 1;
+            if (cell.terrain === 'core' && !isCoreSlot(mapName, row, col)) {
                 stats.warnings += 1;
             }
             if (cell.terrain === 'teleport') {
@@ -476,8 +433,6 @@ function getGlobalStats() {
         acc.wall += stats.wall;
         acc.teleport += stats.teleport;
         acc.core += stats.core;
-        acc.high += stats.high;
-        acc.peak += stats.peak;
         acc.changed += stats.changed;
         acc.warnings += stats.warnings;
         return acc;
@@ -485,8 +440,6 @@ function getGlobalStats() {
         wall: 0,
         teleport: 0,
         core: 0,
-        high: 0,
-        peak: 0,
         changed: 0,
         warnings: 0
     });
@@ -542,21 +495,6 @@ function setActiveTool(tool) {
     renderStatus();
 }
 
-function setActiveHeight(height) {
-    state.activeHeight = clamp(Number(height) || 0, 0, MAX_HEIGHT);
-    saveState();
-    renderToolbar();
-    renderStatus();
-}
-
-function setApplyMode(mode) {
-    if (!VALID_APPLY_MODES.has(mode)) return;
-    state.applyMode = mode;
-    saveState();
-    renderToolbar();
-    renderStatus();
-}
-
 function createBlankPreset() {
     history.push(deepClone(state.maps));
     if (history.length > 64) {
@@ -573,65 +511,36 @@ function paintCell(mapName, row, col) {
     const cell = getCell(mapName, row, col);
     if (!cell) return false;
 
-    const targetTerrain = state.applyMode !== 'height'
-        ? (state.activeTool === 'erase' ? null : state.activeTool)
-        : cell.terrain;
-    const targetHeight = state.applyMode !== 'terrain'
-        ? clamp(state.activeHeight, 0, MAX_HEIGHT)
-        : cell.height;
-
     let nextTerrain = cell.terrain;
-    let nextHeight = cell.height;
     let nextTeleportGroup = cell.teleportGroup;
 
-    if (state.applyMode !== 'height') {
-        if (cell.terrain === 'teleport' && targetTerrain !== 'teleport') {
+    if (state.activeTool === 'erase') {
+        if (cell.terrain === 'teleport') {
             removeTeleportGroup(cell.teleportGroup);
-            nextTerrain = null;
-            nextTeleportGroup = null;
+        }
+        nextTerrain = null;
+        nextTeleportGroup = null;
+    } else if (state.activeTool === 'teleport') {
+        const chosenGroup = cell.terrain === 'teleport'
+            ? Number(cell.teleportGroup) || getOpenTeleportGroup() || allocateTeleportGroup()
+            : getOpenTeleportGroup() || allocateTeleportGroup();
+
+        if (cell.terrain === 'teleport' && Number(cell.teleportGroup) !== chosenGroup) {
+            removeTeleportGroup(cell.teleportGroup);
         }
 
-        if (targetTerrain === 'teleport') {
-            const mirror = getTeleportMirrorCell(mapName, row, col);
-            const linkedCells = [
-                { mapName, row, col, cell },
-                mirror ? { mapName: mirror.mapName, row: mirror.row, col: mirror.col, cell: getCell(mirror.mapName, mirror.row, mirror.col) } : null
-            ].filter(Boolean);
-            const existingGroups = linkedCells
-                .map(entry => entry.cell?.terrain === 'teleport' ? Number(entry.cell.teleportGroup) || null : null)
-                .filter(Boolean);
-            const chosenGroup = existingGroups[0] || allocateTeleportGroup();
-
-            linkedCells.forEach(entry => {
-                const targetCell = entry.cell;
-                if (!targetCell) return;
-                if (targetCell.terrain === 'teleport' && Number(targetCell.teleportGroup) !== chosenGroup) {
-                    removeTeleportGroup(targetCell.teleportGroup);
-                }
-            });
-
-            linkedCells.forEach(entry => {
-                const targetCell = entry.cell;
-                if (!targetCell) return;
-                targetCell.terrain = 'teleport';
-                targetCell.teleportGroup = chosenGroup;
-            });
-
-            nextTerrain = 'teleport';
-            nextTeleportGroup = chosenGroup;
-        } else if (targetTerrain !== 'teleport') {
-            nextTerrain = targetTerrain;
-            nextTeleportGroup = null;
+        nextTerrain = 'teleport';
+        nextTeleportGroup = chosenGroup;
+    } else {
+        if (cell.terrain === 'teleport') {
+            removeTeleportGroup(cell.teleportGroup);
         }
-    }
-
-    if (state.applyMode !== 'terrain') {
-        nextHeight = targetHeight;
+        nextTerrain = state.activeTool;
+        nextTeleportGroup = null;
     }
 
     const changed =
         cell.terrain !== nextTerrain ||
-        cell.height !== nextHeight ||
         cell.teleportGroup !== nextTeleportGroup;
 
     if (!changed) return false;
@@ -642,7 +551,6 @@ function paintCell(mapName, row, col) {
     }
 
     cell.terrain = nextTerrain;
-    cell.height = nextHeight;
     cell.teleportGroup = nextTeleportGroup;
 
     saveState();
@@ -695,20 +603,14 @@ function renderToolbar() {
         button.classList.toggle('active', button.dataset.tool === state.activeTool);
     });
 
-    document.querySelectorAll('[data-height]').forEach(button => {
-        button.classList.toggle('active', Number(button.dataset.height) === state.activeHeight);
-    });
-
-    document.querySelectorAll('[data-apply-mode]').forEach(button => {
-        button.classList.toggle('active', button.dataset.applyMode === state.applyMode);
-    });
-
     document.querySelectorAll('[data-map-card]').forEach(card => {
         card.classList.toggle('active', card.dataset.mapCard === state.activeMap);
     });
 
-    dom.teleportPairLabel.textContent = `T${getNextTeleportGroup()}`;
-    dom.teleportNextLabel.textContent = `T${getNextTeleportGroup() + 1}`;
+    const openGroup = getOpenTeleportGroup();
+    const nextGroup = getNextTeleportGroup();
+    dom.teleportPairLabel.textContent = openGroup ? `T${openGroup}` : `T${nextGroup}`;
+    dom.teleportNextLabel.textContent = openGroup ? `T${nextGroup + 1}` : `T${nextGroup}`;
 }
 
 function renderBoard(mapName) {
@@ -722,14 +624,10 @@ function renderBoard(mapName) {
             button.type = 'button';
             button.className = [
                 'cell',
-                `height-${cell.height}`,
                 cell.terrain ? `terrain-${cell.terrain}` : 'terrain-empty'
             ].join(' ');
 
-            if (
-                (cell.terrain === 'teleport' && !isTeleportSlot(mapName, row, col)) ||
-                (cell.terrain === 'core' && !isCoreSlot(mapName, row, col))
-            ) {
+            if (cell.terrain === 'core' && !isCoreSlot(mapName, row, col)) {
                 button.classList.add('illegal');
             }
 
@@ -738,14 +636,12 @@ function renderBoard(mapName) {
             button.dataset.col = String(col);
             button.setAttribute(
                 'aria-label',
-                `${MAP_LABELS[mapName]} ${row + 1}-${col + 1} ${getTerrainLabel(cell.terrain)} H${cell.height}`
+                `${MAP_LABELS[mapName]} ${row + 1}-${col + 1} ${getTerrainLabel(cell.terrain)}`
             );
             const teleportLabel = cell.terrain === 'teleport' ? ` / T${cell.teleportGroup || '?'}` : '';
-            button.title = `${getTerrainLabel(cell.terrain)} / H${cell.height}${teleportLabel}`;
+            button.title = `${getTerrainLabel(cell.terrain)}${teleportLabel}`;
             button.innerHTML = `
-                <span class="height-fill"></span>
                 <span class="terrain-glyph">${getTerrainGlyph(cell.terrain)}</span>
-                <span class="height-badge">H${cell.height}</span>
                 ${cell.terrain === 'teleport' ? `<span class="teleport-link-badge">T${cell.teleportGroup || '?'}</span>` : ''}
             `;
             fragment.appendChild(button);
@@ -836,8 +732,6 @@ function renderStats() {
     dom.statWall.textContent = String(stats.wall);
     dom.statTeleport.textContent = String(stats.teleport);
     dom.statCore.textContent = String(stats.core);
-    dom.statHigh.textContent = String(stats.high);
-    dom.statPeak.textContent = String(stats.peak);
     dom.statChanged.textContent = String(stats.changed);
     dom.statWarnings.textContent = String(stats.warnings);
 }
@@ -845,9 +739,8 @@ function renderStats() {
 function renderStatus() {
     const stats = getGlobalStats();
     const toolLabel = state.activeTool === 'erase' ? 'ERASE' : state.activeTool.toUpperCase();
-    const applyLabel = state.applyMode.toUpperCase();
     const warningPart = stats.warnings > 0 ? ` / WARNINGS ${stats.warnings}` : '';
-    dom.statusLine.textContent = `FOCUS ${MAP_LABELS[state.activeMap]} / TOOL ${toolLabel} / HEIGHT H${state.activeHeight} / APPLY ${applyLabel}${warningPart}`;
+    dom.statusLine.textContent = `FOCUS ${MAP_LABELS[state.activeMap]} / TOOL ${toolLabel}${warningPart}`;
 }
 
 function serializeExportPayload() {
@@ -866,12 +759,6 @@ function serializeExportPayload() {
         type: 'sector8-fixed-map-preset',
         createdAt: new Date().toISOString(),
         rules: {
-            height: {
-                enabled: true,
-                maxLevel: MAX_HEIGHT,
-                visionBonusPerLevel: 1,
-                moveExtraCostPerLevel: 1
-            },
             teleport: {
                 syncMode: 'pair',
                 visualize: ['number', 'line'],
@@ -975,14 +862,6 @@ function bindEvents() {
         button.addEventListener('click', () => setActiveTool(button.dataset.tool));
     });
 
-    document.querySelectorAll('[data-height]').forEach(button => {
-        button.addEventListener('click', () => setActiveHeight(button.dataset.height));
-    });
-
-    document.querySelectorAll('[data-apply-mode]').forEach(button => {
-        button.addEventListener('click', () => setApplyMode(button.dataset.applyMode));
-    });
-
     dom.btnNewPreset.addEventListener('click', createBlankPreset);
     dom.btnUndo.addEventListener('click', undo);
     dom.btnRedo.addEventListener('click', redo);
@@ -1033,8 +912,6 @@ function bindEvents() {
         if (key === '2') setActiveTool('teleport');
         if (key === '3') setActiveTool('core');
         if (key === '4') setActiveTool('erase');
-        if (key === '5') setActiveHeight(0);
-        if (key === '6') setActiveHeight(1);
     });
 }
 

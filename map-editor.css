@@ -91,7 +91,6 @@ button, textarea, a { font: inherit; }
 .editor-btn,
 .tool-btn,
 .map-tab,
-.height-btn,
 .target-btn,
 .map-focus-btn {
     border: 1px solid rgba(0, 240, 255, 0.35);
@@ -122,7 +121,6 @@ button, textarea, a { font: inherit; }
 .editor-btn:hover,
 .tool-btn:hover,
 .map-tab:hover,
-.height-btn:hover,
 .target-btn:hover,
 .map-focus-btn:hover {
     transform: translateY(-1px);
@@ -168,20 +166,17 @@ button, textarea, a { font: inherit; }
 
 .tab-row,
 .tool-grid,
-.height-grid,
 .target-grid {
     display: grid;
     gap: 8px;
 }
 
 .tab-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.tool-grid,
-.height-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.tool-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .target-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 
 .map-tab,
 .tool-btn,
-.height-btn,
 .target-btn {
     padding: 0.8rem 0.55rem;
     text-align: center;
@@ -189,7 +184,6 @@ button, textarea, a { font: inherit; }
 
 .map-tab.active,
 .tool-btn.active,
-.height-btn.active,
 .target-btn.active {
     background: rgba(255, 183, 0, 0.16);
     border-color: rgba(255, 183, 0, 0.6);
@@ -204,9 +198,7 @@ button, textarea, a { font: inherit; }
     line-height: 1.6;
 }
 
-.teleport-info,
-.height-legend,
-.height-summary {
+.teleport-info {
     display: flex;
     flex-wrap: wrap;
     gap: 10px 14px;
@@ -241,15 +233,6 @@ button, textarea, a { font: inherit; }
 
 .teleport-info strong { color: var(--cyan); }
 
-.height-summary { justify-content: flex-end; padding: 0 6px; }
-
-.height-legend span,
-.height-summary span {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-}
-
 .legend-swatch,
 .summary-swatch {
     width: 12px;
@@ -257,14 +240,6 @@ button, textarea, a { font: inherit; }
     border-radius: 999px;
     display: inline-block;
     border: 1px solid rgba(255,255,255,0.18);
-}
-
-.h0 {
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
-}
-
-.h1 {
-    background: linear-gradient(180deg, rgba(0, 240, 255, 0.55), rgba(0, 240, 255, 0.15));
 }
 
 .stats-grid {
@@ -485,38 +460,6 @@ button, textarea, a { font: inherit; }
     border-color: rgba(0, 240, 255, 0.28);
 }
 
-.cell.height-0 {
-    transform: translateY(0);
-}
-
-.cell.height-1 {
-    transform: translateY(-1px);
-}
-
-.cell.height-0,
-.cell.height-1 {
-    box-shadow:
-        inset 0 1px 0 rgba(255,255,255,0.05),
-        inset 0 -14px 20px rgba(0,0,0,0.18),
-        0 0 0 1px rgba(255,255,255,0.02);
-}
-
-.cell .height-fill {
-    position: absolute;
-    inset: 0;
-    background:
-        linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0.02) 42%, rgba(0,0,0,0.32)),
-        linear-gradient(180deg, transparent, rgba(0,0,0,0.12));
-    opacity: 0.72;
-    pointer-events: none;
-}
-
-.cell.height-1 .height-fill {
-    background:
-        linear-gradient(180deg, rgba(0, 240, 255, 0.18), rgba(0,0,0,0.18) 45%, rgba(0,0,0,0.34)),
-        linear-gradient(180deg, rgba(255,255,255,0.08), transparent);
-}
-
 .cell .terrain-glyph {
     position: absolute;
     left: 8px;
@@ -588,25 +531,6 @@ button, textarea, a { font: inherit; }
     text-shadow: 0 0 10px rgba(0,0,0,0.55);
 }
 
-.cell .height-badge {
-    position: absolute;
-    top: 6px;
-    right: 6px;
-    z-index: 2;
-    min-width: 2rem;
-    padding: 2px 6px;
-    border-radius: 999px;
-    background: rgba(6,9,16,0.88);
-    border: 1px solid rgba(255,255,255,0.1);
-    color: #eaf6ff;
-    font-family: var(--font-mono);
-    font-size: 0.62rem;
-    font-weight: 800;
-    letter-spacing: 0.08em;
-    text-align: center;
-    pointer-events: none;
-}
-
 .cell .teleport-link-badge {
     position: absolute;
     left: 6px;
@@ -674,7 +598,6 @@ button, textarea, a { font: inherit; }
 
     .tab-row,
     .tool-grid,
-    .height-grid,
     .stats-grid,
     .target-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -687,9 +610,5 @@ button, textarea, a { font: inherit; }
 
     .status-line {
         text-align: left;
-    }
-
-    .height-summary {
-        justify-content: flex-start;
     }
 }
