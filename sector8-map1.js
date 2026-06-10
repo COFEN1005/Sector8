@@ -1,0 +1,1574 @@
+window.SECTOR8_FIXED_MAP_PRESET = {
+  "version": 5,
+  "type": "sector8-fixed-map-preset",
+  "createdAt": "2026-06-09T16:05:43.275Z",
+  "rules": {
+    "teleport": {
+      "syncMode": "pair",
+      "visualize": [
+        "number",
+        "line"
+      ],
+      "pairSize": 2
+    }
+  },
+  "maps": {
+    "area1": {
+      "rows": 11,
+      "cols": 11,
+      "cells": [
+        [
+          {
+            "terrain": "teleport",
+            "teleportGroup": 6
+          },
+          {
+            "terrain": "teleport",
+            "teleportGroup": 7
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": "wall",
+            "teleportGroup": null
+          },
+          {
+            "terrain": "teleport",
+            "teleportGroup": 11
+          },
+          {
+            "terrain": "wall",
+            "teleportGroup": null
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": "teleport",
+            "teleportGroup": 9
+          },
+          {
+            "terrain": "teleport",
+            "teleportGroup": 8
+          }
+        ],
+        [
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": "wall",
+            "teleportGroup": null
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": "wall",
+            "teleportGroup": null
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          }
+        ],
+        [
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": "wall",
+            "teleportGroup": null
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": "wall",
+            "teleportGroup": null
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          }
+        ],
+        [
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          }
+        ],
+        [
+          {
+            "terrain": "teleport",
+            "teleportGroup": 12
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": "teleport",
+            "teleportGroup": 13
+          }
+        ],
+        [
+          {
+            "terrain": "wall",
+            "teleportGroup": null
+          },
+          {
+            "terrain": "wall",
+            "teleportGroup": null
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": "wall",
+            "teleportGroup": null
+          },
+          {
+            "terrain": "wall",
+            "teleportGroup": null
+          }
+        ],
+        [
+          {
+            "terrain": "teleport",
+            "teleportGroup": 12
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": "wall",
+            "teleportGroup": null
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": "teleport",
+            "teleportGroup": 13
+          }
+        ],
+        [
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": "wall",
+            "teleportGroup": null
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          }
+        ],
+        [
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          }
+        ],
+        [
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          }
+        ],
+        [
+          {
+            "terrain": "wall",
+            "teleportGroup": null
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": "core",
+            "teleportGroup": 1
+          },
+          {
+            "terrain": "core",
+            "teleportGroup": 1
+          },
+          {
+            "terrain": "core",
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": "wall",
+            "teleportGroup": null
+          }
+        ]
+      ],
+      "stats": {
+        "wall": 14,
+        "teleport": 9,
+        "core": 3,
+        "changed": 26,
+        "warnings": 5
+      }
+    },
+    "area2": {
+      "rows": 11,
+      "cols": 11,
+      "cells": [
+        [
+          {
+            "terrain": "teleport",
+            "teleportGroup": 1
+          },
+          {
+            "terrain": "teleport",
+            "teleportGroup": 2
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": "teleport",
+            "teleportGroup": 5
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": "teleport",
+            "teleportGroup": 3
+          },
+          {
+            "terrain": "teleport",
+            "teleportGroup": 4
+          }
+        ],
+        [
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          }
+        ],
+        [
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": "wall",
+            "teleportGroup": null
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          }
+        ],
+        [
+          {
+            "terrain": "wall",
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": "wall",
+            "teleportGroup": null
+          },
+          {
+            "terrain": null,
+            "teleportGroup": null
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": "wall",
+            "teleportGroup": 1
+          }
+        ],
+        [
+          {
+            "terrain": null,
+            "teleportGroup": null
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": "wall",
+            "teleportGroup": null
+          },
+          {
+            "terrain": null,
+            "teleportGroup": null
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": null
+          }
+        ],
+        [
+          {
+            "terrain": "teleport",
+            "teleportGroup": 10
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": null
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": "wall",
+            "teleportGroup": null
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": null
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": "teleport",
+            "teleportGroup": 10
+          }
+        ],
+        [
+          {
+            "terrain": null,
+            "teleportGroup": null
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": null
+          },
+          {
+            "terrain": "wall",
+            "teleportGroup": null
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": null
+          }
+        ],
+        [
+          {
+            "terrain": "wall",
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": null
+          },
+          {
+            "terrain": "wall",
+            "teleportGroup": null
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": "wall",
+            "teleportGroup": 1
+          }
+        ],
+        [
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": "wall",
+            "teleportGroup": null
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          }
+        ],
+        [
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          }
+        ],
+        [
+          {
+            "terrain": "teleport",
+            "teleportGroup": 6
+          },
+          {
+            "terrain": "teleport",
+            "teleportGroup": 7
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": "teleport",
+            "teleportGroup": 11
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": "teleport",
+            "teleportGroup": 9
+          },
+          {
+            "terrain": "teleport",
+            "teleportGroup": 8
+          }
+        ]
+      ],
+      "stats": {
+        "wall": 11,
+        "teleport": 12,
+        "core": 0,
+        "changed": 23,
+        "warnings": 10
+      }
+    },
+    "area3": {
+      "rows": 11,
+      "cols": 11,
+      "cells": [
+        [
+          {
+            "terrain": "wall",
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": "core",
+            "teleportGroup": 1
+          },
+          {
+            "terrain": "core",
+            "teleportGroup": 1
+          },
+          {
+            "terrain": "core",
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": "wall",
+            "teleportGroup": 1
+          }
+        ],
+        [
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          }
+        ],
+        [
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          }
+        ],
+        [
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": "wall",
+            "teleportGroup": null
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          }
+        ],
+        [
+          {
+            "terrain": "teleport",
+            "teleportGroup": 15
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": "wall",
+            "teleportGroup": null
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": "teleport",
+            "teleportGroup": 14
+          }
+        ],
+        [
+          {
+            "terrain": "wall",
+            "teleportGroup": 1
+          },
+          {
+            "terrain": "wall",
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": "wall",
+            "teleportGroup": 1
+          },
+          {
+            "terrain": "wall",
+            "teleportGroup": 1
+          }
+        ],
+        [
+          {
+            "terrain": "teleport",
+            "teleportGroup": 15
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": "teleport",
+            "teleportGroup": 14
+          }
+        ],
+        [
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          }
+        ],
+        [
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": "wall",
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": "wall",
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          }
+        ],
+        [
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": "wall",
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": "wall",
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          }
+        ],
+        [
+          {
+            "terrain": "teleport",
+            "teleportGroup": 1
+          },
+          {
+            "terrain": "teleport",
+            "teleportGroup": 2
+          },
+          {
+            "terrain": null,
+            "teleportGroup": null
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": "wall",
+            "teleportGroup": 1
+          },
+          {
+            "terrain": "teleport",
+            "teleportGroup": 5
+          },
+          {
+            "terrain": "wall",
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": "teleport",
+            "teleportGroup": 3
+          },
+          {
+            "terrain": "teleport",
+            "teleportGroup": 4
+          }
+        ]
+      ],
+      "stats": {
+        "wall": 14,
+        "teleport": 9,
+        "core": 3,
+        "changed": 26,
+        "warnings": 5
+      }
+    }
+  }
+};
