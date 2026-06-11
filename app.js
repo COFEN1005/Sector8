@@ -1524,11 +1524,17 @@ async function updateAccountName(nextName) {
     return result.profile;
 }
 
-function startMatchTracking() {
+function createOnlineMatchKey() {
+    const roomId = matchRoomId || onlineSession?.roomId || 'online';
+    const uniquePart = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    return `${roomId}:${gameSeed}:${uniquePart}`;
+}
+
+function startMatchTracking(config = null) {
     if (replayPlaybackActive) return;
     currentMatchStartedAt = Date.now();
     currentMatchKey = onlineMode
-        ? `${matchRoomId || 'online'}:${gameSeed}`
+        ? String(config?.matchKey || createOnlineMatchKey())
         : `local:${gameSeed}:${Date.now()}`;
     currentMatchStartProfile = authProfile ? {
         id: authProfile.id,
@@ -1543,8 +1549,17 @@ function startMatchTracking() {
 }
 
 async function submitMatchHistory(reason, winnerId) {
+    if (replayPlaybackActive) return;
+    if (!authProfile && authSession?.token) {
+        try {
+            await restoreAuthSession();
+        } catch {}
+    }
     const localProfile = authProfile || currentMatchStartProfile;
-    if (!authSession?.token || !localProfile || replayPlaybackActive) return;
+    if (!authSession?.token || !localProfile) {
+        console.warn('match history skipped: auth profile missing');
+        return;
+    }
     const viewerSide = onlineMode && localPlayer ? localPlayer : 1;
     const localIsPlayer1 = !onlineMode || viewerSide === 1;
     const isDraw = winnerId == null || reason === 'draw';
@@ -1561,8 +1576,11 @@ async function submitMatchHistory(reason, winnerId) {
     summary.loserName = isDraw ? 'DRAW' : (viewerWon ? opponentName : localProfile.name);
     summary.replay = currentMatchReplay;
     activeMatchSummaryView = summary;
+    const persistedSummary = { ...summary };
+    delete persistedSummary.replay;
     const payload = {
         matchKey: currentMatchKey || `local:${Date.now()}`,
+        roomId: onlineMode ? (matchRoomId || onlineSession?.roomId || null) : null,
         player1Id: player1Profile?.id ?? localProfile.id,
         player2Id: player2Profile?.id ?? null,
         player1Name: player1Profile?.name || (localIsPlayer1 ? localProfile.name : opponentName),
@@ -1581,8 +1599,8 @@ async function submitMatchHistory(reason, winnerId) {
         surrenderByPlayerId: !isDraw && !viewerWon && reason === 'forfeit' ? (localProfile.id || null) : null,
         winnerPlayerId: isDraw ? null : (winnerId === 1 ? (player1Profile?.id || null) : (player2Profile?.id || null)),
         loserPlayerId: isDraw ? null : (winnerId === 1 ? (player2Profile?.id || null) : (player1Profile?.id || null)),
-        summaryJson: summary,
-        replayJson: currentMatchReplay
+        summaryJson: persistedSummary,
+        replayJson: null
     };
     try {
         const result = await apiRequest('/api/matches', { method: 'POST', body: payload, auth: true });
@@ -1601,9 +1619,7 @@ async function submitMatchHistory(reason, winnerId) {
             summary.expDelta = Number(endProfile.exp || 0) - Number((player1Profile?.id === localProfile.id ? player1Profile?.exp : player2Profile?.exp) ?? localProfile.exp ?? 0);
             applyAuthProfile(updatedProfile, authSession.token);
         }
-        if (!document.getElementById('menu-panel')?.classList.contains('hidden')) {
-            loadMatchHistory({ force: true }).catch(() => {});
-        }
+        loadMatchHistory({ force: true }).catch(() => {});
         if (activeMatchSummaryView) {
             activeMatchSummaryView.ratingDelta = summary.ratingDelta;
             activeMatchSummaryView.expDelta = summary.expDelta;
@@ -3336,7 +3352,8 @@ function startOnlineBattle() {
         p1Ability: onlineAbilityChoices[1] || '足跡',
         p2Ability: onlineAbilityChoices[2] || '歴戦王',
         seed: gameSeed || hashStringToSeed(matchRoomId || onlineSession?.roomId || 'online'),
-        matchType: getCurrentMatchType()
+        matchType: getCurrentMatchType(),
+        matchKey: createOnlineMatchKey()
     };
 
     if (onlineMode && (!onlineAbilityChoices[1] || !onlineAbilityChoices[2])) {
@@ -3834,7 +3851,7 @@ function startGame(config = null, fromOnline = false) {
     }
     gameSeed = config?.seed || Math.floor(Math.random() * 0xFFFFFFFF);
     vsAI = onlineMode ? false : vsAI;
-    startMatchTracking();
+    startMatchTracking(config);
 
     activePhase = 'battle';
     resetOnlineAutoStartState();
@@ -3914,7 +3931,7 @@ function startGame(config = null, fromOnline = false) {
     updateAudioButtons();
 
     if (onlineMode && !fromOnline) {
-        sendOnlineMessage({ kind: 'start', config: { p1Ability, p2Ability, seed: gameSeed } });
+        sendOnlineMessage({ kind: 'start', config: { p1Ability, p2Ability, seed: gameSeed, matchKey: currentMatchKey } });
     }
 }
 

@@ -507,37 +507,48 @@ const server = http.createServer(async (req, res) => {
             if (method === 'POST' && url.pathname === '/api/matches') {
                 if (!session) return sendJson(res, 401, { ok: false, error: 'unauthorized' });
                 const matchKey = String(body.matchKey || '').trim();
-                if (matchKey) {
-                    if (pendingMatchHistoryKeys.has(matchKey)) {
-                        return sendJson(res, 200, { ok: true, duplicate: true });
+                if (!matchKey) return sendJson(res, 400, { ok: false, error: 'match_key_required' });
+
+                if (pendingMatchHistoryKeys.has(matchKey)) {
+                    for (let attempt = 0; attempt < 50 && pendingMatchHistoryKeys.has(matchKey); attempt++) {
+                        await new Promise(resolve => setTimeout(resolve, 100));
                     }
-                    pendingMatchHistoryKeys.add(matchKey);
-                    const existing = await accountStore.hasMatchHistoryByKey(matchKey);
-                    if (existing) {
-                        pendingMatchHistoryKeys.delete(matchKey);
-                        return sendJson(res, 200, { ok: true, id: existing.id, duplicate: true });
+                    if (pendingMatchHistoryKeys.has(matchKey)) {
+                        return sendJson(res, 202, { ok: true, duplicate: true, pending: true });
                     }
                 }
+
+                const existing = await accountStore.hasMatchHistoryByKey(matchKey);
+                if (existing) {
+                    const player1 = existing.player1_id ? await accountStore.getPlayerById(existing.player1_id) : null;
+                    const player2 = existing.player2_id ? await accountStore.getPlayerById(existing.player2_id) : null;
+                    return sendJson(res, 200, { ok: true, id: existing.id, duplicate: true, player1, player2 });
+                }
+                pendingMatchHistoryKeys.add(matchKey);
 
                 try {
                     const player1Id = body.player1Id ? Number(body.player1Id) : null;
                     const player2Id = body.player2Id ? Number(body.player2Id) : null;
-                    const winnerPlayerId = body.winnerPlayerId ? Number(body.winnerPlayerId) : null;
-                    const loserPlayerId = body.loserPlayerId ? Number(body.loserPlayerId) : null;
                     const matchType = String(body.matchType || 'normal');
                     const result = String(body.result || '');
                     const isDraw = result === 'draw';
                     const player1Won = result === 'win';
-                    const resolveMatchProfile = async (id, name) => {
-                        const resolvedById = id ? await accountStore.getPlayerById(id) : null;
+                    const room = body.roomId ? rooms.get(String(body.roomId)) : null;
+                    const resolveMatchProfile = async (id, name, roomProfile) => {
+                        const hintedId = id || roomProfile?.id || null;
+                        const resolvedById = hintedId ? await accountStore.getPlayerById(hintedId) : null;
                         if (resolvedById) return resolvedById;
-                        const cleanedName = sanitizeDisplayName(name || '');
+                        const cleanedName = sanitizeDisplayName(name || roomProfile?.name || '');
                         if (!cleanedName) return null;
                         return accountStore.getPlayerByName(cleanedName);
                     };
 
-                    let player1Profile = await resolveMatchProfile(player1Id, body.player1Name);
-                    let player2Profile = await resolveMatchProfile(player2Id, body.player2Name);
+                    let player1Profile = await resolveMatchProfile(player1Id, body.player1Name, room?.profileDetails?.[1]);
+                    let player2Profile = await resolveMatchProfile(player2Id, body.player2Name, room?.profileDetails?.[2]);
+                    if (body.roomId && matchType === 'rank' && (!player1Profile || !player2Profile)) {
+                        return sendJson(res, 409, { ok: false, error: 'match_players_not_ready' });
+                    }
+
                     const player1StartRating = Number(body.player1StartRating || player1Profile?.rating || 0);
                     const player2StartRating = Number(body.player2StartRating || player2Profile?.rating || 0);
                     const player1StartLevel = Number(body.player1Level || player1Profile?.level || 1);
@@ -559,6 +570,32 @@ const server = http.createServer(async (req, res) => {
                         player1RatingDelta = player1Won ? 10 : -10;
                     }
 
+                    const matchId = await accountStore.recordMatchHistory({
+                        matchKey,
+                        matchType,
+                        player1Id: player1Profile?.id || null,
+                        player2Id: player2Profile?.id || null,
+                        player1Name: body.player1Name || player1Profile?.name || 'PLAYER 1',
+                        player2Name: body.player2Name || player2Profile?.name || 'PLAYER 2',
+                        winner: body.winner || (isDraw ? 'DRAW' : (winnerPlayerId === (player1Profile?.id || player1Id) ? (player1Profile?.name || 'PLAYER 1') : (player2Profile?.name || 'PLAYER 2'))),
+                        loser: body.loser || (isDraw ? 'DRAW' : (loserPlayerId === (player1Profile?.id || player1Id) ? (player1Profile?.name || 'PLAYER 1') : (player2Profile?.name || 'PLAYER 2'))),
+                        result: body.result || 'win',
+                        player1RatingDelta,
+                        player2RatingDelta,
+                        player1Level: player1Profile?.level || player1StartLevel,
+                        player2Level: player2Profile?.level || player2StartLevel,
+                        player1StartRating,
+                        player2StartRating,
+                        startedTime: body.startedTime,
+                        endedTime: body.endedTime,
+                        timeTaken: body.timeTaken,
+                        surrenderByPlayerId: body.surrenderByPlayerId || null,
+                        winnerPlayerId: isDraw ? null : (player1Won ? (player1Profile?.id || null) : (player2Profile?.id || null)),
+                        loserPlayerId: isDraw ? null : (!player1Won ? (player1Profile?.id || null) : (player2Profile?.id || null)),
+                        summaryJson: body.summaryJson || null,
+                        replayJson: null
+                    });
+
                     if (player1Profile) {
                         try {
                             player1Profile = await accountStore.updatePlayerProgress(player1Profile.id, player1RatingDelta, 50);
@@ -576,29 +613,6 @@ const server = http.createServer(async (req, res) => {
                         }
                     }
 
-                    const matchId = await accountStore.recordMatchHistory({
-                        matchKey,
-                        matchType,
-                        player1Id: player1Profile?.id || player1Id,
-                        player2Id: player2Profile?.id || player2Id,
-                        player1Name: body.player1Name || player1Profile?.name || 'PLAYER 1',
-                        player2Name: body.player2Name || player2Profile?.name || 'PLAYER 2',
-                        winner: body.winner || (isDraw ? 'DRAW' : (winnerPlayerId === (player1Profile?.id || player1Id) ? (player1Profile?.name || 'PLAYER 1') : (player2Profile?.name || 'PLAYER 2'))),
-                        loser: body.loser || (isDraw ? 'DRAW' : (loserPlayerId === (player1Profile?.id || player1Id) ? (player1Profile?.name || 'PLAYER 1') : (player2Profile?.name || 'PLAYER 2'))),
-                        result: body.result || 'win',
-                        player1RatingDelta,
-                        player2RatingDelta,
-                        player1Level: player1Profile?.level || player1StartLevel,
-                        player2Level: player2Profile?.level || player2StartLevel,
-                        player1StartRating,
-                        player2StartRating,
-                        startedTime: body.startedTime,
-                        endedTime: body.endedTime,
-                        timeTaken: body.timeTaken,
-                        surrenderByPlayerId: body.surrenderByPlayerId || null,
-                        winnerPlayerId: isDraw ? null : (winnerPlayerId || (player1Won ? (player1Profile?.id || player1Id) : (player2Profile?.id || player2Id)) || null),
-                        loserPlayerId: isDraw ? null : (loserPlayerId || (!player1Won ? (player1Profile?.id || player1Id) : (player2Profile?.id || player2Id)) || null)
-                    });
                     return sendJson(res, 200, {
                         ok: true,
                         id: matchId,
