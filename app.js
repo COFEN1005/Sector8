@@ -1990,25 +1990,43 @@ class Unit {
 }
 
 // --- INITIALIZATION ---
-document.addEventListener('DOMContentLoaded', async () => {
-    applyDeviceProfile();
-    loadSavedUsername();
-    loadSavedAuthSession();
-    loadSavedOnlineSession();
-    loadSavedUiSettings();
-    refreshMapSourceModeFromStorage();
-    await preloadBundledFixedMapPreset();
-    syncAbilitySelectOptions();
-    setupUIEventListeners();
-    setupMapTabs();
-    setupGameModeTabs();
-    setupOnlineMode();
-    updateModeVisibility();
-    updateUsernameUI();
-    updateAccountUI();
-    updateAudioButtons();
-    restoreAuthSession().catch(() => {});
-    addConsoleLog("SYSTEM READY. SELECT CONFIGURATION AND PRESS 'SYSTEM INITIATE'.", 'system');
+function runUiInitStep(label, callback) {
+    try {
+        return callback();
+    } catch (error) {
+        console.error(`${label} initialization failed:`, error);
+        return null;
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    runUiInitStep('device profile', applyDeviceProfile);
+    runUiInitStep('saved username', loadSavedUsername);
+    runUiInitStep('saved auth session', loadSavedAuthSession);
+    runUiInitStep('saved online session', loadSavedOnlineSession);
+    runUiInitStep('saved UI settings', loadSavedUiSettings);
+    runUiInitStep('map source mode', refreshMapSourceModeFromStorage);
+
+    // Keep each control group independent. One missing optional element must not
+    // prevent MENU, settings, or matchmaking controls from being registered.
+    runUiInitStep('UI controls', setupUIEventListeners);
+    runUiInitStep('map tabs', setupMapTabs);
+    runUiInitStep('game mode tabs', setupGameModeTabs);
+    runUiInitStep('online mode', setupOnlineMode);
+
+    runUiInitStep('ability options', syncAbilitySelectOptions);
+    runUiInitStep('mode visibility', updateModeVisibility);
+    runUiInitStep('username UI', updateUsernameUI);
+    runUiInitStep('account UI', updateAccountUI);
+    runUiInitStep('audio UI', updateAudioButtons);
+    runUiInitStep('system log', () => addConsoleLog("SYSTEM READY. SELECT CONFIGURATION AND PRESS 'SYSTEM INITIATE'.", 'system'));
+
+    preloadBundledFixedMapPreset().catch(error => {
+        console.warn('Bundled fixed map preload failed:', error);
+    });
+    restoreAuthSession().catch(error => {
+        console.warn('Session restore failed:', error);
+    });
 });
 
 window.addEventListener('resize', applyDeviceProfile);
@@ -2504,7 +2522,7 @@ function registerMapTabSequence(mapName) {
 
 function setupUIEventListeners() {
     document.addEventListener('pointerdown', initializeAudio, { once: true });
-    document.getElementById('btn-start-game').addEventListener('click', () => startGame());
+    document.getElementById('btn-start-game')?.addEventListener('click', () => startGame());
     const menuToggle = document.getElementById('btn-toggle-menu');
     const menuPanel = document.getElementById('menu-panel');
     const newsMenu = document.querySelector('.news-menu');
@@ -2544,15 +2562,15 @@ function setupUIEventListeners() {
             if (settingsMenu.open) closeHeaderPanels('settings');
         });
     }
-    document.getElementById('btn-opt-ai').addEventListener('click', () => setOpponent(true));
-    document.getElementById('btn-opt-human').addEventListener('click', () => setOpponent(false));
-    document.getElementById('btn-move').addEventListener('click', () => selectActionType('move'));
-    document.getElementById('btn-ability').addEventListener('click', () => selectActionType('ability'));
-    document.getElementById('btn-cancel').addEventListener('click', cancelSelection);
+    document.getElementById('btn-opt-ai')?.addEventListener('click', () => setOpponent(true));
+    document.getElementById('btn-opt-human')?.addEventListener('click', () => setOpponent(false));
+    document.getElementById('btn-move')?.addEventListener('click', () => selectActionType('move'));
+    document.getElementById('btn-ability')?.addEventListener('click', () => selectActionType('ability'));
+    document.getElementById('btn-cancel')?.addEventListener('click', cancelSelection);
     document.getElementById('btn-skip-turn')?.addEventListener('click', skipTurn);
     document.getElementById('btn-draw')?.addEventListener('click', requestDraw);
-    document.getElementById('btn-forfeit').addEventListener('click', forfeitGame);
-    document.getElementById('btn-restart').addEventListener('click', resetToSetup);
+    document.getElementById('btn-forfeit')?.addEventListener('click', forfeitGame);
+    document.getElementById('btn-restart')?.addEventListener('click', resetToSetup);
     const replayMatchBtn = document.getElementById('btn-replay-match');
     if (replayMatchBtn) replayMatchBtn.addEventListener('click', () => {
         const source = replayPlaybackSource || activeMatchSummaryView;
@@ -2569,8 +2587,8 @@ function setupUIEventListeners() {
     if (replaySlider) replaySlider.addEventListener('input', (event) => {
         renderReplaySnapshot(Number(event.target.value || 0));
     });
-    document.getElementById('btn-cancel-dir').addEventListener('click', () => {
-        document.getElementById('direction-overlay').classList.add('hidden');
+    document.getElementById('btn-cancel-dir')?.addEventListener('click', () => {
+        document.getElementById('direction-overlay')?.classList.add('hidden');
     });
 
     document.querySelectorAll('.dir-btn').forEach(btn => {
