@@ -42,7 +42,6 @@
                         <details class="news-item">
                             <summary>PATCH 0.7.27</summary>
                             <ul class="news-list">
-                                <li>狂愛の移動を直線2に調整し、表示も「愛」に統一</li>
                                 <li>憑依はボタン選択式のまま、見た目と移動・視界を憑依先に寄せるよう調整</li>
                                 <li>各スキルはターンを消費するが、使用したコマは行動済みにならないよう統一</li>
                                 <li>脳筋は撃破ごとにマンハッタン視界+1、戦姫のビジュアルは「姫」に整理</li>
@@ -376,11 +375,6 @@
                                     <div class="ability-detail-meta"><span>行動範囲: 周囲1マス</span><span>視界範囲: 周囲1マスの味方に影響</span></div>
                                 </div>
                                 <div class="ability-detail-card">
-                                    <h4>足跡</h4>
-                                    <p>パッシブ型。直近2ターン分の視界情報を保持する。</p>
-                                    <div class="ability-detail-meta"><span>行動範囲: なし</span><span>視界範囲: 2ターン分を保存</span></div>
-                                </div>
-                                <div class="ability-detail-card">
                                     <h4>歴戦王</h4>
                                     <p>パッシブ型。敵撃破時に行動済みを解除する。解除後の再行動は自陣側を除く直線移動2になる。</p>
                                     <div class="ability-detail-meta"><span>行動範囲: 再行動時は直線移動2</span><span>視界範囲: 甲の基本視界</span></div>
@@ -404,11 +398,6 @@
                                     <h4>脳筋</h4>
                                     <p>パッシブ型。直線移動11、視界0の突撃型コマ。敵を撃破するたびにマンハッタン視界+1を得る。</p>
                                     <div class="ability-detail-meta"><span>行動範囲: 直線移動11</span><span>視界範囲: 0+撃破ボーナス</span></div>
-                                </div>
-                                <div class="ability-detail-card">
-                                    <h4>狂愛</h4>
-                                    <p>発動型。直線移動2、マンハッタン視界4。相手の次のターン開始時、視界内の指定対象1体を行動済み状態にする。CT:5。</p>
-                                    <div class="ability-detail-meta"><span>行動範囲: 直線移動2</span><span>視界範囲: マンハッタン視界4</span></div>
                                 </div>
                                 <div class="ability-detail-card">
                                     <h4>爆破</h4>
@@ -483,13 +472,11 @@
                         <ul>
                             <li><strong>千里眼</strong>: 発動型。1方向の直線全マスを表示する。壁を貫通する。</li>
                             <li><strong>鼓舞</strong>: 発動型。周囲1マスの味方の視界と移動を+1する。</li>
-                            <li><strong>足跡</strong>: このコマの視界を2ターン前まで保存する。</li>
                             <li><strong>歴戦王</strong>: パッシブ型。敵撃破時、行動済みを解除する。解除後の移動は自陣側を除く直線移動2になる。</li>
                             <li><strong>戦姫(姫)</strong>: パッシブ型。このコマが敵を4体撃破すると、自コマの丁を全て丙に変える。10体撃破すると、自コマの丙を全て乙に変える。</li>
                             <li><strong>憑依</strong>: 発動型。マンハッタン移動3・視界3。好きなコマの見た目に変化し、敵撃破で元に戻る。1度使うと10ターン再変更できない。</li>
                             <li><strong>儀式</strong>: 発動型。マンハッタン移動2・視界3。自軍の偵察兵を1体破壊し、ランダムな敵1体を10ターン発光させる。</li>
                             <li><strong>脳筋</strong>: パッシブ型。直線移動11・視界0の突撃型。敵を撃破するたびにマンハッタン視界+1。</li>
-                            <li><strong>狂愛</strong>: 発動型。直線移動2・マンハッタン視界4。相手の次のターン開始時、視界内の指定対象1体を行動済みにする。CT:5。</li>
                             <li><strong>爆破</strong>: 発動、パッシブ型。発動した、もしくは死亡時、周囲2マスの壁、敵味方ユニット、軍旗をすべて破壊する。</li>
                             <li><strong>暗殺者</strong>: パッシブ型。敵撃破時、進行方向から1マス戻る。</li>
                             <li><strong>盲目</strong>: 視界1、移動4の盲目コマ。</li>
@@ -627,13 +614,11 @@
                             <select id="p1-ability-choice" class="neon-select">
                                 <option value="千里眼">千里眼</option>
                                 <option value="鼓舞">鼓舞</option>
-                                <option value="足跡" selected>足跡</option>
                                 <option value="歴戦王">歴戦王</option>
                                 <option value="戦姫">戦姫</option>
                                 <option value="憑依">憑依</option>
                                 <option value="儀式">儀式</option>
                                 <option value="脳筋">脳筋</option>
-                                <option value="狂愛">狂愛</option>
                                 <option value="爆破">爆破</option>
                                 <option value="暗殺者">暗殺者</option>
                                 <option value="盲目">盲目</option>
@@ -648,13 +633,11 @@
                                 <select id="p2-ability-choice" class="neon-select">
                                     <option value="千里眼">千里眼</option>
                                     <option value="鼓舞">鼓舞</option>
-                                    <option value="足跡">足跡</option>
                                     <option value="歴戦王" selected>歴戦王</option>
                                     <option value="戦姫">戦姫</option>
                                     <option value="憑依">憑依</option>
                                     <option value="儀式">儀式</option>
                                     <option value="脳筋">脳筋</option>
-                                    <option value="狂愛">狂愛</option>
                                     <option value="爆破">爆破</option>
                                     <option value="暗殺者">暗殺者</option>
                                     <option value="盲目">盲目</option>
@@ -746,13 +729,11 @@
                             <select id="online-ability-choice" class="neon-select">
                                 <option value="千里眼">千里眼</option>
                                 <option value="鼓舞">鼓舞</option>
-                                <option value="足跡" selected>足跡</option>
                                 <option value="歴戦王">歴戦王</option>
                                 <option value="戦姫">戦姫</option>
                                 <option value="憑依">憑依</option>
                                 <option value="儀式">儀式</option>
                                 <option value="脳筋">脳筋</option>
-                                <option value="狂愛">狂愛</option>
                                 <option value="爆破">爆破</option>
                                 <option value="暗殺者">暗殺者</option>
                                 <option value="盲目">盲目</option>

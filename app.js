@@ -35,7 +35,7 @@ const LEVEL_EXP_PER_LEVEL = 100;
 const MATCH_EXP_GAIN = 50;
 const KEEPALIVE_WARNING_MS = 10 * 60 * 1000;
 const DEVELOP_MODE_SEQUENCE = '12312321213';
-const ALL_ABILITY_OPTIONS = ['千里眼', '鼓舞', '足跡', '歴戦王', '戦姫', '爆破', '暗殺者', '盲目', '衛生兵', '監視', '迷彩', '煙幕', '憑依', '儀式', '脳筋', '狂愛'];
+const ALL_ABILITY_OPTIONS = ['千里眼', '鼓舞', '歴戦王', '戦姫', '爆破', '暗殺者', '盲目', '衛生兵', '監視', '迷彩', '煙幕', '憑依', '儀式', '脳筋'];
 const IMPERSONATION_CHOICES = ['core', 'otsu', 'hei', 'tei', 'scout', ...ALL_ABILITY_OPTIONS];
 const USERNAME_STORAGE_KEY = 'sector8_username';
 const ONLINE_SESSION_STORAGE_KEY = 'sector8_online_session';
@@ -133,7 +133,7 @@ let boards = { area1: [], area2: [], area3: [] };
 let units = [];
 let currentPlayer = 1;
 let gameTurn = 1;
-let p1Ability = '足跡';
+let p1Ability = '千里眼';
 let p2Ability = '歴戦王';
 let vsAI = true;
 let gameMode = 'debug';
@@ -195,8 +195,6 @@ let p1Vision = { area1: new Set(), area2: new Set(), area3: new Set() };
 let p2Vision = { area1: new Set(), area2: new Set(), area3: new Set() };
 let p1LastVision = { area1: new Set(), area2: new Set(), area3: new Set() };
 let p2LastVision = { area1: new Set(), area2: new Set(), area3: new Set() };
-let p1VisionHistory = [];
-let p2VisionHistory = [];
 
 let p1KohDestroyed = false;
 let p2KohDestroyed = false;
@@ -323,7 +321,6 @@ function getUnitTypeLabel(type) {
 function getImpersonationLabel(value) {
     if (!value) return '不明';
     if (value === '戦姫') return '戦姫(姫)';
-    if (value === '狂愛') return '狂愛(愛)';
     if (value === 'core' || value === 'otsu' || value === 'hei' || value === 'tei' || value === 'scout') {
         return getUnitTypeLabel(value);
     }
@@ -346,7 +343,6 @@ function getUnitTypeSymbol(type) {
 function getAbilityVisualSymbol(ability) {
     if (!ability) return '?';
     if (ability === '戦姫') return '姫';
-    if (ability === '狂愛') return '愛';
     return ability.charAt(0);
 }
 
@@ -372,8 +368,7 @@ function normalizeImpersonationForm(value) {
         '偵': 'scout',
         '偵察兵': 'scout',
         'scout': 'scout',
-        '姫': '戦姫',
-        '愛': '狂愛'
+        '姫': '戦姫'
     };
     return lookup[text] || lookup[compact] || (ALL_ABILITY_OPTIONS.includes(text) ? text : null);
 }
@@ -1809,9 +1804,6 @@ class Unit {
         this.manualCamouflage = false;
         this.smokeCamouflage = false;
         this.glowUntilTurn = 0;
-        this.loveCharmTargetId = null;
-        this.loveCharmResolveTurn = 0;
-        this.loveCharmCooldownUntilTurn = 0;
         this.veteranMomentumPenalty = false;
         this.carryingFlagPlayer = null;
         this.carryingFlagAbility = null;
@@ -1883,7 +1875,6 @@ class Unit {
             const descriptions = {
                 '千里眼': '【甲特有: 千里眼 / 発動型】壁を貫通して、選んだ1方向の直線全マスを表示。',
                 '鼓舞': '【甲特有: 鼓舞 / 発動型】周囲1マスの味方に移動+1・視界+1を付与。',
-                '足跡': '【甲特有: 足跡 / パッシブ型】直近2ターン分の視界情報を保持。',
                 '歴戦王': '【甲特有: 歴戦王 / パッシブ型】敵撃破時に行動済みを解除。再行動は自陣側を除く直線移動2。',
                 '戦姫': '【甲特有: 戦姫(姫) / パッシブ型】4体撃破で丁→丙、10体撃破で丙→乙へ昇格。',
                 '爆破': '【甲特有: 爆破 / 発動・パッシブ型】発動時または死亡時、周囲2マスを完全破壊。',
@@ -1895,8 +1886,7 @@ class Unit {
                 '煙幕': '【甲特有: 煙幕 / 発動型】マンハッタン視界3。直線移動4＋周囲1。3×3の煙幕を設置し、煙幕内の敵味方を迷彩状態にする。',
                 '憑依': '【甲特有: 憑依 / 発動型】マンハッタン移動3・視界3。好きなコマの見た目に変えられる。敵撃破で元に戻り、再変更は10ターン後。',
                 '儀式': '【甲特有: 儀式 / 発動型】マンハッタン移動2・視界3。自身の偵察兵を1体破壊し、ランダムな敵1体を10ターン発光させる。',
-                '脳筋': '【甲特有: 脳筋 / パッシブ型】直線移動11・視界0。敵を撃破するたびマンハッタン視界+1。',
-                '狂愛': '【甲特有: 狂愛 / 発動型】直線移動3・マンハッタン視界4。相手の次のターン開始時に、視界内の指定対象1体を行動済みにする。CT:5'
+                '脳筋': '【甲特有: 脳筋 / パッシブ型】直線移動11・視界0。敵を撃破するたびマンハッタン視界+1。'
             };
             return descriptions[ability] || `【甲特有: ${getAbilityDisplayName(ability)}】`;
         }
@@ -1920,7 +1910,6 @@ class Unit {
             if (ability === '脳筋') { return 11; }
             if (ability === '憑依') { return 3; }
             if (ability === '儀式') { return 2; }
-            if (ability === '狂愛') { return 2; }
             if (ability === '暗殺者') { return 5; }
             if (ability === '盲目') { return 4; }
             if (ability === '監視') { return 1; }
@@ -1943,7 +1932,6 @@ class Unit {
             if (ability === '脳筋') v = 0;
             if (ability === '憑依') v = 3;
             if (ability === '儀式') v = 3;
-            if (ability === '狂愛') v = 4;
             if (ability === '暗殺者') v = 5; // 直線視界5 (special: handled separately)
             if (ability === '盲目') v = 1;
             if (ability === '監視') v = 2;
@@ -1966,7 +1954,6 @@ class Unit {
             if (disguiseProfile) return disguiseProfile.moveType;
             const ability = getUnitAbilityContext(this);
             if (ability === '脳筋') return 'straight';
-            if (ability === '狂愛') return 'straight';
             if (ability === '暗殺者') return 'straight';
             if (ability === '監視') return 'square';
             if (ability === '煙幕') return 'smoke';
@@ -2034,7 +2021,6 @@ window.addEventListener('resize', applyDeviceProfile);
 function getAbilityInitial(player) {
     const ability = player === 1 ? p1Ability : p2Ability;
     if (ability === '戦姫') return '姫';
-    if (ability === '狂愛') return '愛';
     return ability ? ability.charAt(0) : '甲';
 }
 
@@ -2042,7 +2028,6 @@ function getAbilityClassByName(ability) {
     const classMap = {
         '千里眼': 'ability-clairvoyance',
         '鼓舞': 'ability-inspire',
-        '足跡': 'ability-trail',
         '歴戦王': 'ability-veteran',
         '戦姫': 'ability-princess',
         '爆破': 'ability-blast',
@@ -2053,8 +2038,7 @@ function getAbilityClassByName(ability) {
         '迷彩': 'ability-camouflage',
         '憑依': 'ability-possession',
         '儀式': 'ability-ritual',
-        '脳筋': 'ability-brute',
-        '狂愛': 'ability-love'
+        '脳筋': 'ability-brute'
     };
     return classMap[ability] || null;
 }
@@ -2182,7 +2166,6 @@ function getUnitMovementSummary(unit) {
         if (ability === '脳筋') return '直線11';
         if (ability === '憑依') return 'マンハッタン3';
         if (ability === '儀式') return 'マンハッタン2';
-        if (ability === '狂愛') return '直線2';
         if (ability === '煙幕') return '直線4＋正方形1';
     }
     return `${getMoveTypeLabel(unit.getEffectiveMoveType())}${unit.getMovementRange()}`;
@@ -2190,6 +2173,10 @@ function getUnitMovementSummary(unit) {
 
 function getAllAbilityOptions() {
     return [...ALL_ABILITY_OPTIONS];
+}
+
+function normalizeAbilityChoice(value, fallback = '千里眼') {
+    return ALL_ABILITY_OPTIONS.includes(value) ? value : fallback;
 }
 
 function syncAbilitySelectOptions() {
@@ -2209,9 +2196,9 @@ function syncAbilitySelectOptions() {
 
         const fallbackValue =
             select.id === 'p2-ability-choice' ? '歴戦王' :
-            select.id === 'online-ability-choice' ? '足跡' :
-            '足跡';
-        select.value = getAllAbilityOptions().includes(currentValue) ? currentValue : fallbackValue;
+            select.id === 'online-ability-choice' ? '千里眼' :
+            '千里眼';
+        select.value = normalizeAbilityChoice(currentValue, fallbackValue);
     });
 }
 
@@ -2261,9 +2248,6 @@ function serializeReplayUnit(unit) {
         manualCamouflage: Boolean(unit.manualCamouflage),
         smokeCamouflage: Boolean(unit.smokeCamouflage),
         glowUntilTurn: Number(unit.glowUntilTurn || 0),
-        loveCharmTargetId: unit.loveCharmTargetId || null,
-        loveCharmResolveTurn: Number(unit.loveCharmResolveTurn || 0),
-        loveCharmCooldownUntilTurn: Number(unit.loveCharmCooldownUntilTurn || 0),
         veteranMomentumPenalty: Boolean(unit.veteranMomentumPenalty),
         carryingFlagPlayer: unit.carryingFlagPlayer || null,
         carryingFlagAbility: unit.carryingFlagAbility || null,
@@ -2332,9 +2316,6 @@ function hydrateReplayUnit(raw) {
     unit.smokeCamouflage = Boolean(raw.smokeCamouflage);
     unit.camouflaged = Boolean(unit.manualCamouflage || unit.smokeCamouflage || raw.camouflaged);
     unit.glowUntilTurn = Number(raw.glowUntilTurn || 0);
-    unit.loveCharmTargetId = raw.loveCharmTargetId || null;
-    unit.loveCharmResolveTurn = Number(raw.loveCharmResolveTurn || 0);
-    unit.loveCharmCooldownUntilTurn = Number(raw.loveCharmCooldownUntilTurn || 0);
     unit.bruteVisionBonus = Number(raw.bruteVisionBonus || 0);
     return unit;
 }
@@ -2422,8 +2403,8 @@ function withReplayRenderState(snapshotState, callback) {
     actedUnitIds = snapshotState.actedUnitIds instanceof Set ? new Set(snapshotState.actedUnitIds) : new Set(snapshotState.actedUnitIds || []);
     p1Vision = snapshotState.p1Vision;
     p2Vision = snapshotState.p2Vision;
-    p1Ability = snapshotState.p1Ability || p1Ability;
-    p2Ability = snapshotState.p2Ability || p2Ability;
+    p1Ability = normalizeAbilityChoice(snapshotState.p1Ability, p1Ability);
+    p2Ability = normalizeAbilityChoice(snapshotState.p2Ability, p2Ability);
     gameMode = snapshotState.gameMode || gameMode;
     refreshSmokeCamouflageStates();
 
@@ -3135,7 +3116,7 @@ function setupOnlineMode() {
 }
 
 function getOnlineAbilityChoice() {
-    return document.getElementById('online-ability-choice')?.value || '足跡';
+    return normalizeAbilityChoice(document.getElementById('online-ability-choice')?.value, '千里眼');
 }
 
 async function copyRoomCode() {
@@ -3333,15 +3314,13 @@ function prepareOnlineMatchPreview(seed = null) {
     p2ClairvoyanceAge = 0;
     p1LastVision = { area1: new Set(), area2: new Set(), area3: new Set() };
     p2LastVision = { area1: new Set(), area2: new Set(), area3: new Set() };
-    p1VisionHistory = [];
-    p2VisionHistory = [];
     currentMatchStartedAt = 0;
     currentMatchKey = onlineMode
         ? `${matchRoomId || onlineSession?.roomId || 'online'}:${gameSeed}:${Date.now()}`
         : `preview:${gameSeed}`;
 
-    p1Ability = onlineAbilityChoices[1] || '足跡';
-    p2Ability = onlineAbilityChoices[2] || '歴戦王';
+    p1Ability = normalizeAbilityChoice(onlineAbilityChoices[1], '千里眼');
+    p2Ability = normalizeAbilityChoice(onlineAbilityChoices[2], '歴戦王');
     vsAI = false;
 
     initializeAudio();
@@ -3367,8 +3346,8 @@ function prepareOnlineMatchPreview(seed = null) {
 
 function startOnlineBattle() {
     const config = {
-        p1Ability: onlineAbilityChoices[1] || '足跡',
-        p2Ability: onlineAbilityChoices[2] || '歴戦王',
+        p1Ability: normalizeAbilityChoice(onlineAbilityChoices[1], '千里眼'),
+        p2Ability: normalizeAbilityChoice(onlineAbilityChoices[2], '歴戦王'),
         seed: gameSeed || hashStringToSeed(matchRoomId || onlineSession?.roomId || 'online'),
         matchType: getCurrentMatchType(),
         matchKey: createOnlineMatchKey()
@@ -3383,8 +3362,8 @@ function startOnlineBattle() {
         prepareOnlineMatchPreview(config.seed);
     }
 
-    p1Ability = config.p1Ability;
-    p2Ability = config.p2Ability;
+    p1Ability = normalizeAbilityChoice(config.p1Ability, '千里眼');
+    p2Ability = normalizeAbilityChoice(config.p2Ability, '歴戦王');
     pendingMatchIntroCutIn = true;
     startGame(config, true);
     if (onlineMode && localPlayer === 1) {
@@ -3861,11 +3840,11 @@ function startGame(config = null, fromOnline = false) {
         if (!reusePreview && localPlayer) {
             onlineAbilityChoices[localPlayer] = getOnlineAbilityChoice();
         }
-        p1Ability = config ? config.p1Ability : (onlineAbilityChoices[1] || '足跡');
-        p2Ability = config ? config.p2Ability : (onlineAbilityChoices[2] || '歴戦王');
+        p1Ability = normalizeAbilityChoice(config ? config.p1Ability : onlineAbilityChoices[1], '千里眼');
+        p2Ability = normalizeAbilityChoice(config ? config.p2Ability : onlineAbilityChoices[2], '歴戦王');
     } else {
-        p1Ability = config ? config.p1Ability : document.getElementById('p1-ability-choice').value;
-        p2Ability = config ? config.p2Ability : document.getElementById('p2-ability-choice').value;
+        p1Ability = normalizeAbilityChoice(config ? config.p1Ability : document.getElementById('p1-ability-choice').value, '千里眼');
+        p2Ability = normalizeAbilityChoice(config ? config.p2Ability : document.getElementById('p2-ability-choice').value, '歴戦王');
     }
     gameSeed = config?.seed || Math.floor(Math.random() * 0xFFFFFFFF);
     vsAI = onlineMode ? false : vsAI;
@@ -3898,8 +3877,6 @@ function startGame(config = null, fromOnline = false) {
 
     p1LastVision = { area1: new Set(), area2: new Set(), area3: new Set() };
     p2LastVision = { area1: new Set(), area2: new Set(), area3: new Set() };
-    p1VisionHistory = [];
-    p2VisionHistory = [];
 
     if (!reusePreview) {
         initializeBoards();
@@ -4699,20 +4676,6 @@ function calculateVisibility() {
     if (p1ClairvoyanceDir) applyClairvoyanceSight(p1ClairvoyanceDir, p1Vision[p1ClairvoyanceDir.map]);
     if (p2ClairvoyanceDir) applyClairvoyanceSight(p2ClairvoyanceDir, p2Vision[p2ClairvoyanceDir.map]);
 
-    if (p1Ability === '足跡' && !p1KohDestroyed) {
-        p1VisionHistory.forEach(snapshot => {
-            Object.keys(p1Vision).forEach(map => {
-                snapshot[map].forEach(coord => p1Vision[map].add(coord));
-            });
-        });
-    }
-    if (p2Ability === '足跡' && !p2KohDestroyed) {
-        p2VisionHistory.forEach(snapshot => {
-            Object.keys(p2Vision).forEach(map => {
-                snapshot[map].forEach(coord => p2Vision[map].add(coord));
-            });
-        });
-    }
 }
 
 function applyClairvoyanceSight(clairObj, targetVisionSet) {
@@ -4744,10 +4707,6 @@ function saveTurnVision() {
     };
     p1LastVision = p1Snapshot;
     p2LastVision = p2Snapshot;
-    p1VisionHistory.unshift(p1Snapshot);
-    p2VisionHistory.unshift(p2Snapshot);
-    p1VisionHistory = p1VisionHistory.slice(0, 2);
-    p2VisionHistory = p2VisionHistory.slice(0, 2);
 }
 
 // --- BOARD RENDERER ---
@@ -5389,7 +5348,6 @@ function selectUnit(unit) {
         if (abilityName === '千里眼') abilityBtn.textContent = `方向選択: ${abilityName}`;
         else if (abilityName === '煙幕') abilityBtn.textContent = smokeCooldown > 0 ? `煙幕 CD ${smokeCooldown}` : `即時発動: ${abilityName}`;
         else if (abilityName === '鼓舞' || abilityName === '爆破' || abilityName === '迷彩' || abilityName === '憑依' || abilityName === '儀式') abilityBtn.textContent = `即時発動: ${abilityName}`;
-        else if (abilityName === '狂愛') abilityBtn.textContent = `対象選択: ${abilityName}`;
         else if (abilityName === '脳筋') abilityBtn.textContent = `特性確認: ${abilityName}`;
         else abilityBtn.textContent = `特性確認: ${abilityName}`;
     } else if (unit.type === 'scout') {
@@ -5447,15 +5405,6 @@ function selectActionType(type) {
                     const el = document.querySelector(`.cell[data-row="${target.row}"][data-col="${target.col}"]`);
                     if (el) el.classList.add('highlight-ability');
                 });
-                } else if (abilityName === '狂愛') {
-                    const visibleCells = getUnitVisionCells(selectedUnit);
-                    visibleCells.forEach(coord => {
-                        const [row, col] = coord.split(',').map(Number);
-                        const target = boards[selectedUnit.map]?.[row]?.[col]?.unit;
-                        if (!target || target.id === selectedUnit.id || target.type === 'core') return;
-                        const el = document.querySelector(`.cell[data-row="${row}"][data-col="${col}"]`);
-                        if (el) el.classList.add('highlight-ability');
-                    });
                 } else if (abilityName === '憑依') {
                     openImpersonationOverlay(selectedUnit);
                     return;
@@ -5757,33 +5706,6 @@ function executeAbility(unit, destRow, destCol, actionMeta = {}) {
             consumeTurnWithoutMarkingActed(unit);
             return;
 
-        } else if (abilityName === '狂愛') {
-            if (unit.loveCharmCooldownUntilTurn > gameTurn) {
-                addConsoleLog(`ERROR: 狂愛はあと ${unit.loveCharmCooldownUntilTurn - gameTurn} ターン使用できません。`, 'warning');
-                return;
-            }
-            const targetUnit = actionMeta.targetId
-                ? units.find(entry => entry.id === actionMeta.targetId)
-                : boards[map][destRow]?.[destCol]?.unit;
-            if (!targetUnit || targetUnit.id === unit.id || targetUnit.type === 'core') {
-                addConsoleLog('ERROR: 狂愛の対象を選択してください。', 'warning');
-                return;
-            }
-            const visibleCells = getUnitVisionCells(unit);
-            if (!visibleCells.has(`${targetUnit.row},${targetUnit.col}`)) {
-                addConsoleLog('ERROR: 視界内の対象しか選べません。', 'warning');
-                return;
-            }
-            unit.loveCharmTargetId = targetUnit.id;
-            unit.loveCharmResolveTurn = gameTurn;
-            unit.loveCharmCooldownUntilTurn = gameTurn + 5;
-            addConsoleLog(`ABILITY: 甲の「狂愛」発動。${targetUnit.name} を相手の次のターンに拘束対象として記録。`, 'ability');
-            if (!shouldHideAiActionFeedback(unit.player)) playMoveSfx();
-            recordMatchReplayEvent({ kind: 'action', action: { type: 'ability', unitId: unit.id, targetId: targetUnit.id } });
-            sendOnlineMessage({ kind: 'action', action: { type: 'ability', unitId: unit.id, targetId: targetUnit.id } });
-            consumeTurnWithoutMarkingActed(unit);
-            return;
-
         } else if (abilityName === '迷彩') {
             unit.manualCamouflage = true;
             refreshUnitCamouflageState(unit);
@@ -5932,31 +5854,6 @@ function shouldHideAiActionFeedback(player = currentPlayer) {
     return vsAI && !onlineMode && player === 2;
 }
 
-function processStartOfTurnEffects(player) {
-    const turn = gameTurn;
-    units.forEach(unit => {
-        if (unit.type !== 'koh') return;
-        if (unit.loveCharmResolveTurn === turn && unit.loveCharmTargetId) {
-            const target = units.find(entry => entry.id === unit.loveCharmTargetId);
-            const canTargetBeCharmed = Boolean(
-                target &&
-                target.player === player &&
-                target.type !== 'core' &&
-                target.map === unit.map &&
-                getUnitVisionCells(unit).has(`${target.row},${target.col}`)
-            );
-            if (canTargetBeCharmed) {
-                actedUnitIds.add(target.id);
-                addConsoleLog(`ABILITY: 狂愛 - ${target.name} が行動済みになりました。`, 'ability');
-            } else {
-                addConsoleLog('ABILITY: 狂愛 - 指定対象が視界外のため効果は発動しませんでした。', 'warning');
-            }
-            unit.loveCharmTargetId = null;
-            unit.loveCharmResolveTurn = 0;
-        }
-    });
-}
-
 function endTurn() {
     cancelSelection();
     if (isGameOver) return;
@@ -5994,7 +5891,6 @@ function endTurn() {
         resetDrawRequests();
     }
 
-    processStartOfTurnEffects(currentPlayer);
     calculateVisibility();
     renderBoard();
     updateUI();
@@ -6442,26 +6338,6 @@ function executeAITurn() {
                         bestAction = { type: 'ability', unit: u, action: '儀式', sacrificeId: ownScout.id, targetId: enemyTarget.id };
                     }
                 }
-            } else if (aiAbility === '狂愛') {
-                if (u.loveCharmCooldownUntilTurn <= gameTurn) {
-                    const visibleTargets = Array.from(getUnitVisionCells(u))
-                        .map(coord => {
-                            const [row, col] = coord.split(',').map(Number);
-                            return boards[map][row]?.[col]?.unit;
-                        })
-                        .filter(target => target && target.player === 1 && target.type !== 'core');
-                    const target = visibleTargets.sort((a, b) => {
-                        const value = t => (t.type === 'koh' ? 600 : t.type === 'otsu' ? 300 : t.type === 'hei' ? 200 : t.type === 'tei' ? 120 : 80);
-                        return value(b) - value(a);
-                    })[0];
-                    if (target) {
-                        const score = 170;
-                        if (score > bestScore) {
-                            bestScore = score;
-                            bestAction = { type: 'ability', unit: u, action: '狂愛', targetId: target.id };
-                        }
-                    }
-                }
             } else if (aiAbility === '脳筋') {
                 // パッシブのみ
             } else if (aiAbility === '千里眼') {
@@ -6485,9 +6361,6 @@ function executeAITurn() {
                     executeAbility(bestAction.unit, null, null);
                 } else if (bestAction.action === '憑依' || bestAction.action === '儀式') {
                     executeAbility(bestAction.unit, null, null, bestAction);
-                } else if (bestAction.action === '狂愛') {
-                    const target = units.find(entry => entry.id === bestAction.targetId);
-                    executeAbility(bestAction.unit, target?.row ?? null, target?.col ?? null, bestAction);
                 } else if (bestAction.action === '煙幕') {
                     executeAbility(bestAction.unit, bestAction.row ?? bestAction.unit.row, bestAction.col ?? bestAction.unit.col);
                 } else if (bestAction.action === '千里眼') {
