@@ -3,7 +3,6 @@ const fs = require('fs');
 const path = require('path');
 const https = require('node:https');
 const { URL } = require('node:url');
-const { DatabaseSync } = require('node:sqlite');
 
 const ROOT = __dirname;
 const DATA_DIR = path.join(ROOT, 'data');
@@ -240,6 +239,14 @@ function createSupabaseStore() {
       query,
       prefer: 'return=minimal'
     });
+  }
+
+  function getMissingOptionalColumn(error, optionalColumns) {
+    const text = `${error?.message || ''} ${JSON.stringify(error?.response || {})}`;
+    for (const column of optionalColumns) {
+      if (text.includes(column)) return column;
+    }
+    return null;
   }
 
   async function getPlayerRowById(id) {
@@ -634,7 +641,28 @@ function createSupabaseStore() {
       if (existing) return existing.id;
     }
 
-    const rows = await insertRows('match_history', payload, { select: 'id' });
+    const optionalColumns = [
+      'match_type',
+      'summary_json',
+      'replay_json',
+      'winner_player_id',
+      'loser_player_id',
+      'player1_start_rating',
+      'player2_start_rating'
+    ];
+    let insertPayload = { ...payload };
+    let rows = null;
+    for (let attempt = 0; attempt <= optionalColumns.length; attempt++) {
+      try {
+        rows = await insertRows('match_history', insertPayload, { select: 'id' });
+        break;
+      } catch (error) {
+        const missingColumn = getMissingOptionalColumn(error, optionalColumns);
+        if (!missingColumn || !(missingColumn in insertPayload)) throw error;
+        delete insertPayload[missingColumn];
+        console.warn(`Supabase match_history column "${missingColumn}" is missing; saving without it.`);
+      }
+    }
     return rows[0]?.id || null;
   }
 
@@ -689,6 +717,7 @@ function createSupabaseStore() {
 
 function createSqliteStore() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
+  const { DatabaseSync } = require('node:sqlite');
   const db = new DatabaseSync(DB_PATH);
   db.exec('PRAGMA foreign_keys = ON;');
   try {
@@ -1258,7 +1287,8 @@ function createSqliteStore() {
 }
 
 function createStore() {
-  return createSqliteStore();
+  const supabaseStore = createSupabaseStore();
+  return supabaseStore || createSqliteStore();
 }
 
 module.exports = {

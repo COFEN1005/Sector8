@@ -570,6 +570,15 @@ const server = http.createServer(async (req, res) => {
                         player1RatingDelta = player1Won ? 10 : -10;
                     }
 
+                    const winnerPlayerId = isDraw ? null : (
+                        body.winnerPlayerId ||
+                        (player1Won ? (player1Profile?.id || null) : (player2Profile?.id || null))
+                    );
+                    const loserPlayerId = isDraw ? null : (
+                        body.loserPlayerId ||
+                        (!player1Won ? (player1Profile?.id || null) : (player2Profile?.id || null))
+                    );
+
                     const matchId = await accountStore.recordMatchHistory({
                         matchKey,
                         matchType,
@@ -590,8 +599,8 @@ const server = http.createServer(async (req, res) => {
                         endedTime: body.endedTime,
                         timeTaken: body.timeTaken,
                         surrenderByPlayerId: body.surrenderByPlayerId || null,
-                        winnerPlayerId: isDraw ? null : (player1Won ? (player1Profile?.id || null) : (player2Profile?.id || null)),
-                        loserPlayerId: isDraw ? null : (!player1Won ? (player1Profile?.id || null) : (player2Profile?.id || null)),
+                        winnerPlayerId,
+                        loserPlayerId,
                         summaryJson: body.summaryJson || null,
                         replayJson: null
                     });
