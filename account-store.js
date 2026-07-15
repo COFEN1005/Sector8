@@ -249,6 +249,40 @@ function createSupabaseStore() {
     return null;
   }
 
+  function isMissingColumnError(error, column) {
+    return Boolean(getMissingOptionalColumn(error, [column]));
+  }
+
+  async function insertRowsWithOptionalColumns(table, body, query, optionalColumns) {
+    let insertPayload = { ...body };
+    for (let attempt = 0; attempt <= optionalColumns.length; attempt++) {
+      try {
+        return await insertRows(table, insertPayload, query);
+      } catch (error) {
+        const missingColumn = getMissingOptionalColumn(error, optionalColumns);
+        if (!missingColumn || !(missingColumn in insertPayload)) throw error;
+        delete insertPayload[missingColumn];
+        console.warn(`Supabase ${table} column "${missingColumn}" is missing; saving without it.`);
+      }
+    }
+    return [];
+  }
+
+  async function updateRowsWithOptionalColumns(table, query, body, optionalColumns) {
+    let updatePayload = { ...body };
+    for (let attempt = 0; attempt <= optionalColumns.length; attempt++) {
+      try {
+        return await updateRows(table, query, updatePayload);
+      } catch (error) {
+        const missingColumn = getMissingOptionalColumn(error, optionalColumns);
+        if (!missingColumn || !(missingColumn in updatePayload)) throw error;
+        delete updatePayload[missingColumn];
+        console.warn(`Supabase ${table} column "${missingColumn}" is missing; updating without it.`);
+      }
+    }
+    return [];
+  }
+
   async function getPlayerRowById(id) {
     const numericId = Number(id);
     if (!Number.isFinite(numericId) || numericId <= 0) return null;
@@ -258,7 +292,12 @@ function createSupabaseStore() {
   async function getPlayerRowByPlayerId(playerId) {
     const normalized = normalizePlayerId(playerId);
     if (!normalized) return null;
-    return selectOne('players', { player_id_norm: `eq.${normalized}` });
+    try {
+      return await selectOne('players', { player_id_norm: `eq.${normalized}` });
+    } catch (error) {
+      if (!isMissingColumnError(error, 'player_id_norm')) throw error;
+      return selectOne('players', { player_id: `eq.${normalized}` });
+    }
   }
 
   async function getPlayerRowByFriendCode(friendCode) {
@@ -270,7 +309,12 @@ function createSupabaseStore() {
   async function getPlayerRowByName(name) {
     const cleanName = sanitizeDisplayName(name);
     if (!cleanName) return null;
-    return selectOne('players', { name_norm: `eq.${cleanName.toUpperCase()}` });
+    try {
+      return await selectOne('players', { name_norm: `eq.${cleanName.toUpperCase()}` });
+    } catch (error) {
+      if (!isMissingColumnError(error, 'name_norm')) throw error;
+      return selectOne('players', { name: `eq.${cleanName}` });
+    }
   }
 
   async function getPlayersByIds(ids) {
@@ -302,14 +346,14 @@ function createSupabaseStore() {
   async function createSession(playerId, deviceLabel = null) {
     const token = crypto.randomBytes(32).toString('hex');
     const ts = now();
-    await insertRows('auth_sessions', {
+    await insertRowsWithOptionalColumns('auth_sessions', {
       token,
       player_id: playerId,
       created_at: ts,
       last_seen_at: ts,
       expires_at: ts + SESSION_TTL_MS,
       device_label: deviceLabel
-    }, {});
+    }, {}, ['device_label']);
     return token;
   }
 
@@ -354,7 +398,7 @@ function createSupabaseStore() {
       const { salt, hash } = hashPin(cleanPin);
       const ts = now();
       try {
-        const rows = await insertRows('players', {
+        const rows = await insertRowsWithOptionalColumns('players', {
           player_id: playerId,
           player_id_norm: playerId,
           name: cleanName,
@@ -370,7 +414,7 @@ function createSupabaseStore() {
           created_at: ts,
           updated_at: ts,
           last_login_at: ts
-        }, { select: '*' });
+        }, { select: '*' }, ['player_id_norm', 'name_norm', 'pin_fail_count', 'pin_locked_until', 'last_login_at']);
         const row = rows[0];
         if (!row) continue;
         const token = await createSession(row.id);
@@ -399,20 +443,20 @@ function createSupabaseStore() {
     const ts = now();
     const ok = verifyPin(cleanPin, row.pin_salt, row.pin_hash);
     if (!ok) {
-      await updateRows('players', { id: `eq.${row.id}` }, {
+      await updateRowsWithOptionalColumns('players', { id: `eq.${row.id}` }, {
         pin_fail_count: Number(row.pin_fail_count || 0) + 1,
         pin_locked_until: 0,
         updated_at: ts
-      });
+      }, ['pin_fail_count', 'pin_locked_until']);
       return { ok: false, error: 'credentials_invalid' };
     }
 
-    await updateRows('players', { id: `eq.${row.id}` }, {
+    await updateRowsWithOptionalColumns('players', { id: `eq.${row.id}` }, {
       pin_fail_count: 0,
       pin_locked_until: 0,
       last_login_at: ts,
       updated_at: ts
-    });
+    }, ['pin_fail_count', 'pin_locked_until', 'last_login_at']);
     const token = await createSession(row.id, deviceLabel);
     return { ok: true, profile: rowToProfile(await getPlayerRowById(row.id)), token };
   }
@@ -449,11 +493,11 @@ function createSupabaseStore() {
     const cleanName = sanitizeDisplayName(name);
     if (!cleanName) return { ok: false, error: 'name_invalid' };
     const ts = now();
-    const rows = await updateRows('players', { id: `eq.${playerId}` }, {
+    const rows = await updateRowsWithOptionalColumns('players', { id: `eq.${playerId}` }, {
       name: cleanName,
       name_norm: cleanName.toUpperCase(),
       updated_at: ts
-    });
+    }, ['name_norm']);
     return { ok: true, profile: rowToProfile(rows[0] || await getPlayerRowById(playerId)) };
   }
 
