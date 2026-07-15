@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const https = require('node:https');
 const { URL } = require('node:url');
+const { DatabaseSync } = require('node:sqlite');
 
 const ROOT = __dirname;
 const DATA_DIR = path.join(ROOT, 'data');
@@ -690,7 +691,11 @@ function createSqliteStore() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
   const db = new DatabaseSync(DB_PATH);
   db.exec('PRAGMA foreign_keys = ON;');
-  db.exec('PRAGMA journal_mode = WAL;');
+  try {
+    db.exec('PRAGMA journal_mode = WAL;');
+  } catch (error) {
+    console.warn('SQLite WAL mode is unavailable; using default journal mode.', error?.message || error);
+  }
   db.exec(`
     CREATE TABLE IF NOT EXISTS players (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1253,11 +1258,7 @@ function createSqliteStore() {
 }
 
 function createStore() {
-  const supabaseStore = createSupabaseStore();
-  if (!supabaseStore) {
-    throw new Error('Supabase configuration is required. Set supabase.local.json or SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY.');
-  }
-  return supabaseStore;
+  return createSqliteStore();
 }
 
 module.exports = {

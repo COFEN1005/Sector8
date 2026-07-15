@@ -8,18 +8,18 @@ Sector8 is a browser strategy board game with AI, local play, and room-based onl
 npm start
 ```
 
-`supabase.local.json` or the matching environment variables must be set before the server will start.
+Account data, rating, exp, friends, and match history are saved locally in `data/sector8.sqlite`.
+Supabase settings are not required.
 
 Open `http://localhost:8787/`.
 
-## Supabase backend
+## Local data backend
 
-Set these values in `supabase.local.json` or environment variables to connect the app to Supabase:
+The account backend uses the local SQLite file below:
 
-- `SUPABASE_URL`
-- `SUPABASE_SERVICE_ROLE_KEY`
+- `data/sector8.sqlite`
 
-`supabase.local.json` is ignored by Git, so keep your real project URL and service role key there.
+Keep this file when you want to preserve accounts and match history. Delete it only when you intentionally want to reset local account data.
 
 ## Online match flow
 
