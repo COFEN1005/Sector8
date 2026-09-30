@@ -5,7 +5,7 @@ services:
     plan: free
     buildCommand: npm install --omit=dev
     startCommand: node server.js
-    healthCheckPath: /keepalive
+    healthCheckPath: /api/account/health
     envVars:
       - key: SUPABASE_URL
         sync: false

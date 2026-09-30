@@ -9,7 +9,7 @@ npm start
 ```
 
 Account data, rating, exp, friends, and match history are saved to Supabase when `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are configured.
-If Supabase is not configured, the server falls back to local SQLite at `data/sector8.sqlite`.
+Local development falls back to SQLite at `data/sector8.sqlite`. Production refuses to start without Supabase so online data is never silently written to an ephemeral Render disk.
 
 Open `http://localhost:8787/`.
 
@@ -18,9 +18,13 @@ Open `http://localhost:8787/`.
 For online persistence, set these values in `supabase.local.json`, Render environment variables, or your local environment:
 
 - `SUPABASE_URL`
-- `SUPABASE_SERVICE_ROLE_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY` (server secret; never put it in browser code or GitHub)
 
-Without those values, the app uses `data/sector8.sqlite` for local testing only.
+Run the complete contents of `supabase/schema.sql` in the Supabase SQL Editor after creating or updating a project. It is safe to run repeatedly and installs the atomic registration, login, friend, and match-finalization functions used by the server.
+
+After deployment, open `/api/account/health`. A ready project returns `ok: true`, `backend: "supabase"`, and `schemaVersion: 3`. `supabase_schema_update_required` means the SQL above has not been applied yet.
+
+Without Supabase values, local development uses `data/sector8.sqlite`. Set `ACCOUNT_BACKEND=sqlite` only when an explicit local database is desired in a production-like environment.
 
 ## Online match flow
 

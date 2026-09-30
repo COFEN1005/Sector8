@@ -1516,6 +1516,29 @@ details li {
     animation: cell-pulse-gold 1.5s infinite;
 }
 
+.cell.clairvoyance {
+    background-image:
+        linear-gradient(135deg, rgba(0, 240, 255, 0.18), rgba(0, 240, 255, 0.02)),
+        repeating-linear-gradient(90deg, rgba(0, 240, 255, 0.16) 0 2px, transparent 2px 8px);
+    border-color: rgba(0, 240, 255, 0.75);
+    box-shadow:
+        inset 0 0 16px rgba(0, 240, 255, 0.24),
+        0 0 14px rgba(0, 240, 255, 0.22);
+}
+
+.cell.clairvoyance::after {
+    content: "SCAN";
+    position: absolute;
+    bottom: 4px;
+    left: 5px;
+    font-family: var(--font-mono);
+    font-size: 0.48rem;
+    font-weight: 900;
+    letter-spacing: 0.12em;
+    color: var(--neon-cyan);
+    text-shadow: 0 0 6px rgba(0, 240, 255, 0.8);
+}
+
 .cell.highlight-preview-move {
     background: rgba(255, 255, 255, 0.08) !important;
     border: 2px dashed rgba(255, 255, 255, 0.7) !important;

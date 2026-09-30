@@ -383,6 +383,11 @@ const server = http.createServer(async (req, res) => {
             const sessionToken = body.token || body.sessionToken || getBearerToken(req);
             const session = sessionToken ? await accountStore.getSession(sessionToken) : null;
 
+            if (method === 'GET' && url.pathname === '/api/account/health') {
+                const health = await accountStore.healthCheck();
+                return sendJson(res, health.ok ? 200 : 503, health);
+            }
+
             if (method === 'GET' && url.pathname === '/api/auth/me') {
                 if (!session) return sendJson(res, 401, { ok: false, error: 'unauthorized' });
                 return sendJson(res, 200, { ok: true, profile: session.profile });
@@ -407,7 +412,8 @@ const server = http.createServer(async (req, res) => {
                 if (!result.ok) {
                     return sendJson(res, 401, {
                         ok: false,
-                        error: result.error
+                        error: result.error,
+                        retryAfterMs: result.retryAfterMs || undefined
                     });
                 }
                 return sendJson(res, 200, { ok: true, token: result.token, profile: result.profile });
@@ -520,6 +526,10 @@ const server = http.createServer(async (req, res) => {
 
                 const existing = await accountStore.hasMatchHistoryByKey(matchKey);
                 if (existing) {
+                    const sessionPlayerId = Number(session.profile.id);
+                    if (![Number(existing.player1_id), Number(existing.player2_id)].includes(sessionPlayerId)) {
+                        return sendJson(res, 403, { ok: false, error: 'match_participant_required' });
+                    }
                     const player1 = existing.player1_id ? await accountStore.getPlayerById(existing.player1_id) : null;
                     const player2 = existing.player2_id ? await accountStore.getPlayerById(existing.player2_id) : null;
                     return sendJson(res, 200, { ok: true, id: existing.id, duplicate: true, player1, player2 });
@@ -535,7 +545,7 @@ const server = http.createServer(async (req, res) => {
                     const player1Won = result === 'win';
                     const room = body.roomId ? rooms.get(String(body.roomId)) : null;
                     const resolveMatchProfile = async (id, name, roomProfile) => {
-                        const hintedId = id || roomProfile?.id || null;
+                        const hintedId = roomProfile?.id || id || null;
                         const resolvedById = hintedId ? await accountStore.getPlayerById(hintedId) : null;
                         if (resolvedById) return resolvedById;
                         const cleanedName = sanitizeDisplayName(name || roomProfile?.name || '');
@@ -545,6 +555,14 @@ const server = http.createServer(async (req, res) => {
 
                     let player1Profile = await resolveMatchProfile(player1Id, body.player1Name, room?.profileDetails?.[1]);
                     let player2Profile = await resolveMatchProfile(player2Id, body.player2Name, room?.profileDetails?.[2]);
+                    if (!body.roomId) {
+                        player1Profile = session.profile;
+                        player2Profile = null;
+                    }
+                    const participantIds = [player1Profile?.id, player2Profile?.id].filter(Boolean).map(Number);
+                    if (!participantIds.includes(Number(session.profile.id))) {
+                        return sendJson(res, 403, { ok: false, error: 'match_participant_required' });
+                    }
                     if (body.roomId && matchType === 'rank' && (!player1Profile || !player2Profile)) {
                         return sendJson(res, 409, { ok: false, error: 'match_players_not_ready' });
                     }
@@ -555,7 +573,6 @@ const server = http.createServer(async (req, res) => {
                     const player2StartLevel = Number(body.player2Level || player2Profile?.level || 1);
                     let player1RatingDelta = 0;
                     let player2RatingDelta = 0;
-                    const updateWarnings = [];
                     const ratingBonus = (playerRating, opponentRating) => {
                         const diff = Math.max(0, Number(opponentRating || 0) - Number(playerRating || 0));
                         return Math.floor(diff / 100);
@@ -579,7 +596,7 @@ const server = http.createServer(async (req, res) => {
                         (!player1Won ? (player1Profile?.id || null) : (player2Profile?.id || null))
                     );
 
-                    const matchId = await accountStore.recordMatchHistory({
+                    const finalized = await accountStore.finalizeMatch({
                         matchKey,
                         matchType,
                         player1Id: player1Profile?.id || null,
@@ -603,31 +620,16 @@ const server = http.createServer(async (req, res) => {
                         loserPlayerId,
                         summaryJson: body.summaryJson || null,
                         replayJson: null
-                    });
-
-                    if (player1Profile) {
-                        try {
-                            player1Profile = await accountStore.updatePlayerProgress(player1Profile.id, player1RatingDelta, 50);
-                        } catch (error) {
-                            updateWarnings.push(`player1:${error?.message || error}`);
-                            console.error('match update failed for player1', error);
-                        }
-                    }
-                    if (player2Profile) {
-                        try {
-                            player2Profile = await accountStore.updatePlayerProgress(player2Profile.id, player2RatingDelta, 50);
-                        } catch (error) {
-                            updateWarnings.push(`player2:${error?.message || error}`);
-                            console.error('match update failed for player2', error);
-                        }
-                    }
+                    }, 50);
+                    player1Profile = finalized.player1 || player1Profile;
+                    player2Profile = finalized.player2 || player2Profile;
 
                     return sendJson(res, 200, {
                         ok: true,
-                        id: matchId,
+                        id: finalized.matchId,
+                        duplicate: finalized.duplicate,
                         player1: player1Profile,
-                        player2: player2Profile,
-                        warnings: updateWarnings.length ? updateWarnings : undefined
+                        player2: player2Profile
                     });
                 } finally {
                     if (matchKey) pendingMatchHistoryKeys.delete(matchKey);
@@ -790,10 +792,20 @@ if (require.main === module) {
     server.listen(port, '0.0.0.0', () => {
         console.log('');
         console.log('SECTOR-8 SERVER ONLINE');
+        console.log(`Accounts: ${String(accountStore.backend || 'unknown').toUpperCase()}`);
         console.log(`Local:  http://localhost:${port}/`);
         console.log(`LAN:    http://<your-ip>:${port}/`);
         console.log('Render: deploy this repo as a Node web service');
         console.log('');
+        void Promise.resolve(accountStore.healthCheck()).then(health => {
+            if (health.ok) {
+                console.log(`ACCOUNT BACKEND READY: ${health.backend} / schema v${health.schemaVersion || '?'}`);
+            } else {
+                console.error(`ACCOUNT BACKEND NOT READY: ${health.error || 'unknown_error'}`);
+            }
+        }).catch(error => {
+            console.error('ACCOUNT BACKEND CHECK FAILED:', error?.message || error);
+        });
     });
 }
 

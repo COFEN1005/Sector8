@@ -106,3 +106,409 @@ alter table if exists match_history
 
 alter table if exists match_history
   add column if not exists match_type text not null default 'unknown';
+
+create index if not exists match_history_winner_player_idx on match_history (winner_player_id);
+create index if not exists match_history_loser_player_idx on match_history (loser_player_id);
+create index if not exists match_history_surrender_player_idx on match_history (surrender_by_player_id);
+
+-- These tables are server-only. The Render backend uses the service role;
+-- browser roles must never read PIN hashes, sessions, or private match data.
+alter table public.players enable row level security;
+alter table public.auth_sessions enable row level security;
+alter table public.friend_requests enable row level security;
+alter table public.friends enable row level security;
+alter table public.match_history enable row level security;
+
+revoke all on table public.players from public, anon, authenticated;
+revoke all on table public.auth_sessions from public, anon, authenticated;
+revoke all on table public.friend_requests from public, anon, authenticated;
+revoke all on table public.friends from public, anon, authenticated;
+revoke all on table public.match_history from public, anon, authenticated;
+
+grant select, insert, update, delete on table public.players to service_role;
+grant select, insert, update, delete on table public.auth_sessions to service_role;
+grant select, insert, update, delete on table public.friend_requests to service_role;
+grant select, insert, update, delete on table public.friends to service_role;
+grant select, insert, update, delete on table public.match_history to service_role;
+
+revoke all on all sequences in schema public from public, anon, authenticated;
+grant usage, select, update on all sequences in schema public to service_role;
+
+-- The server calls this function before reporting the account backend as ready.
+create or replace function public.sector8_account_health()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select jsonb_build_object(
+    'schemaReady', true,
+    'schemaVersion', 3,
+    'players', (select count(*) from public.players),
+    'matches', (select count(*) from public.match_history)
+  );
+$$;
+
+-- Match history and both player profiles must either all be saved or all be rolled back.
+create or replace function public.sector8_finalize_match(
+  p_match_key text,
+  p_match_type text,
+  p_player1_id bigint,
+  p_player2_id bigint,
+  p_player1_name text,
+  p_player2_name text,
+  p_winner text,
+  p_loser text,
+  p_result text,
+  p_player1_rating_delta integer,
+  p_player2_rating_delta integer,
+  p_player1_level integer,
+  p_player2_level integer,
+  p_started_time bigint,
+  p_ended_time bigint,
+  p_time_taken bigint,
+  p_surrender_by_player_id bigint,
+  p_summary_json jsonb,
+  p_replay_json jsonb,
+  p_winner_player_id bigint,
+  p_loser_player_id bigint,
+  p_player1_start_rating integer,
+  p_player2_start_rating integer,
+  p_exp_gain integer,
+  p_created_at bigint
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_existing public.match_history%rowtype;
+  v_match_id bigint;
+  v_player1 public.players%rowtype;
+  v_player2 public.players%rowtype;
+  v_exp_gain integer := greatest(coalesce(p_exp_gain, 0), 0);
+begin
+  if nullif(btrim(p_match_key), '') is null then
+    raise exception 'match_key_required';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtextextended(p_match_key, 0));
+  select * into v_existing
+  from public.match_history
+  where match_key = p_match_key;
+
+  if found then
+    if v_existing.player1_id is not null then
+      select * into v_player1 from public.players where id = v_existing.player1_id;
+    end if;
+    if v_existing.player2_id is not null then
+      select * into v_player2 from public.players where id = v_existing.player2_id;
+    end if;
+    return jsonb_build_object(
+      'match_id', v_existing.id,
+      'duplicate', true,
+      'player1', to_jsonb(v_player1),
+      'player2', to_jsonb(v_player2)
+    );
+  end if;
+
+  insert into public.match_history (
+    match_key, player1_id, player2_id, player1_name, player2_name, match_type,
+    winner, loser, result, player1_get_rating, player2_get_rating,
+    player1_level, player2_level, started_time, ended_time, time_taken,
+    surrender_by_player_id, created_at, summary_json, replay_json,
+    winner_player_id, loser_player_id, player1_start_rating, player2_start_rating
+  ) values (
+    p_match_key, p_player1_id, p_player2_id, p_player1_name, p_player2_name, p_match_type,
+    p_winner, p_loser, p_result, p_player1_rating_delta, p_player2_rating_delta,
+    p_player1_level, p_player2_level, p_started_time, p_ended_time, p_time_taken,
+    p_surrender_by_player_id, p_created_at, p_summary_json, p_replay_json,
+    p_winner_player_id, p_loser_player_id, p_player1_start_rating, p_player2_start_rating
+  ) returning id into v_match_id;
+
+  if p_player1_id is not null then
+    update public.players
+    set level = level + ((exp + v_exp_gain) / 100),
+        exp = mod(exp + v_exp_gain, 100),
+        rating = rating + coalesce(p_player1_rating_delta, 0),
+        updated_at = p_created_at
+    where id = p_player1_id
+    returning * into v_player1;
+  end if;
+
+  if p_player2_id is not null and p_player2_id is distinct from p_player1_id then
+    update public.players
+    set level = level + ((exp + v_exp_gain) / 100),
+        exp = mod(exp + v_exp_gain, 100),
+        rating = rating + coalesce(p_player2_rating_delta, 0),
+        updated_at = p_created_at
+    where id = p_player2_id
+    returning * into v_player2;
+  end if;
+
+  return jsonb_build_object(
+    'match_id', v_match_id,
+    'duplicate', false,
+    'player1', to_jsonb(v_player1),
+    'player2', to_jsonb(v_player2)
+  );
+end;
+$$;
+
+-- Supabase may install this event-trigger helper. It never needs Data API access.
+do $$
+begin
+  if to_regprocedure('public.rls_auto_enable()') is not null then
+    revoke execute on function public.rls_auto_enable() from public, anon, authenticated;
+  end if;
+end;
+$$;
+
+-- Registration creates the player and its first session in one transaction.
+create or replace function public.sector8_register_player(
+  p_player_id text,
+  p_player_id_norm text,
+  p_name text,
+  p_name_norm text,
+  p_pin_salt text,
+  p_pin_hash text,
+  p_friend_code text,
+  p_token text,
+  p_device_label text,
+  p_now bigint,
+  p_expires_at bigint
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_player public.players%rowtype;
+begin
+  insert into public.players (
+    player_id, player_id_norm, name, name_norm, pin_salt, pin_hash, friend_code,
+    level, exp, rating, pin_fail_count, pin_locked_until,
+    created_at, updated_at, last_login_at
+  ) values (
+    p_player_id, p_player_id_norm, p_name, p_name_norm, p_pin_salt, p_pin_hash, p_friend_code,
+    1, 0, 1500, 0, 0, p_now, p_now, p_now
+  ) returning * into v_player;
+
+  insert into public.auth_sessions (
+    token, player_id, created_at, last_seen_at, expires_at, device_label
+  ) values (
+    p_token, v_player.id, p_now, p_now, p_expires_at, p_device_label
+  );
+
+  return jsonb_build_object('ok', true, 'profile', to_jsonb(v_player), 'token', p_token);
+end;
+$$;
+
+-- Failed PIN attempts must be incremented atomically, not through a stale client row.
+create or replace function public.sector8_record_login_failure(
+  p_player_id bigint,
+  p_now bigint,
+  p_max_failures integer,
+  p_lock_ms bigint
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_player public.players%rowtype;
+begin
+  update public.players
+  set pin_fail_count = pin_fail_count + 1,
+      pin_locked_until = case
+        when pin_fail_count + 1 >= greatest(coalesce(p_max_failures, 5), 1)
+          then p_now + greatest(coalesce(p_lock_ms, 0), 0)
+        else 0
+      end,
+      updated_at = p_now
+  where id = p_player_id
+  returning * into v_player;
+
+  if not found then
+    raise exception 'player_not_found';
+  end if;
+  return jsonb_build_object(
+    'pin_fail_count', v_player.pin_fail_count,
+    'pin_locked_until', v_player.pin_locked_until
+  );
+end;
+$$;
+
+-- A successful login resets the lock state and issues the session together.
+create or replace function public.sector8_complete_login(
+  p_player_id bigint,
+  p_token text,
+  p_device_label text,
+  p_now bigint,
+  p_expires_at bigint
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_player public.players%rowtype;
+begin
+  update public.players
+  set pin_fail_count = 0,
+      pin_locked_until = 0,
+      last_login_at = p_now,
+      updated_at = p_now
+  where id = p_player_id
+  returning * into v_player;
+
+  if not found then
+    raise exception 'player_not_found';
+  end if;
+
+  insert into public.auth_sessions (
+    token, player_id, created_at, last_seen_at, expires_at, device_label
+  ) values (
+    p_token, v_player.id, p_now, p_now, p_expires_at, p_device_label
+  );
+
+  return jsonb_build_object('ok', true, 'profile', to_jsonb(v_player), 'token', p_token);
+end;
+$$;
+
+-- Friend requests are resolved entirely on the database side to prevent races.
+create or replace function public.sector8_create_friend_request(
+  p_sender_player_id bigint,
+  p_friend_code text,
+  p_now bigint
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_sender public.players%rowtype;
+  v_receiver public.players%rowtype;
+  v_request public.friend_requests%rowtype;
+  v_request_id bigint;
+begin
+  select * into v_sender from public.players where id = p_sender_player_id;
+  if not found then return jsonb_build_object('ok', false, 'error', 'sender_missing'); end if;
+
+  select * into v_receiver from public.players where friend_code = p_friend_code;
+  if not found then return jsonb_build_object('ok', false, 'error', 'receiver_missing'); end if;
+  if v_sender.id = v_receiver.id then return jsonb_build_object('ok', false, 'error', 'self'); end if;
+
+  if exists (
+    select 1 from public.friends
+    where player1_id = least(v_sender.id, v_receiver.id)
+      and player2_id = greatest(v_sender.id, v_receiver.id)
+  ) then
+    return jsonb_build_object('ok', false, 'error', 'already_friend');
+  end if;
+
+  select * into v_request
+  from public.friend_requests
+  where (sender_player_id = v_sender.id and receiver_player_id = v_receiver.id)
+     or (sender_player_id = v_receiver.id and receiver_player_id = v_sender.id)
+  order by created_at desc
+  limit 1
+  for update;
+
+  if found and v_request.status = 'pending' then
+    return jsonb_build_object('ok', false, 'error', 'pending');
+  end if;
+  if found and v_request.status = 'accepted' then
+    return jsonb_build_object('ok', false, 'error', 'already_friend');
+  end if;
+
+  if found and v_request.sender_player_id = v_sender.id then
+    update public.friend_requests
+    set status = 'pending', created_at = p_now, responded_at = null
+    where id = v_request.id
+    returning id into v_request_id;
+  else
+    insert into public.friend_requests (
+      sender_player_id, receiver_player_id, status, created_at, responded_at
+    ) values (
+      v_sender.id, v_receiver.id, 'pending', p_now, null
+    ) returning id into v_request_id;
+  end if;
+
+  return jsonb_build_object('ok', true, 'requestId', v_request_id);
+end;
+$$;
+
+create or replace function public.sector8_respond_friend_request(
+  p_receiver_player_id bigint,
+  p_request_id bigint,
+  p_action text,
+  p_now bigint
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_request public.friend_requests%rowtype;
+begin
+  select * into v_request from public.friend_requests where id = p_request_id for update;
+  if not found then return jsonb_build_object('ok', false, 'error', 'not_found'); end if;
+  if v_request.receiver_player_id <> p_receiver_player_id then
+    return jsonb_build_object('ok', false, 'error', 'forbidden');
+  end if;
+  if v_request.status <> 'pending' then
+    return jsonb_build_object('ok', false, 'error', 'already_handled');
+  end if;
+
+  if p_action = 'accept' then
+    update public.friend_requests set status = 'accepted', responded_at = p_now where id = v_request.id;
+    insert into public.friends (player1_id, player2_id, created_at)
+    values (least(v_request.sender_player_id, v_request.receiver_player_id), greatest(v_request.sender_player_id, v_request.receiver_player_id), p_now)
+    on conflict (player1_id, player2_id) do nothing;
+    return jsonb_build_object('ok', true, 'status', 'accepted');
+  end if;
+
+  if p_action = 'reject' then
+    update public.friend_requests set status = 'rejected', responded_at = p_now where id = v_request.id;
+    return jsonb_build_object('ok', true, 'status', 'rejected');
+  end if;
+
+  return jsonb_build_object('ok', false, 'error', 'invalid_action');
+end;
+$$;
+
+-- Only the server-side service role may call account maintenance functions.
+do $$
+declare
+  fn regprocedure;
+begin
+  for fn in
+    select p.oid::regprocedure
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public'
+      and p.proname in (
+        'sector8_account_health',
+        'sector8_finalize_match',
+        'sector8_register_player',
+        'sector8_record_login_failure',
+        'sector8_complete_login',
+        'sector8_create_friend_request',
+        'sector8_respond_friend_request'
+      )
+  loop
+    execute format('revoke all on function %s from public', fn);
+    execute format('revoke all on function %s from anon', fn);
+    execute format('revoke all on function %s from authenticated', fn);
+    execute format('grant execute on function %s to service_role', fn);
+  end loop;
+end;
+$$;

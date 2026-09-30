@@ -6,7 +6,10 @@ const { URL } = require('node:url');
 
 const ROOT = __dirname;
 const DATA_DIR = path.join(ROOT, 'data');
-const DB_PATH = path.join(DATA_DIR, 'sector8.sqlite');
+const SQLITE_PATH_OVERRIDE = String(process.env.SECTOR8_SQLITE_PATH || '').trim();
+const DB_PATH = SQLITE_PATH_OVERRIDE
+  ? (SQLITE_PATH_OVERRIDE === ':memory:' ? SQLITE_PATH_OVERRIDE : path.resolve(SQLITE_PATH_OVERRIDE))
+  : path.join(DATA_DIR, 'sector8.sqlite');
 const SUPABASE_CONFIG_PATH = path.join(ROOT, 'supabase.local.json');
 
 const SAFE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
@@ -14,6 +17,9 @@ const PLAYER_ID_LENGTH = 14;
 const FRIEND_CODE_LENGTH = 12;
 const LEVEL_EXP_PER_LEVEL = 100;
 const SESSION_TTL_MS = 365 * 24 * 60 * 60 * 1000;
+const SESSION_TOUCH_INTERVAL_MS = 5 * 60 * 1000;
+const PIN_MAX_FAILURES = 5;
+const PIN_LOCK_MS = 5 * 60 * 1000;
 
 function now() {
   return Date.now();
@@ -181,7 +187,9 @@ function createSupabaseClient() {
   return { request };
 }
 
-function createSupabaseStore() {
+// Kept temporarily as a reference while the strict v3 Supabase store below
+// replaces the old optional-column compatibility path.
+function createLegacySupabaseStore() {
   const client = createSupabaseClient();
   if (!client) return null;
 
@@ -366,7 +374,10 @@ function createSupabaseStore() {
       await deleteRows('auth_sessions', { token: `eq.${sessionToken}` });
       return null;
     }
-    await updateRows('auth_sessions', { token: `eq.${sessionToken}` }, { last_seen_at: now() });
+    const ts = now();
+    if (ts - Number(session.last_seen_at || 0) >= SESSION_TOUCH_INTERVAL_MS) {
+      await updateRows('auth_sessions', { token: `eq.${sessionToken}` }, { last_seen_at: ts });
+    }
     const profile = rowToProfile(await getPlayerRowById(session.player_id));
     if (!profile) return null;
     return { token: session.token, profile };
@@ -441,14 +452,27 @@ function createSupabaseStore() {
     }
 
     const ts = now();
+    if (Number(row.pin_locked_until || 0) > ts) {
+      return {
+        ok: false,
+        error: 'temporarily_locked',
+        retryAfterMs: Number(row.pin_locked_until) - ts
+      };
+    }
     const ok = verifyPin(cleanPin, row.pin_salt, row.pin_hash);
     if (!ok) {
+      const failCount = Number(row.pin_fail_count || 0) + 1;
+      const lockedUntil = failCount >= PIN_MAX_FAILURES ? ts + PIN_LOCK_MS : 0;
       await updateRowsWithOptionalColumns('players', { id: `eq.${row.id}` }, {
-        pin_fail_count: Number(row.pin_fail_count || 0) + 1,
-        pin_locked_until: 0,
+        pin_fail_count: failCount,
+        pin_locked_until: lockedUntil,
         updated_at: ts
       }, ['pin_fail_count', 'pin_locked_until']);
-      return { ok: false, error: 'credentials_invalid' };
+      return {
+        ok: false,
+        error: lockedUntil ? 'temporarily_locked' : 'credentials_invalid',
+        retryAfterMs: lockedUntil ? PIN_LOCK_MS : 0
+      };
     }
 
     await updateRowsWithOptionalColumns('players', { id: `eq.${row.id}` }, {
@@ -724,6 +748,78 @@ function createSupabaseStore() {
     return rowToProfile(rows[0] || await getPlayerRowById(playerId));
   }
 
+  async function finalizeMatch(entry, expGain = 50) {
+    const ts = now();
+    const startedTime = Number(entry.startedTime || ts);
+    const endedTime = Number(entry.endedTime || ts);
+    let response;
+    try {
+      response = await client.request('POST', '/rest/v1/rpc/sector8_finalize_match', {
+        body: {
+          p_match_key: String(entry.matchKey || '').trim(),
+          p_match_type: String(entry.matchType || 'unknown'),
+          p_player1_id: entry.player1Id || null,
+          p_player2_id: entry.player2Id || null,
+          p_player1_name: sanitizeDisplayName(entry.player1Name || 'PLAYER 1'),
+          p_player2_name: sanitizeDisplayName(entry.player2Name || 'PLAYER 2'),
+          p_winner: String(entry.winner || ''),
+          p_loser: String(entry.loser || ''),
+          p_result: String(entry.result || 'win'),
+          p_player1_rating_delta: Number(entry.player1RatingDelta || 0),
+          p_player2_rating_delta: Number(entry.player2RatingDelta || 0),
+          p_player1_level: Number(entry.player1Level || 1),
+          p_player2_level: Number(entry.player2Level || 1),
+          p_started_time: startedTime,
+          p_ended_time: endedTime,
+          p_time_taken: Number(entry.timeTaken || Math.max(0, endedTime - startedTime)),
+          p_surrender_by_player_id: entry.surrenderByPlayerId || null,
+          p_summary_json: entry.summaryJson || null,
+          p_replay_json: entry.replayJson || null,
+          p_winner_player_id: entry.winnerPlayerId || null,
+          p_loser_player_id: entry.loserPlayerId || null,
+          p_player1_start_rating: Number(entry.player1StartRating || 0),
+          p_player2_start_rating: Number(entry.player2StartRating || 0),
+          p_exp_gain: Math.max(0, Number(expGain || 0)),
+          p_created_at: ts
+        }
+      });
+    } catch (error) {
+      const detail = `${error?.message || ''} ${JSON.stringify(error?.response || {})}`;
+      if (detail.includes('sector8_finalize_match') || detail.includes('PGRST202') || detail.includes('42883')) {
+        const schemaError = new Error('supabase_schema_update_required');
+        schemaError.cause = error;
+        throw schemaError;
+      }
+      throw error;
+    }
+
+    const result = Array.isArray(response.data) ? response.data[0] : response.data;
+    if (!result || !result.match_id) throw new Error('supabase_finalize_match_invalid_response');
+    return {
+      matchId: result.match_id,
+      duplicate: Boolean(result.duplicate),
+      player1: rowToProfile(result.player1),
+      player2: rowToProfile(result.player2)
+    };
+  }
+
+  async function healthCheck() {
+    try {
+      const response = await client.request('POST', '/rest/v1/rpc/sector8_account_health', { body: {} });
+      const details = Array.isArray(response.data) ? response.data[0] : response.data;
+      return { ok: true, backend: 'supabase', ...details };
+    } catch (error) {
+      const detail = `${error?.message || ''} ${JSON.stringify(error?.response || {})}`;
+      const schemaReady = !(detail.includes('sector8_account_health') || detail.includes('PGRST202') || detail.includes('42883'));
+      return {
+        ok: false,
+        backend: 'supabase',
+        schemaReady,
+        error: schemaReady ? 'supabase_unreachable' : 'supabase_schema_update_required'
+      };
+    }
+  }
+
   return {
     db: null,
     backend: 'supabase',
@@ -746,6 +842,7 @@ function createSupabaseStore() {
     sendFriendRequest,
     respondFriendRequest,
     recordMatchHistory,
+    finalizeMatch,
     listRecentMatches,
     updatePlayerProgress,
     calculateRatingDelta,
@@ -755,7 +852,448 @@ function createSupabaseStore() {
     sanitizeDisplayName,
     applyExperience,
     adjustExperience,
-    hasMatchHistoryByKey
+    hasMatchHistoryByKey,
+    healthCheck
+  };
+}
+
+// Supabase v3: strict schema contract.  This intentionally does not fall back
+// to partial writes when a column or RPC is missing: that behavior hid schema
+// mismatches and produced accounts whose history or progress was incomplete.
+function createSupabaseStore() {
+  const client = createSupabaseClient();
+  if (!client) return null;
+
+  function rowToProfile(row) {
+    if (!row) return null;
+    return {
+      id: row.id,
+      playerId: row.player_id,
+      name: row.name,
+      friendCode: formatFriendCode(row.friend_code),
+      level: Number(row.level || 1),
+      exp: Number(row.exp || 0),
+      nextLevelExp: Math.max(0, LEVEL_EXP_PER_LEVEL - Number(row.exp || 0)),
+      rating: Number(row.rating || 1500),
+      pinFailCount: Number(row.pin_fail_count || 0),
+      pinLockedUntil: Number(row.pin_locked_until || 0),
+      createdAt: Number(row.created_at || 0),
+      updatedAt: Number(row.updated_at || 0),
+      lastLoginAt: Number(row.last_login_at || 0)
+    };
+  }
+
+  function isUniqueViolation(error) {
+    const detail = `${error?.message || ''} ${JSON.stringify(error?.response || {})}`;
+    return error?.status === 409 || detail.includes('23505') || /duplicate|unique/i.test(detail);
+  }
+
+  function schemaError(error) {
+    const detail = `${error?.message || ''} ${JSON.stringify(error?.response || {})}`;
+    return detail.includes('PGRST202') || detail.includes('42883') || detail.includes('does not exist');
+  }
+
+  async function selectMany(table, query = {}) {
+    const response = await client.request('GET', `/rest/v1/${table}`, { query: { select: '*', ...query } });
+    return Array.isArray(response.data) ? response.data : [];
+  }
+
+  async function selectOne(table, query = {}) {
+    return (await selectMany(table, { ...query, limit: 1 }))[0] || null;
+  }
+
+  async function insertRows(table, body, query = {}) {
+    const response = await client.request('POST', `/rest/v1/${table}`, { query, body });
+    return Array.isArray(response.data) ? response.data : [];
+  }
+
+  async function updateRows(table, query, body) {
+    const response = await client.request('PATCH', `/rest/v1/${table}`, { query, body });
+    return Array.isArray(response.data) ? response.data : [];
+  }
+
+  async function deleteRows(table, query) {
+    await client.request('DELETE', `/rest/v1/${table}`, { query, prefer: 'return=minimal' });
+  }
+
+  async function callRpc(name, body) {
+    try {
+      const response = await client.request('POST', `/rest/v1/rpc/${name}`, { body });
+      return Array.isArray(response.data) ? response.data[0] : response.data;
+    } catch (error) {
+      if (schemaError(error)) {
+        const setupError = new Error('supabase_schema_update_required');
+        setupError.cause = error;
+        throw setupError;
+      }
+      throw error;
+    }
+  }
+
+  async function getPlayerRowById(id) {
+    const numericId = Number(id);
+    if (!Number.isInteger(numericId) || numericId <= 0) return null;
+    return selectOne('players', { id: `eq.${numericId}` });
+  }
+
+  async function getPlayerRowByPlayerId(playerId) {
+    const normalized = normalizePlayerId(playerId);
+    if (!normalized) return null;
+    return selectOne('players', { player_id_norm: `eq.${normalized}` });
+  }
+
+  async function getPlayerRowByFriendCode(friendCode) {
+    const normalized = normalizeFriendCode(friendCode);
+    if (!normalized) return null;
+    return selectOne('players', { friend_code: `eq.${normalized}` });
+  }
+
+  async function getPlayerRowByName(name) {
+    const normalized = sanitizeDisplayName(name).toUpperCase();
+    if (!normalized) return null;
+    return selectOne('players', { name_norm: `eq.${normalized}` });
+  }
+
+  async function getPlayersByIds(ids) {
+    const uniqueIds = [...new Set(ids.map(Number).filter(id => Number.isInteger(id) && id > 0))];
+    if (!uniqueIds.length) return [];
+    return selectMany('players', { id: `in.(${uniqueIds.join(',')})` });
+  }
+
+  async function createSession(playerId, deviceLabel = null) {
+    const token = crypto.randomBytes(32).toString('hex');
+    const ts = now();
+    await insertRows('auth_sessions', {
+      token,
+      player_id: Number(playerId),
+      created_at: ts,
+      last_seen_at: ts,
+      expires_at: ts + SESSION_TTL_MS,
+      device_label: deviceLabel ? String(deviceLabel).slice(0, 120) : null
+    });
+    return token;
+  }
+
+  async function deleteSession(token) {
+    const sessionToken = String(token || '').trim();
+    if (sessionToken) await deleteRows('auth_sessions', { token: `eq.${sessionToken}` });
+  }
+
+  async function getSession(token) {
+    const sessionToken = String(token || '').trim();
+    if (!sessionToken) return null;
+    const session = await selectOne('auth_sessions', { token: `eq.${sessionToken}` });
+    if (!session) return null;
+    const ts = now();
+    if (Number(session.expires_at) <= ts) {
+      await deleteSession(sessionToken);
+      return null;
+    }
+    if (ts - Number(session.last_seen_at || 0) >= SESSION_TOUCH_INTERVAL_MS) {
+      await updateRows('auth_sessions', { token: `eq.${sessionToken}` }, { last_seen_at: ts });
+    }
+    const profile = rowToProfile(await getPlayerRowById(session.player_id));
+    return profile ? { token: session.token, profile } : null;
+  }
+
+  async function registerPlayer({ name, pin }) {
+    const cleanName = sanitizeDisplayName(name);
+    const cleanPin = String(pin || '').trim();
+    if (!cleanName) return { ok: false, error: 'name_invalid' };
+    if (!/^\d{4}$/.test(cleanPin)) return { ok: false, error: 'pin_invalid' };
+
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const playerId = safeId(PLAYER_ID_LENGTH);
+      const friendCode = safeId(FRIEND_CODE_LENGTH);
+      const { salt, hash } = hashPin(cleanPin);
+      const token = crypto.randomBytes(32).toString('hex');
+      const ts = now();
+      try {
+        const result = await callRpc('sector8_register_player', {
+          p_player_id: playerId,
+          p_player_id_norm: playerId,
+          p_name: cleanName,
+          p_name_norm: cleanName.toUpperCase(),
+          p_pin_salt: salt,
+          p_pin_hash: hash,
+          p_friend_code: friendCode,
+          p_token: token,
+          p_device_label: null,
+          p_now: ts,
+          p_expires_at: ts + SESSION_TTL_MS
+        });
+        if (!result?.profile || !result?.token) throw new Error('supabase_register_invalid_response');
+        return { ok: true, profile: rowToProfile(result.profile), token: result.token };
+      } catch (error) {
+        if (isUniqueViolation(error)) continue;
+        throw error;
+      }
+    }
+    throw new Error('failed_to_generate_unique_player');
+  }
+
+  async function loginPlayer({ playerId, pin, deviceLabel = null }) {
+    const normalized = normalizePlayerId(playerId);
+    const cleanPin = String(pin || '').trim();
+    if (!normalized || !/^\d{4}$/.test(cleanPin)) return { ok: false, error: 'credentials_invalid' };
+    const row = await getPlayerRowByPlayerId(normalized);
+    if (!row) return { ok: false, error: 'credentials_invalid' };
+
+    const ts = now();
+    if (Number(row.pin_locked_until || 0) > ts) {
+      return { ok: false, error: 'temporarily_locked', retryAfterMs: Number(row.pin_locked_until) - ts };
+    }
+    if (!verifyPin(cleanPin, row.pin_salt, row.pin_hash)) {
+      const result = await callRpc('sector8_record_login_failure', {
+        p_player_id: row.id,
+        p_now: ts,
+        p_max_failures: PIN_MAX_FAILURES,
+        p_lock_ms: PIN_LOCK_MS
+      });
+      const lockedUntil = Number(result?.pin_locked_until || 0);
+      return {
+        ok: false,
+        error: lockedUntil > ts ? 'temporarily_locked' : 'credentials_invalid',
+        retryAfterMs: lockedUntil > ts ? lockedUntil - ts : 0
+      };
+    }
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const result = await callRpc('sector8_complete_login', {
+      p_player_id: row.id,
+      p_token: token,
+      p_device_label: deviceLabel ? String(deviceLabel).slice(0, 120) : null,
+      p_now: ts,
+      p_expires_at: ts + SESSION_TTL_MS
+    });
+    if (!result?.profile || !result?.token) throw new Error('supabase_login_invalid_response');
+    return { ok: true, profile: rowToProfile(result.profile), token: result.token };
+  }
+
+  async function restoreSession(token) {
+    if (!token) return { ok: false, error: 'missing' };
+    const session = await getSession(token);
+    return session ? { ok: true, profile: session.profile } : { ok: false, error: 'invalid' };
+  }
+
+  async function logoutSession(token) {
+    await deleteSession(token);
+    return { ok: true };
+  }
+
+  async function getPlayerById(id) { return rowToProfile(await getPlayerRowById(id)); }
+  async function getPlayerByPlayerId(playerId) { return rowToProfile(await getPlayerRowByPlayerId(playerId)); }
+  async function getPlayerByFriendCode(friendCode) { return rowToProfile(await getPlayerRowByFriendCode(friendCode)); }
+  async function getPlayerByName(name) { return rowToProfile(await getPlayerRowByName(name)); }
+
+  async function updatePlayerName(playerId, name) {
+    const cleanName = sanitizeDisplayName(name);
+    if (!cleanName) return { ok: false, error: 'name_invalid' };
+    const rows = await updateRows('players', { id: `eq.${Number(playerId)}` }, {
+      name: cleanName,
+      name_norm: cleanName.toUpperCase(),
+      updated_at: now()
+    });
+    const profile = rowToProfile(rows[0] || await getPlayerRowById(playerId));
+    return profile ? { ok: true, profile } : { ok: false, error: 'not_found' };
+  }
+
+  async function adjustPlayerProgress(playerId, ratingDelta = 0, expDelta = 0) {
+    const row = await getPlayerRowById(playerId);
+    if (!row) return { ok: false, error: 'not_found' };
+    const levelState = adjustExperience(Number(row.level), Number(row.exp), Number(expDelta || 0));
+    const rows = await updateRows('players', { id: `eq.${row.id}` }, {
+      level: levelState.level,
+      exp: levelState.exp,
+      rating: Number(row.rating) + Number(ratingDelta || 0),
+      updated_at: now()
+    });
+    return { ok: true, profile: rowToProfile(rows[0] || await getPlayerRowById(row.id)) };
+  }
+
+  async function deletePlayerById(playerId) {
+    const row = await getPlayerRowById(playerId);
+    if (!row) return { ok: false, error: 'not_found' };
+    await deleteRows('players', { id: `eq.${row.id}` });
+    return { ok: true, profile: rowToProfile(row) };
+  }
+
+  async function listFriends(playerId) {
+    const id = Number(playerId);
+    const links = await selectMany('friends', { or: `(player1_id.eq.${id},player2_id.eq.${id})`, order: 'created_at.desc' });
+    const friendIds = links.map(link => Number(link.player1_id) === id ? link.player2_id : link.player1_id);
+    const players = new Map((await getPlayersByIds(friendIds)).map(player => [Number(player.id), player]));
+    return links.map(link => {
+      const friend = players.get(Number(link.player1_id) === id ? Number(link.player2_id) : Number(link.player1_id));
+      return friend ? {
+        id: friend.id,
+        playerId: friend.player_id,
+        name: friend.name,
+        friendCode: formatFriendCode(friend.friend_code),
+        level: Number(friend.level),
+        exp: Number(friend.exp),
+        rating: Number(friend.rating),
+        friendSince: link.created_at,
+        lastLoginAt: friend.last_login_at
+      } : null;
+    }).filter(Boolean);
+  }
+
+  async function listFriendRequests(playerId) {
+    const id = Number(playerId);
+    const requests = await selectMany('friend_requests', {
+      or: `(sender_player_id.eq.${id},receiver_player_id.eq.${id})`,
+      order: 'created_at.desc'
+    });
+    const ids = requests.flatMap(request => [request.sender_player_id, request.receiver_player_id]);
+    const players = new Map((await getPlayersByIds(ids)).map(player => [Number(player.id), player]));
+    return requests.map(request => {
+      const sender = players.get(Number(request.sender_player_id));
+      const receiver = players.get(Number(request.receiver_player_id));
+      return sender && receiver ? {
+        id: request.id,
+        status: request.status,
+        createdAt: request.created_at,
+        respondedAt: request.responded_at,
+        sender: { id: sender.id, name: sender.name, friendCode: formatFriendCode(sender.friend_code) },
+        receiver: { id: receiver.id, name: receiver.name, friendCode: formatFriendCode(receiver.friend_code) }
+      } : null;
+    }).filter(Boolean);
+  }
+
+  async function sendFriendRequest(senderPlayerId, friendCode) {
+    return callRpc('sector8_create_friend_request', {
+      p_sender_player_id: Number(senderPlayerId),
+      p_friend_code: normalizeFriendCode(friendCode),
+      p_now: now()
+    });
+  }
+
+  async function respondFriendRequest(receiverPlayerId, requestId, action) {
+    if (!['accept', 'reject'].includes(action)) return { ok: false, error: 'invalid_action' };
+    return callRpc('sector8_respond_friend_request', {
+      p_receiver_player_id: Number(receiverPlayerId),
+      p_request_id: Number(requestId),
+      p_action: action,
+      p_now: now()
+    });
+  }
+
+  async function hasMatchHistoryByKey(matchKey) {
+    const key = String(matchKey || '').trim();
+    return key ? selectOne('match_history', { match_key: `eq.${key}` }) : null;
+  }
+
+  async function listRecentMatches(playerId, limit = 20) {
+    return selectMany('match_history', {
+      or: `(player1_id.eq.${Number(playerId)},player2_id.eq.${Number(playerId)})`,
+      order: 'started_time.desc',
+      limit: Math.max(1, Math.min(50, Number(limit) || 20))
+    });
+  }
+
+  function matchRpcBody(entry, expGain) {
+    const ts = now();
+    const startedTime = Number(entry.startedTime || ts);
+    const endedTime = Number(entry.endedTime || ts);
+    return {
+      p_match_key: String(entry.matchKey || '').trim(),
+      p_match_type: String(entry.matchType || 'unknown'),
+      p_player1_id: entry.player1Id || null,
+      p_player2_id: entry.player2Id || null,
+      p_player1_name: sanitizeDisplayName(entry.player1Name || 'PLAYER 1'),
+      p_player2_name: sanitizeDisplayName(entry.player2Name || 'PLAYER 2'),
+      p_winner: String(entry.winner || ''),
+      p_loser: String(entry.loser || ''),
+      p_result: String(entry.result || 'win'),
+      p_player1_rating_delta: Number(entry.player1RatingDelta || 0),
+      p_player2_rating_delta: Number(entry.player2RatingDelta || 0),
+      p_player1_level: Number(entry.player1Level || 1),
+      p_player2_level: Number(entry.player2Level || 1),
+      p_started_time: startedTime,
+      p_ended_time: endedTime,
+      p_time_taken: Number(entry.timeTaken || Math.max(0, endedTime - startedTime)),
+      p_surrender_by_player_id: entry.surrenderByPlayerId || null,
+      p_summary_json: entry.summaryJson || null,
+      p_replay_json: entry.replayJson || null,
+      p_winner_player_id: entry.winnerPlayerId || null,
+      p_loser_player_id: entry.loserPlayerId || null,
+      p_player1_start_rating: Number(entry.player1StartRating || 0),
+      p_player2_start_rating: Number(entry.player2StartRating || 0),
+      p_exp_gain: Math.max(0, Number(expGain || 0)),
+      p_created_at: ts
+    };
+  }
+
+  async function finalizeMatch(entry, expGain = 50) {
+    const result = await callRpc('sector8_finalize_match', matchRpcBody(entry, expGain));
+    if (!result?.match_id) throw new Error('supabase_finalize_match_invalid_response');
+    return {
+      matchId: result.match_id,
+      duplicate: Boolean(result.duplicate),
+      player1: rowToProfile(result.player1),
+      player2: rowToProfile(result.player2)
+    };
+  }
+
+  async function recordMatchHistory(entry) {
+    const result = await finalizeMatch(entry, 0);
+    return result.matchId;
+  }
+
+  async function updatePlayerProgress(playerId, ratingDelta, expGain = 50) {
+    const result = await adjustPlayerProgress(playerId, ratingDelta, expGain);
+    return result.profile || null;
+  }
+
+  async function healthCheck() {
+    try {
+      const details = await callRpc('sector8_account_health', {});
+      return { ok: true, backend: 'supabase', ...details };
+    } catch (error) {
+      return {
+        ok: false,
+        backend: 'supabase',
+        schemaReady: error.message !== 'supabase_schema_update_required',
+        error: error.message === 'supabase_schema_update_required' ? 'supabase_schema_update_required' : 'supabase_unreachable'
+      };
+    }
+  }
+
+  return {
+    db: null,
+    backend: 'supabase',
+    createSession,
+    deleteSession,
+    getSession,
+    registerPlayer,
+    loginPlayer,
+    restoreSession,
+    logoutSession,
+    getPlayerById,
+    getPlayerByPlayerId,
+    getPlayerByFriendCode,
+    getPlayerByName,
+    updatePlayerName,
+    adjustPlayerProgress,
+    deletePlayerById,
+    listFriends,
+    listFriendRequests,
+    sendFriendRequest,
+    respondFriendRequest,
+    recordMatchHistory,
+    finalizeMatch,
+    listRecentMatches,
+    updatePlayerProgress,
+    calculateRatingDelta,
+    normalizePlayerId,
+    normalizeFriendCode,
+    formatFriendCode,
+    sanitizeDisplayName,
+    applyExperience,
+    adjustExperience,
+    hasMatchHistoryByKey,
+    healthCheck
   };
 }
 
@@ -920,7 +1458,10 @@ function createSqliteStore() {
       db.prepare('DELETE FROM auth_sessions WHERE token = ?').run(token);
       return null;
     }
-    db.prepare('UPDATE auth_sessions SET last_seen_at = ? WHERE token = ?').run(now(), token);
+    const ts = now();
+    if (ts - Number(row.last_seen_at || 0) >= SESSION_TOUCH_INTERVAL_MS) {
+      db.prepare('UPDATE auth_sessions SET last_seen_at = ? WHERE token = ?').run(ts, token);
+    }
     return {
       token: row.token,
       profile: rowToProfile(row)
@@ -973,15 +1514,27 @@ function createSqliteStore() {
     }
 
     const ts = now();
+    if (Number(row.pin_locked_until || 0) > ts) {
+      return {
+        ok: false,
+        error: 'temporarily_locked',
+        retryAfterMs: Number(row.pin_locked_until) - ts
+      };
+    }
     const ok = verifyPin(cleanPin, row.pin_salt, row.pin_hash);
     if (!ok) {
-      const failCount = row.pin_fail_count + 1;
+      const failCount = Number(row.pin_fail_count || 0) + 1;
+      const lockedUntil = failCount >= PIN_MAX_FAILURES ? ts + PIN_LOCK_MS : 0;
       db.prepare(`
         UPDATE players
-        SET pin_fail_count = ?, pin_locked_until = 0, updated_at = ?
+        SET pin_fail_count = ?, pin_locked_until = ?, updated_at = ?
         WHERE id = ?
-      `).run(failCount, ts, row.id);
-      return { ok: false, error: 'credentials_invalid' };
+      `).run(failCount, lockedUntil, ts, row.id);
+      return {
+        ok: false,
+        error: lockedUntil ? 'temporarily_locked' : 'credentials_invalid',
+        retryAfterMs: lockedUntil ? PIN_LOCK_MS : 0
+      };
     }
 
     db.prepare(`
@@ -1280,7 +1833,7 @@ function createSqliteStore() {
   function hasMatchHistoryByKey(matchKey) {
     const key = String(matchKey || '').trim();
     if (!key) return null;
-    return db.prepare('SELECT id FROM match_history WHERE match_key = ?').get(key);
+    return db.prepare('SELECT * FROM match_history WHERE match_key = ?').get(key);
   }
 
   function updatePlayerProgress(playerId, ratingDelta, expGain = 50) {
@@ -1294,6 +1847,36 @@ function createSqliteStore() {
       WHERE id = ?
     `).run(levelState.level, levelState.exp, ratingDelta, ts, playerId);
     return rowToProfile(db.prepare('SELECT * FROM players WHERE id = ?').get(playerId));
+  }
+
+  function finalizeMatch(entry, expGain = 50) {
+    return withTransaction(() => {
+      const key = String(entry.matchKey || '').trim();
+      const existing = key ? db.prepare('SELECT * FROM match_history WHERE match_key = ?').get(key) : null;
+      if (existing) {
+        return {
+          matchId: existing.id,
+          duplicate: true,
+          player1: existing.player1_id ? getPlayerById(existing.player1_id) : null,
+          player2: existing.player2_id ? getPlayerById(existing.player2_id) : null
+        };
+      }
+
+      const matchId = recordMatchHistory(entry);
+      const player1 = entry.player1Id
+        ? updatePlayerProgress(entry.player1Id, entry.player1RatingDelta, expGain)
+        : null;
+      const player2 = entry.player2Id && Number(entry.player2Id) !== Number(entry.player1Id)
+        ? updatePlayerProgress(entry.player2Id, entry.player2RatingDelta, expGain)
+        : null;
+      return { matchId, duplicate: false, player1, player2 };
+    });
+  }
+
+  function healthCheck() {
+    db.prepare('SELECT 1 FROM players LIMIT 1').get();
+    db.prepare('SELECT 1 FROM match_history LIMIT 1').get();
+    return { ok: true, backend: 'sqlite', schemaReady: true, schemaVersion: 2 };
   }
 
   return {
@@ -1317,6 +1900,7 @@ function createSqliteStore() {
     sendFriendRequest,
     respondFriendRequest,
     recordMatchHistory,
+    finalizeMatch,
     listRecentMatches,
     updatePlayerProgress,
     calculateRatingDelta,
@@ -1326,13 +1910,22 @@ function createSqliteStore() {
     sanitizeDisplayName,
     applyExperience,
     adjustExperience,
-    hasMatchHistoryByKey
+    hasMatchHistoryByKey,
+    healthCheck,
+    backend: 'sqlite'
   };
 }
 
 function createStore() {
   const supabaseStore = createSupabaseStore();
-  return supabaseStore || createSqliteStore();
+  if (supabaseStore) return supabaseStore;
+
+  const production = process.env.NODE_ENV === 'production' || Boolean(process.env.RENDER);
+  const localDatabaseExplicitlyAllowed = process.env.ACCOUNT_BACKEND === 'sqlite';
+  if (production && !localDatabaseExplicitlyAllowed) {
+    throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required in production');
+  }
+  return createSqliteStore();
 }
 
 module.exports = {

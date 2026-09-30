@@ -40,6 +40,16 @@
                     <summary class="small-tool-btn">NEWS</summary>
                     <div class="news-menu-panel">
                         <details class="news-item">
+                            <summary>PATCH 0.7.28</summary>
+                            <ul class="news-list">
+                                <li>使用可能な甲アビリティを暗殺者・監視・鼓舞・千里眼・戦姫の5体に整理</li>
+                                <li>暗殺者、監視、鼓舞、千里眼、戦姫の移動・視界・パッシブ/発動効果を新仕様へ調整</li>
+                                <li>千里眼を3×3可視化ゾーンに変更し、可視化マスが煙を無効化するよう実装</li>
+                                <li>スキル使用はターン消費なしにし、偵察兵ワープは通常移動と同じ行動消費のまま維持</li>
+                                <li>スキルのクールダウンを自分のターン終了時に減少するよう整理</li>
+                            </ul>
+                        </details>
+                        <details class="news-item">
                             <summary>PATCH 0.7.27</summary>
                             <ul class="news-list">
                                 <li>憑依はボタン選択式のまま、見た目と移動・視界を憑依先に寄せるよう調整</li>
@@ -366,13 +376,13 @@
                             <div class="ability-detail-list">
                                 <div class="ability-detail-card">
                                     <h4>千里眼</h4>
-                                    <p>発動型。壁を貫通して、選んだ1方向の直線全マスを表示する。</p>
-                                    <div class="ability-detail-meta"><span>行動範囲: 1方向の直線全マス</span><span>視界範囲: 選択方向の直線全マス</span></div>
+                                    <p>発動型。3×3のマスを3ターン可視化する。可視化状態のマスは煙マスを無効化できる。CTは7ターンで、自分のターン終了時に-1される。</p>
+                                    <div class="ability-detail-meta"><span>行動範囲: マンハッタン移動2</span><span>視界範囲: マンハッタン視界3</span></div>
                                 </div>
                                 <div class="ability-detail-card">
                                     <h4>鼓舞</h4>
-                                    <p>発動型。周囲1マスの味方に、移動+1と視界+1を付与する。</p>
-                                    <div class="ability-detail-meta"><span>行動範囲: 周囲1マス</span><span>視界範囲: 周囲1マスの味方に影響</span></div>
+                                    <p>パッシブ型。自身の周囲1マスの味方コマの移動値を+1する。</p>
+                                    <div class="ability-detail-meta"><span>行動範囲: マンハッタン移動2</span><span>視界範囲: マンハッタン視界3</span></div>
                                 </div>
                                 <div class="ability-detail-card">
                                     <h4>歴戦王</h4>
@@ -381,8 +391,8 @@
                                 </div>
                                 <div class="ability-detail-card">
                                     <h4>戦姫(姫)</h4>
-                                    <p>パッシブ型。敵を4体撃破すると自軍の丁を全て丙へ、10体撃破すると自軍の丙を全て乙へ変える。</p>
-                                    <div class="ability-detail-meta"><span>行動範囲: なし</span><span>視界範囲: 甲の基本視界</span></div>
+                                    <p>パッシブ型。このコマが敵を撃破すると、偵察兵を即時1体得る。ターン消費による偵察兵の上限は2体だが、撃破ボーナスでは最大4体まで保持できる。</p>
+                                    <div class="ability-detail-meta"><span>行動範囲: マンハッタン移動3</span><span>視界範囲: マンハッタン視界3</span></div>
                                 </div>
                                 <div class="ability-detail-card">
                                     <h4>憑依</h4>
@@ -406,8 +416,8 @@
                                 </div>
                                 <div class="ability-detail-card">
                                     <h4>暗殺者</h4>
-                                    <p>パッシブ型。直線移動5・直線視界5。敵撃破時、進行方向から1マス戻る。</p>
-                                    <div class="ability-detail-meta"><span>行動範囲: 直線移動5 / 撃破時に1マス戻る</span><span>視界範囲: 直線視界5</span></div>
+                                    <p>パッシブ型。敵撃破時、撃破地点を中心とする3×3に煙を発生させ、自身の行動済み状態を解除する。解除後は正方形移動1になる。</p>
+                                    <div class="ability-detail-meta"><span>行動範囲: 直線移動4 / 解除後は正方形移動1</span><span>視界範囲: 直線視界4</span></div>
                                 </div>
                                 <div class="ability-detail-card">
                                     <h4>盲目</h4>
@@ -421,8 +431,8 @@
                                 </div>
                                 <div class="ability-detail-card">
                                     <h4>監視</h4>
-                                    <p>パッシブ型。周囲正方形視界2・周囲正方形移動1。視界内の敵コマの移動を-1する。</p>
-                                    <div class="ability-detail-meta"><span>行動範囲: 周囲正方形移動1</span><span>視界範囲: 周囲正方形視界2</span></div>
+                                    <p>パッシブ型。視界内の敵コマの移動値を-1する。</p>
+                                    <div class="ability-detail-meta"><span>行動範囲: 直線移動1</span><span>視界範囲: 正方形視界2</span></div>
                                 </div>
                                 <div class="ability-detail-card">
                                     <h4>迷彩</h4>
@@ -470,18 +480,19 @@
                     <details>
                         <summary>⚔️ 甲アビリティ一覧</summary>
                         <ul>
-                            <li><strong>千里眼</strong>: 発動型。1方向の直線全マスを表示する。壁を貫通する。</li>
-                            <li><strong>鼓舞</strong>: 発動型。周囲1マスの味方の視界と移動を+1する。</li>
+                            <li><strong>暗殺者</strong>: 直線視界4、直線移動4。敵撃破時、撃破地点3×3に煙を発生させ、行動済み状態を解除する。解除後は正方形移動1。</li>
+                            <li><strong>監視</strong>: 正方形視界2、直線移動1。視界内の敵コマの移動-1。</li>
+                            <li><strong>鼓舞</strong>: マンハッタン視界3、マンハッタン移動2。自身の周囲1マスの味方コマの移動+1。</li>
+                            <li><strong>千里眼</strong>: マンハッタン視界3、マンハッタン移動2。3×3のマスを3ターン可視化し、可視化状態マスは煙を無効化する。CT7。</li>
+                            <li><strong>戦姫(姫)</strong>: マンハッタン視界3、マンハッタン移動3。敵撃破時に偵察兵を即時1体得る。通常上限は2体、撃破ボーナス分は最大4体。</li>
+                            <li><strong>スキル共通</strong>: スキル使用にターンを消費しない。行動後にもスキル使用可能。クールダウンは自分のターン終了時に-1される。</li>
                             <li><strong>歴戦王</strong>: パッシブ型。敵撃破時、行動済みを解除する。解除後の移動は自陣側を除く直線移動2になる。</li>
-                            <li><strong>戦姫(姫)</strong>: パッシブ型。このコマが敵を4体撃破すると、自コマの丁を全て丙に変える。10体撃破すると、自コマの丙を全て乙に変える。</li>
                             <li><strong>憑依</strong>: 発動型。マンハッタン移動3・視界3。好きなコマの見た目に変化し、敵撃破で元に戻る。1度使うと10ターン再変更できない。</li>
                             <li><strong>儀式</strong>: 発動型。マンハッタン移動2・視界3。自軍の偵察兵を1体破壊し、ランダムな敵1体を10ターン発光させる。</li>
                             <li><strong>脳筋</strong>: パッシブ型。直線移動11・視界0の突撃型。敵を撃破するたびにマンハッタン視界+1。</li>
                             <li><strong>爆破</strong>: 発動、パッシブ型。発動した、もしくは死亡時、周囲2マスの壁、敵味方ユニット、軍旗をすべて破壊する。</li>
-                            <li><strong>暗殺者</strong>: パッシブ型。敵撃破時、進行方向から1マス戻る。</li>
                             <li><strong>盲目</strong>: 視界1、移動4の盲目コマ。</li>
                             <li><strong>衛生兵</strong>: パッシブ型。このコマが生存してるなら偵察兵の補給が7ターンに1回になり、偵察兵の上限が3になる。右上カウンターで進行状況を確認できる。</li>
-                            <li><strong>監視</strong>: パッシブ型。敵コマがこのコマの視界内にいるなら、そのコマの移動-1。</li>
                             <li><strong>迷彩</strong>: 発動型。スキル使用後、マンハッタン視界1になり、動かない限り敵の視界に表示されない。</li>
                             <li><strong>煙幕</strong>: 発動型。マンハッタン視界3、直線移動4＋正方形移動1。3×3の煙幕を同マップ内の視界内に設置し、煙幕内の敵味方コマを迷彩状態にする。3ターン使えない。</li>
                         </ul>
@@ -612,39 +623,21 @@
                         <div class="ability-select-container">
                             <h4>PLAYER 1: 甲アビリティ</h4>
                             <select id="p1-ability-choice" class="neon-select">
-                                <option value="千里眼">千里眼</option>
-                                <option value="鼓舞">鼓舞</option>
-                                <option value="歴戦王">歴戦王</option>
-                                <option value="戦姫">戦姫</option>
-                                <option value="憑依">憑依</option>
-                                <option value="儀式">儀式</option>
-                                <option value="脳筋">脳筋</option>
-                                <option value="爆破">爆破</option>
                                 <option value="暗殺者">暗殺者</option>
-                                <option value="盲目">盲目</option>
-                                <option value="衛生兵">衛生兵</option>
                                 <option value="監視">監視</option>
-                                <option value="迷彩">迷彩</option>
-                                <option value="煙幕">煙幕</option>
+                                <option value="鼓舞">鼓舞</option>
+                                <option value="千里眼">千里眼</option>
+                                <option value="戦姫">戦姫</option>
                             </select>
 
                             <div id="p2-ability-group" style="opacity:0.5">
                                 <h4>PLAYER 2: 甲アビリティ</h4>
                                 <select id="p2-ability-choice" class="neon-select">
-                                    <option value="千里眼">千里眼</option>
-                                    <option value="鼓舞">鼓舞</option>
-                                    <option value="歴戦王" selected>歴戦王</option>
-                                    <option value="戦姫">戦姫</option>
-                                    <option value="憑依">憑依</option>
-                                    <option value="儀式">儀式</option>
-                                    <option value="脳筋">脳筋</option>
-                                    <option value="爆破">爆破</option>
                                     <option value="暗殺者">暗殺者</option>
-                                    <option value="盲目">盲目</option>
-                                    <option value="衛生兵">衛生兵</option>
-                                    <option value="監視">監視</option>
-                                    <option value="迷彩">迷彩</option>
-                                    <option value="煙幕">煙幕</option>
+                                    <option value="監視" selected>監視</option>
+                                    <option value="鼓舞">鼓舞</option>
+                                    <option value="千里眼">千里眼</option>
+                                    <option value="戦姫">戦姫</option>
                                 </select>
                             </div>
                         </div>
@@ -727,20 +720,11 @@
                         <div class="matchmaking-section">
                             <h4 class="match-subhead">甲アビリティ選択</h4>
                             <select id="online-ability-choice" class="neon-select">
-                                <option value="千里眼">千里眼</option>
-                                <option value="鼓舞">鼓舞</option>
-                                <option value="歴戦王">歴戦王</option>
-                                <option value="戦姫">戦姫</option>
-                                <option value="憑依">憑依</option>
-                                <option value="儀式">儀式</option>
-                                <option value="脳筋">脳筋</option>
-                                <option value="爆破">爆破</option>
                                 <option value="暗殺者">暗殺者</option>
-                                <option value="盲目">盲目</option>
-                                <option value="衛生兵">衛生兵</option>
                                 <option value="監視">監視</option>
-                                <option value="迷彩">迷彩</option>
-                                <option value="煙幕">煙幕</option>
+                                <option value="鼓舞">鼓舞</option>
+                                <option value="千里眼">千里眼</option>
+                                <option value="戦姫">戦姫</option>
                             </select>
                             <button id="btn-online-ready" class="neon-btn ready-btn" type="button" disabled>準備完了</button>
                         </div>
@@ -858,7 +842,7 @@
         </div>
     </div>
 
-    <div class="patch-badge">PATCH ver.0.7.27</div>
+    <div class="patch-badge">PATCH ver.0.7.28</div>
     <script>
     // Mode tab switching helper (called from inline onclick)
     function setModeTab(mode) {
