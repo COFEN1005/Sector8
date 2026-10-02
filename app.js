@@ -35,9 +35,9 @@ const LEVEL_EXP_PER_LEVEL = 100;
 const MATCH_EXP_GAIN = 50;
 const KEEPALIVE_WARNING_MS = 10 * 60 * 1000;
 const DEVELOP_MODE_SEQUENCE = '12312321213';
-const ALL_ABILITY_OPTIONS = ['千里眼', '鼓舞', '歴戦王', '戦姫', '爆破', '暗殺者', '盲目', '衛生兵', '監視', '迷彩', '煙幕', '憑依', '儀式', '脳筋'];
-const SELECTABLE_ABILITY_OPTIONS = ['暗殺者', '監視', '鼓舞', '千里眼', '戦姫'];
-const CLAIRVOYANCE_COOLDOWN_TURNS = 7;
+const ALL_ABILITY_OPTIONS = ['千里眼', '暗殺者', '戦姫', '監視', '弓兵'];
+const SELECTABLE_ABILITY_OPTIONS = ['千里眼', '暗殺者', '戦姫', '監視', '弓兵'];
+const CLAIRVOYANCE_COOLDOWN_TURNS = 3;
 const CLAIRVOYANCE_DURATION_TURNS = 3;
 const WAR_PRINCESS_SCOUT_BONUS_LIMIT = 4;
 const IMPERSONATION_CHOICES = ['core', 'otsu', 'hei', 'tei', 'scout', ...ALL_ABILITY_OPTIONS];
@@ -155,6 +155,7 @@ let smokeCooldownByPlayer = { 1: 0, 2: 0 };
 let clairvoyanceZones = [];
 let clairvoyanceZoneSerial = 0;
 let clairvoyanceCooldownByPlayer = { 1: 0, 2: 0 };
+let playerKillCounts = { 1: 0, 2: 0 };
 let lastKeepAliveAt = Date.now();
 let developModeEnabled = false;
 let developModeSequence = '';
@@ -585,6 +586,7 @@ function resetMatchRecording() {
     clairvoyanceZones = [];
     clairvoyanceZoneSerial = 0;
     clairvoyanceCooldownByPlayer = { 1: 0, 2: 0 };
+    playerKillCounts = { 1: 0, 2: 0 };
     resetDrawRequests();
 }
 
@@ -1899,15 +1901,16 @@ class Unit {
             }
             const ability = getUnitAbilityContext(this);
             const descriptions = {
-                '千里眼': '【甲特有: 千里眼 / 発動型】マンハッタン移動2・視界3。3×3を3ターン可視化し、そのマスの煙を無効化。CT7。',
+                '千里眼': '【甲特有: 千里眼 / アクティブ】菱形移動3・菱形視界3。盤面の好きな1マスを中心に3×3の視界を3ターン得る。CT3。',
                 '鼓舞': '【甲特有: 鼓舞 / パッシブ型】マンハッタン移動2・視界3。自身の周囲1マスの味方コマの移動+1。',
                 '歴戦王': '【甲特有: 歴戦王 / パッシブ型】敵撃破時に行動済みを解除。再行動は自陣側を除く直線移動2。',
-                '戦姫': '【甲特有: 戦姫(姫) / パッシブ型】マンハッタン移動3・視界3。敵撃破時に偵察兵を即時1体得る。撃破ボーナス分は最大4体まで保持可能。',
+                '戦姫': '【甲特有: 戦姫(姫) / パッシブ】菱形移動2・菱形視界2。自軍の総撃破数5で移動と視界+1、10でさらに+1。',
                 '爆破': '【甲特有: 爆破 / 発動・パッシブ型】発動時または死亡時、周囲2マスを完全破壊。',
-                '暗殺者': '【甲特有: 暗殺者 / パッシブ型】直線移動4・直線視界4。敵撃破時、撃破地点3×3に煙を発生させ行動済みを解除。解除後は正方形移動1。',
+                '暗殺者': '【甲特有: 暗殺者 / パッシブ】直線移動4・直線視界4。敵撃破時、進行方向と逆へ最大2マス戻る。',
                 '盲目': '【甲特有: 盲目 / パッシブ型】マンハッタン移動4、視界1。',
                 '衛生兵': '【甲特有: 衛生兵 / パッシブ型】生存中、偵察兵の補充周期が7ターンになり上限が3になる。補充状況は甲の右上カウンターで確認できる。',
-                '監視': '【甲特有: 監視 / パッシブ型】正方形視界2・直線移動1。視界内の敵移動-1。',
+                '監視': '【甲特有: 監視 / パッシブ】正方形視界2・直線移動1。視界内の敵移動-1。',
+                '弓兵': '【甲特有: 弓兵 / アクティブ・パッシブ】菱形移動2・菱形視界3。通常攻撃では撃破不可。視界内かつ菱形距離3の敵を射撃する。',
                 '迷彩': '【甲特有: 迷彩 / 発動型】使用後はマンハッタン視界1になり、動かない限り敵視界に出ない。',
                 '煙幕': '【甲特有: 煙幕 / 発動型】マンハッタン視界3。直線移動4＋周囲1。3×3の煙幕を設置し、煙幕内の敵味方を迷彩状態にする。',
                 '憑依': '【甲特有: 憑依 / 発動型】マンハッタン移動3・視界3。好きなコマの見た目に変えられる。敵撃破で元に戻り、再変更は10ターン後。',
@@ -1936,13 +1939,14 @@ class Unit {
             if (ability === '脳筋') { return 11; }
             if (ability === '憑依') { return 3; }
             if (ability === '儀式') { return 2; }
-            if (ability === '暗殺者') r = this.assassinMomentumPenalty ? 1 : 4;
+            if (ability === '暗殺者') r = 4;
             if (ability === '盲目') { return 4; }
             if (ability === '監視') r = 1;
             if (ability === '煙幕') { return 4; }
             if (ability === '鼓舞') r = 2;
-            if (ability === '千里眼') r = 2;
-            if (ability === '戦姫') r = 3;
+            if (ability === '千里眼') r = 3;
+            if (ability === '戦姫') r = 2 + getWarPrincessBonus(this.player);
+            if (ability === '弓兵') r = 2;
             if (ability === '歴戦王' && this.veteranMomentumPenalty) r = 2;
         }
         r -= getMonitorPenalty(this);
@@ -1968,7 +1972,8 @@ class Unit {
             if (ability === '歴戦王') v = 2;
             if (ability === '鼓舞') v = 3;
             if (ability === '千里眼') v = 3;
-            if (ability === '戦姫') v = 3;
+            if (ability === '戦姫') v = 2 + getWarPrincessBonus(this.player);
+            if (ability === '弓兵') v = 3;
             if (ability === '迷彩' && this.camouflaged) v = 1;
             if (getPlayerAbility(this.player) === '脳筋') {
                 v += Number(this.bruteVisionBonus || 0);
@@ -1985,7 +1990,7 @@ class Unit {
             if (disguiseProfile) return disguiseProfile.moveType;
             const ability = getUnitAbilityContext(this);
             if (ability === '脳筋') return 'straight';
-            if (ability === '暗殺者') return this.assassinMomentumPenalty ? 'square' : 'straight';
+            if (ability === '暗殺者') return 'straight';
             if (ability === '監視') return 'straight';
             if (ability === '煙幕') return 'smoke';
             if (ability === '歴戦王' && this.veteranMomentumPenalty) return 'straight';
@@ -2066,6 +2071,7 @@ function getAbilityClassByName(ability) {
         '盲目': 'ability-blind',
         '衛生兵': 'ability-medic',
         '監視': 'ability-watch',
+        '弓兵': 'ability-archer',
         '迷彩': 'ability-camouflage',
         '憑依': 'ability-possession',
         '儀式': 'ability-ritual',
@@ -2083,6 +2089,17 @@ function getPlayerAbility(player) {
     return player === 1 ? p1Ability : p2Ability;
 }
 
+function getPlayerKillCount(player) {
+    return Math.max(0, Number(playerKillCounts[player] || 0));
+}
+
+function getWarPrincessBonus(player) {
+    const kills = getPlayerKillCount(player);
+    if (kills >= 10) return 2;
+    if (kills >= 5) return 1;
+    return 0;
+}
+
 function getSmokeCooldownRemaining(player) {
     return Math.max(0, Number(smokeCooldownByPlayer[player] || 0));
 }
@@ -2096,7 +2113,6 @@ function isCellInClairvoyanceZone(mapName, row, col) {
 }
 
 function isCellInSmoke(mapName, row, col) {
-    if (isCellInClairvoyanceZone(mapName, row, col)) return false;
     return smokeZones.some(zone => zone.map === mapName && zone.cells.some(cell => cell.row === row && cell.col === col));
 }
 
@@ -2201,18 +2217,30 @@ function addClairvoyanceZone(mapName, centerRow, centerCol, player) {
     return zone;
 }
 
-function getClairvoyancePlacementTargets(unit) {
+function getClairvoyancePlacementTargets(unit, mapName = unit?.map) {
     const valid = [];
-    const map = unit.map;
-    const activeVision = unit.player === 1 ? p1Vision[map] : p2Vision[map];
+    const map = mapName;
+    if (!unit || !MAP_SIZES[map]) return valid;
     const size = MAP_SIZES[map];
     for (let r = 0; r < size.rows; r++) {
         for (let c = 0; c < size.cols; c++) {
-            if (!activeVision.has(`${r},${c}`)) continue;
             valid.push({ row: r, col: c, type: 'ability' });
         }
     }
     return valid;
+}
+
+function getArcherTargets(unit) {
+    if (!unit || unit.type !== 'koh' || getPlayerAbility(unit.player) !== '弓兵') return [];
+    const vision = unit.player === 1 ? p1Vision[unit.map] : p2Vision[unit.map];
+    return units
+        .filter(target => (
+            target.player !== unit.player &&
+            target.map === unit.map &&
+            Math.abs(target.row - unit.row) + Math.abs(target.col - unit.col) === 3 &&
+            isUnitVisibleToViewer(target, unit.player, vision)
+        ))
+        .map(target => ({ row: target.row, col: target.col, type: 'ability' }));
 }
 
 function refreshUnitCamouflageState(unit) {
@@ -2385,6 +2413,7 @@ function serializeReplaySnapshot(label = null) {
         gameMode,
         p1Ability,
         p2Ability,
+        playerKillCounts: { ...playerKillCounts },
         p1Vision: serializeReplayVision(p1Vision),
         p2Vision: serializeReplayVision(p2Vision),
         actedUnitIds: Array.from(actedUnitIds || []),
@@ -2506,6 +2535,7 @@ function withReplayRenderState(snapshotState, callback) {
         p2Vision,
         p1Ability,
         p2Ability,
+        playerKillCounts,
         gameMode
     };
 
@@ -2522,6 +2552,10 @@ function withReplayRenderState(snapshotState, callback) {
     p2Vision = snapshotState.p2Vision;
     p1Ability = normalizeAbilityChoice(snapshotState.p1Ability, p1Ability);
     p2Ability = normalizeAbilityChoice(snapshotState.p2Ability, p2Ability);
+    playerKillCounts = {
+        1: Number(snapshotState.playerKillCounts?.[1] || 0),
+        2: Number(snapshotState.playerKillCounts?.[2] || 0)
+    };
     gameMode = snapshotState.gameMode || gameMode;
     refreshSmokeCamouflageStates();
 
@@ -2541,6 +2575,7 @@ function withReplayRenderState(snapshotState, callback) {
         p2Vision = saved.p2Vision;
         p1Ability = saved.p1Ability;
         p2Ability = saved.p2Ability;
+        playerKillCounts = saved.playerKillCounts;
         gameMode = saved.gameMode;
         refreshSmokeCamouflageStates();
     }
@@ -2946,14 +2981,21 @@ function setupGameModeTabs() {
 }
 
 function switchActiveMap(mapName) {
+    const preserveClairvoyanceSelection = Boolean(
+        selectedUnit?.type === 'koh' &&
+        selectedAction === 'ability' &&
+        getPlayerAbility(selectedUnit.player) === '千里眼' &&
+        getClairvoyanceCooldownRemaining(selectedUnit.player) === 0
+    );
     if (activeMap !== mapName) playUiSfx();
     activeMap = mapName;
     registerMapTabSequence(mapName);
     document.querySelectorAll('.map-tab').forEach(tab => {
         tab.classList.toggle('active', tab.getAttribute('data-map') === mapName);
     });
-    cancelSelection();
+    if (!preserveClairvoyanceSelection) cancelSelection();
     renderBoard();
+    if (preserveClairvoyanceSelection) selectActionType('ability');
 }
 
 function setOpponent(isAi) {
@@ -3439,6 +3481,7 @@ function prepareOnlineMatchPreview(seed = null) {
     clairvoyanceZones = [];
     clairvoyanceZoneSerial = 0;
     clairvoyanceCooldownByPlayer = { 1: 0, 2: 0 };
+    playerKillCounts = { 1: 0, 2: 0 };
     p1LastVision = { area1: new Set(), area2: new Set(), area3: new Set() };
     p2LastVision = { area1: new Set(), area2: new Set(), area3: new Set() };
     currentMatchStartedAt = 0;
@@ -4019,6 +4062,7 @@ function startGame(config = null, fromOnline = false) {
     clairvoyanceZoneSerial = 0;
     clairvoyanceCooldownByPlayer = { 1: 0, 2: 0 };
     resetDrawRequests();
+    playerKillCounts = { 1: 0, 2: 0 };
 
     p1LastVision = { area1: new Set(), area2: new Set(), area3: new Set() };
     p2LastVision = { area1: new Set(), area2: new Set(), area3: new Set() };
@@ -4618,6 +4662,15 @@ function getVisibleFlagsOnCell(cell, viewerPlayer, activeVision) {
 
 function captureUnit(victim, attackerPlayer) {
     recordMatchCapture(victim, attackerPlayer);
+    if ((attackerPlayer === 1 || attackerPlayer === 2) && victim.player !== attackerPlayer) {
+        const previousKills = getPlayerKillCount(attackerPlayer);
+        playerKillCounts[attackerPlayer] = previousKills + 1;
+        const previousBonus = previousKills >= 10 ? 2 : previousKills >= 5 ? 1 : 0;
+        const nextBonus = getWarPrincessBonus(attackerPlayer);
+        if (getPlayerAbility(attackerPlayer) === '戦姫' && nextBonus > previousBonus) {
+            addConsoleLog(`ABILITY: 戦姫 - 自軍総撃破数${playerKillCounts[attackerPlayer]}。移動と視界が+${nextBonus}になりました。`, 'ability');
+        }
+    }
     const victimMap = victim.map;
     const victimRow = victim.row;
     const victimCol = victim.col;
@@ -4688,12 +4741,7 @@ function applyWarPrincessKills(unit, killCount) {
         unit.bruteVisionBonus = Number(unit.bruteVisionBonus || 0) + killCount;
         addConsoleLog(`ABILITY: 脳筋 - 撃破数によりマンハッタン視界+${killCount}。`, 'ability');
     }
-    const ability = unit.player === 1 ? p1Ability : p2Ability;
-    if (ability !== '戦姫') return;
-
-    unit.warPrincessKills = (unit.warPrincessKills || 0) + killCount;
-    const granted = grantWarPrincessScout(unit.player, killCount);
-    addConsoleLog(`ABILITY: 戦姫 - 撃破数 ${unit.warPrincessKills}。偵察兵を${granted}体即時獲得。`, 'ability');
+    unit.warPrincessKills = getPlayerKillCount(unit.player);
 }
 
 function isCellWithinUnitVision(unit, mapName, row, col) {
@@ -4985,7 +5033,7 @@ function renderBoard(options = {}) {
                         if (abilityName === '戦姫') {
                             const killCounter = document.createElement('span');
                             killCounter.className = 'kill-counter';
-                            killCounter.textContent = u.warPrincessKills || 0;
+                            killCounter.textContent = getPlayerKillCount(u.player);
                             unitEl.appendChild(killCounter);
                         }
                     }
@@ -5349,6 +5397,9 @@ function getValidMoves(unit, options = {}) {
         }
     }
 
+    if (unit.type === 'koh' && getPlayerAbility(unit.player) === '弓兵') {
+        return valid.filter(move => move.type !== 'attack');
+    }
     return valid;
 }
 
@@ -5386,6 +5437,26 @@ function isVisibleEnemyMoveTarget(unit, resolved, localRow, localCol) {
         return true;
     }
     return false;
+}
+
+function getAssassinRetreatDestination(unit, startRow, startCol, movedRow, movedCol, targetMap, targetRow, targetCol) {
+    const moveRow = Math.sign(movedRow - startRow);
+    const moveCol = Math.sign(movedCol - startCol);
+    if (moveRow === 0 && moveCol === 0) return { row: targetRow, col: targetCol };
+
+    let row = targetRow;
+    let col = targetCol;
+    const size = MAP_SIZES[targetMap];
+    for (let step = 0; step < 2; step++) {
+        const nextRow = row - moveRow;
+        const nextCol = col - moveCol;
+        if (nextRow < 0 || nextRow >= size.rows || nextCol < 0 || nextCol >= size.cols) break;
+        const cell = boards[targetMap][nextRow][nextCol];
+        if (cell.isWall || cell.unit) break;
+        row = nextRow;
+        col = nextCol;
+    }
+    return { row, col };
 }
 
 function getScoutWarpTargets(scout) {
@@ -5451,7 +5522,7 @@ function handleCellClick(row, col) {
         const abilityTarget = document.querySelector(`.cell[data-row="${row}"][data-col="${col}"].highlight-ability`);
 
         if (moveTarget || attackTarget) { executeMove(selectedUnit, row, col); return; }
-        if (abilityTarget) { executeAbility(selectedUnit, row, col); return; }
+        if (abilityTarget) { executeAbility(selectedUnit, row, col, { map: activeMap }); return; }
         if (cell.unit && cell.unit.player === currentPlayer) selectUnit(cell.unit);
         else if (clickedVisibleEnemy) showUnitPreview(cell.unit, 'ENEMY PREVIEW');
         else cancelSelection();
@@ -5530,6 +5601,7 @@ function selectUnit(unit) {
     if (unit.type === 'koh') {
         abilityBtn.classList.remove('hidden');
         if (abilityName === '千里眼') abilityBtn.textContent = clairvoyanceCooldown > 0 ? `千里眼 CD ${clairvoyanceCooldown}` : `範囲指定: ${abilityName}`;
+        else if (abilityName === '弓兵') abilityBtn.textContent = '射撃対象を選択';
         else if (abilityName === '煙幕') abilityBtn.textContent = smokeCooldown > 0 ? `煙幕 CD ${smokeCooldown}` : `即時発動: ${abilityName}`;
         else if (abilityName === '鼓舞') abilityBtn.textContent = `パッシブ: ${abilityName}`;
         else if (abilityName === '爆破' || abilityName === '迷彩' || abilityName === '憑依' || abilityName === '儀式') abilityBtn.textContent = `即時発動: ${abilityName}`;
@@ -5583,12 +5655,26 @@ function selectActionType(type) {
                         showStatusAlert(`千里眼はあと ${getClairvoyanceCooldownRemaining(selectedUnit.player)} ターン使用できません。`, 'warning', 2400);
                         return;
                     }
-                    const placements = getClairvoyancePlacementTargets(selectedUnit);
+                    const placements = getClairvoyancePlacementTargets(selectedUnit, activeMap);
                     if (!placements.length) {
                         showStatusAlert('千里眼を指定できる場所がありません。', 'warning', 2400);
                         return;
                     }
                     placements.forEach(target => {
+                        const el = document.querySelector(`.cell[data-row="${target.row}"][data-col="${target.col}"]`);
+                        if (el) el.classList.add('highlight-ability');
+                    });
+                } else if (abilityName === '弓兵') {
+                    if (actedUnitIds.has(selectedUnit.id)) {
+                        showStatusAlert('弓兵は行動済み状態では射撃できません。', 'warning', 2400);
+                        return;
+                    }
+                    const targets = getArcherTargets(selectedUnit);
+                    if (!targets.length) {
+                        showStatusAlert('菱形距離3かつ視界内に射撃対象がいません。', 'warning', 2400);
+                        return;
+                    }
+                    targets.forEach(target => {
                         const el = document.querySelector(`.cell[data-row="${target.row}"][data-col="${target.col}"]`);
                         if (el) el.classList.add('highlight-ability');
                     });
@@ -5643,6 +5729,17 @@ function executeMove(unit, destRow, destCol) {
     const startCol = unit.col;
     const resolved = resolveMoveDestination(unit, destRow, destCol);
 
+    if (
+        unit.type === 'koh' &&
+        getPlayerAbility(unit.player) === '弓兵' &&
+        ((resolved.localOccupant && resolved.localOccupant.player !== unit.player) ||
+            (resolved.destOccupant && resolved.destOccupant.player !== unit.player))
+    ) {
+        addConsoleLog('ERROR: 弓兵は通常攻撃で敵コマを撃破できません。', 'system');
+        cancelSelection();
+        return;
+    }
+
     if (isMoveDestinationBlockedByFriendly(unit, destRow, destCol)) {
         addConsoleLog(`ERROR: 転送先または移動先に味方がいるため移動できません。`, 'system');
         cancelSelection();
@@ -5686,7 +5783,7 @@ function executeMove(unit, destRow, destCol) {
 
     if (isGameOver) return;
 
-    // 暗殺者: 撃破時、撃破地点3×3に煙を発生させ、次の再行動を正方形1に制限する
+    // 暗殺者は撃破地点から進行方向と逆へ、通れる分だけ最大2マス後退する。
     let finalRow = targetRow, finalCol = targetCol, finalMap = targetMap;
     if (unit.type === 'koh' && captured.length > 0) {
         const ability = unit.player === 1 ? p1Ability : p2Ability;
@@ -5696,24 +5793,20 @@ function executeMove(unit, destRow, destCol) {
             addConsoleLog(`ABILITY: 歴戦王 - 撃破により行動済み状態を解除。次の移動範囲は-1。`, 'ability');
         }
         if (ability === '暗殺者') {
-            unit.refreshActedAfterAction = true;
-            unit.assassinMomentumPenalty = true;
-            captured.forEach(v => addSmokeZone(v.map, v.row, v.col, unit.player));
-            unit.map = finalMap;
-            unit.row = finalRow;
-            unit.col = finalCol;
-            boards[finalMap][finalRow][finalCol].unit = unit;
-            tryPickupMilitaryFlag(unit);
-            applyWarPrincessKills(unit, captured.length);
-
-            const captureNames = captured.map(v => v.unit.name).join(', ');
-            addConsoleLog(`ABILITY: 暗殺者 - ${unit.name}が${captureNames}を撃破。撃破地点に煙を展開し、行動済み状態を解除。次の移動は正方形1。`, 'ability');
-            if (resolved.portalDest && unit.player === currentPlayer && shouldFocusMove) activeMap = finalMap;
-            maybeClearCamouflageAfterMove(unit);
-            recordMatchReplayEvent({ kind: 'action', action: { type: 'move', unitId: unit.id, row: destRow, col: destCol } });
-            sendOnlineMessage({ kind: 'action', action: { type: 'move', unitId: unit.id, row: destRow, col: destCol } });
-            completeUnitAction(unit);
-            return;
+            const retreat = getAssassinRetreatDestination(
+                unit,
+                startRow,
+                startCol,
+                destRow,
+                destCol,
+                targetMap,
+                targetRow,
+                targetCol
+            );
+            finalRow = retreat.row;
+            finalCol = retreat.col;
+            const retreatDistance = Math.abs(finalRow - targetRow) + Math.abs(finalCol - targetCol);
+            addConsoleLog(`ABILITY: 暗殺者 - 敵撃破後、進行方向と逆へ${retreatDistance}マス後退。`, 'ability');
         }
     }
 
@@ -5792,7 +5885,36 @@ function executeAbility(unit, destRow, destCol, actionMeta = {}) {
     if (unit.type === 'koh') {
         const abilityName = getPlayerAbility(unit.player);
 
-        if (abilityName === '千里眼') {
+        if (abilityName === '弓兵') {
+            if (actedUnitIds.has(unit.id)) {
+                addConsoleLog('ERROR: 弓兵は行動済み状態では射撃できません。', 'warning');
+                return;
+            }
+            const target = boards[map][destRow]?.[destCol]?.unit;
+            const distance = destRow == null || destCol == null
+                ? -1
+                : Math.abs(destRow - unit.row) + Math.abs(destCol - unit.col);
+            const vision = unit.player === 1 ? p1Vision[map] : p2Vision[map];
+            if (
+                !target ||
+                target.player === unit.player ||
+                distance !== 3 ||
+                !isUnitVisibleToViewer(target, unit.player, vision)
+            ) {
+                addConsoleLog('ERROR: 弓兵は視界内かつ菱形距離3の敵だけを射撃できます。', 'warning');
+                return;
+            }
+
+            const targetName = target.name;
+            const won = captureUnit(target, unit.player);
+            addConsoleLog(`ABILITY: 弓兵 - ${targetName}を射撃して撃破。`, 'ability');
+            if (!shouldHideAiActionFeedback(unit.player)) playMoveSfx();
+            recordMatchReplayEvent({ kind: 'action', action: { type: 'ability', unitId: unit.id, row: destRow, col: destCol } });
+            sendOnlineMessage({ kind: 'action', action: { type: 'ability', unitId: unit.id, row: destRow, col: destCol } });
+            if (!won) completeUnitAction(unit);
+            return;
+
+        } else if (abilityName === '千里眼') {
             if (getClairvoyanceCooldownRemaining(unit.player) > 0) {
                 addConsoleLog(`ERROR: 千里眼はまだ再使用できません。`, 'warning');
                 return;
@@ -5801,22 +5923,18 @@ function executeAbility(unit, destRow, destCol, actionMeta = {}) {
                 addConsoleLog(`ERROR: 千里眼の可視化中心を選択してください。`, 'warning');
                 return;
             }
-            const targetCell = boards[map][destRow]?.[destCol];
+            const targetMap = MAP_SIZES[actionMeta.map] ? actionMeta.map : map;
+            const targetCell = boards[targetMap][destRow]?.[destCol];
             if (!targetCell) {
                 addConsoleLog(`ERROR: 千里眼の指定先が見つかりません。`, 'error');
                 return;
             }
-            const activeVision = unit.player === 1 ? p1Vision[map] : p2Vision[map];
-            if (!activeVision.has(`${destRow},${destCol}`)) {
-                addConsoleLog(`ERROR: 視界外には千里眼を指定できません。`, 'error');
-                return;
-            }
-            addClairvoyanceZone(map, destRow, destCol, unit.player);
+            addClairvoyanceZone(targetMap, destRow, destCol, unit.player);
             clairvoyanceCooldownByPlayer[unit.player] = CLAIRVOYANCE_COOLDOWN_TURNS;
-            addConsoleLog(`ABILITY: 甲の「千里眼」起動。${getAreaLabel(map)} [${destCol},${destRow}] 周辺3×3を3ターン可視化し、煙を無効化。`, 'ability');
+            addConsoleLog(`ABILITY: 甲の「千里眼」起動。${getAreaLabel(targetMap)} [${destCol},${destRow}] 周辺3×3を3ターン可視化。`, 'ability');
             if (!shouldHideAiActionFeedback(unit.player)) playMoveSfx();
-            recordMatchReplayEvent({ kind: 'action', action: { type: 'ability', unitId: unit.id, row: destRow, col: destCol } });
-            sendOnlineMessage({ kind: 'action', action: { type: 'ability', unitId: unit.id, row: destRow, col: destCol } });
+            recordMatchReplayEvent({ kind: 'action', action: { type: 'ability', unitId: unit.id, row: destRow, col: destCol, map: targetMap } });
+            sendOnlineMessage({ kind: 'action', action: { type: 'ability', unitId: unit.id, row: destRow, col: destCol, map: targetMap } });
             consumeTurnWithoutMarkingActed(unit);
             return;
 
@@ -6318,6 +6436,7 @@ function resetToSetup(fromOnline = false) {
     clairvoyanceZones = [];
     clairvoyanceZoneSerial = 0;
     clairvoyanceCooldownByPlayer = { 1: 0, 2: 0 };
+    playerKillCounts = { 1: 0, 2: 0 };
     resetDrawRequests();
 
     boards = { area1: [], area2: [], area3: [] };
@@ -6371,11 +6490,8 @@ function updateUI() {
         playerDotEl.style.boxShadow = '0 0 10px var(--neon-magenta)';
     }
 
-    const captures = currentMatchRecord?.captures || [];
-    const p1Kills = captures.filter(entry => Number(entry.attackerPlayer) === 1).length;
-    const p2Kills = captures.filter(entry => Number(entry.attackerPlayer) === 2).length;
-    document.getElementById('p1-units-count').textContent = `${p1Kills}`;
-    document.getElementById('p2-units-count').textContent = `${p2Kills}`;
+    document.getElementById('p1-units-count').textContent = `${getPlayerKillCount(1)}`;
+    document.getElementById('p2-units-count').textContent = `${getPlayerKillCount(2)}`;
     updateMapLabels();
     updateModeVisibility();
     updateLobbyPlayerCard();
@@ -6537,6 +6653,19 @@ function executeAITurn() {
                 }
             } else if (aiAbility === '脳筋') {
                 // パッシブのみ
+            } else if (aiAbility === '弓兵') {
+                const target = getArcherTargets(u)
+                    .map(candidate => boards[map][candidate.row][candidate.col].unit)
+                    .filter(Boolean)
+                    .sort((a, b) => {
+                        const value = entry => entry.type === 'core' ? 10000 : entry.type === 'koh' ? 600 : entry.type === 'otsu' ? 400 : 150;
+                        return value(b) - value(a);
+                    })[0];
+                const archerScore = target?.type === 'core' ? 10000 : 500;
+                if (target && archerScore > bestScore) {
+                    bestScore = archerScore;
+                    bestAction = { type: 'ability', unit: u, action: '弓兵', row: target.row, col: target.col };
+                }
             } else if (aiAbility === '千里眼') {
                 const score = 90;
                 if (getClairvoyanceCooldownRemaining(2) === 0 && score > bestScore) {
@@ -6560,7 +6689,7 @@ function executeAITurn() {
                     executeAbility(bestAction.unit, null, null, bestAction);
                 } else if (bestAction.action === '煙幕') {
                     executeAbility(bestAction.unit, bestAction.row ?? bestAction.unit.row, bestAction.col ?? bestAction.unit.col);
-                } else if (bestAction.action === '千里眼') {
+                } else if (bestAction.action === '千里眼' || bestAction.action === '弓兵') {
                     executeAbility(bestAction.unit, bestAction.row ?? bestAction.unit.row, bestAction.col ?? bestAction.unit.col);
                 }
             }

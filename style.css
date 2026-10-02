@@ -1723,6 +1723,7 @@ details li {
 .unit.ability-blind { box-shadow: 0 0 14px rgba(255, 255, 255, 0.38), inset 0 0 10px rgba(255, 255, 255, 0.14); }
 .unit.ability-medic { box-shadow: 0 0 14px rgba(32, 201, 151, 0.38), inset 0 0 10px rgba(32, 201, 151, 0.14); }
 .unit.ability-watch { box-shadow: 0 0 14px rgba(255, 214, 10, 0.38), inset 0 0 10px rgba(255, 214, 10, 0.14); }
+.unit.ability-archer { box-shadow: 0 0 14px rgba(74, 222, 128, 0.42), inset 0 0 10px rgba(74, 222, 128, 0.18); }
 .unit.ability-camouflage { box-shadow: 0 0 14px rgba(124, 196, 102, 0.38), inset 0 0 10px rgba(124, 196, 102, 0.14); }
 .unit.ability-possession { box-shadow: 0 0 14px rgba(174, 92, 255, 0.42), inset 0 0 10px rgba(174, 92, 255, 0.16); }
 .unit.ability-ritual { box-shadow: 0 0 14px rgba(0, 194, 168, 0.42), inset 0 0 10px rgba(0, 194, 168, 0.16); }
