@@ -397,6 +397,12 @@ header {
 #game-over-overlay:not(.replay-active) .modal {
     flex: 0 0 auto;
     margin: auto;
+    max-height: calc(100vh - 1.25rem);
+    max-height: calc(100dvh - 1.25rem);
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
 }
 
 .match-summary-capture-row {
@@ -584,6 +590,13 @@ header {
         width: 100%;
         max-width: 100%;
         padding: 0.85rem;
+    }
+
+    #game-over-overlay:not(.replay-active) .modal {
+        max-height: calc(100vh - max(1rem, env(safe-area-inset-top)) - max(1rem, env(safe-area-inset-bottom)));
+        max-height: calc(100dvh - max(1rem, env(safe-area-inset-top)) - max(1rem, env(safe-area-inset-bottom)));
+        margin: 0;
+        touch-action: pan-y;
     }
 
     .summary-stats,
