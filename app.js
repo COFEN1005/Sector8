@@ -41,6 +41,7 @@ const SCOUT_REINFORCE_INTERVAL = 10;
 const MEDIC_SCOUT_REINFORCE_INTERVAL = 7;
 const DEFAULT_SCOUT_LIMIT_PER_PLAYER = 2;
 const MEDIC_SCOUT_LIMIT_PER_PLAYER = 3;
+const INFORMATION_COLLAPSE_TURN_LIMIT = 15;
 const ACTIONS_PER_TURN = 2;
 const FLAG_SURVIVAL_TURNS = 7;
 const LEVEL_EXP_PER_LEVEL = 100;
@@ -185,6 +186,7 @@ let clairvoyanceZones = [];
 let clairvoyanceZoneSerial = 0;
 let clairvoyanceCooldownByPlayer = { 1: 0, 2: 0 };
 let playerKillCounts = { 1: 0, 2: 0 };
+let informationCollapseTurns = { 1: 0, 2: 0 };
 let lastKeepAliveAt = Date.now();
 let developModeEnabled = false;
 let developModeSequence = '';
@@ -618,6 +620,7 @@ function resetMatchRecording() {
     clairvoyanceZoneSerial = 0;
     clairvoyanceCooldownByPlayer = { 1: 0, 2: 0 };
     playerKillCounts = { 1: 0, 2: 0 };
+    informationCollapseTurns = { 1: 0, 2: 0 };
     resetDrawRequests();
 }
 
@@ -2446,6 +2449,7 @@ function serializeReplaySnapshot(label = null) {
         p1Ability,
         p2Ability,
         playerKillCounts: { ...playerKillCounts },
+        informationCollapseTurns: { ...informationCollapseTurns },
         p1Vision: serializeReplayVision(p1Vision),
         p2Vision: serializeReplayVision(p2Vision),
         actedUnitIds: Array.from(actedUnitIds || []),
@@ -2568,6 +2572,7 @@ function withReplayRenderState(snapshotState, callback) {
         p1Ability,
         p2Ability,
         playerKillCounts,
+        informationCollapseTurns,
         gameMode,
         mapSourceMode
     };
@@ -2588,6 +2593,10 @@ function withReplayRenderState(snapshotState, callback) {
     playerKillCounts = {
         1: Number(snapshotState.playerKillCounts?.[1] || 0),
         2: Number(snapshotState.playerKillCounts?.[2] || 0)
+    };
+    informationCollapseTurns = {
+        1: Number(snapshotState.informationCollapseTurns?.[1] || 0),
+        2: Number(snapshotState.informationCollapseTurns?.[2] || 0)
     };
     gameMode = snapshotState.gameMode || gameMode;
     mapSourceMode = snapshotState.mapSourceMode
@@ -2612,6 +2621,7 @@ function withReplayRenderState(snapshotState, callback) {
         p1Ability = saved.p1Ability;
         p2Ability = saved.p2Ability;
         playerKillCounts = saved.playerKillCounts;
+        informationCollapseTurns = saved.informationCollapseTurns;
         gameMode = saved.gameMode;
         mapSourceMode = saved.mapSourceMode;
         refreshSmokeCamouflageStates();
@@ -3528,6 +3538,7 @@ function prepareOnlineMatchPreview(seed = null) {
     clairvoyanceZoneSerial = 0;
     clairvoyanceCooldownByPlayer = { 1: 0, 2: 0 };
     playerKillCounts = { 1: 0, 2: 0 };
+    informationCollapseTurns = { 1: 0, 2: 0 };
     p1LastVision = { area1: new Set(), area2: new Set(), area3: new Set() };
     p2LastVision = { area1: new Set(), area2: new Set(), area3: new Set() };
     currentMatchStartedAt = 0;
@@ -3644,7 +3655,7 @@ function handleOnlineMessage(message) {
                 (message.snapshot.history || []).forEach(entry => {
                     if (entry.kind === 'action') applyRemoteAction(entry.action);
                     else if (entry.kind === 'forfeit' || entry.kind === 'win') {
-                        triggerWin(entry.winner, true, entry.kind === 'forfeit' ? 'forfeit' : 'core');
+                        triggerWin(entry.winner, true, entry.reason || (entry.kind === 'forfeit' ? 'forfeit' : 'core'));
                     } else if (entry.kind === 'draw_request') {
                         receiveDrawRequest(entry.player, Number(entry.turn || gameTurn));
                     } else if (entry.kind === 'draw') {
@@ -3784,7 +3795,7 @@ function handleOnlineMessage(message) {
         } else if (message.kind === 'reset') {
             resetToSetup(true);
         } else if (message.kind === 'forfeit' || message.kind === 'win') {
-            triggerWin(message.winner, true, message.kind === 'forfeit' ? 'forfeit' : 'core');
+            triggerWin(message.winner, true, message.reason || (message.kind === 'forfeit' ? 'forfeit' : 'core'));
         }
     } finally {
         applyingRemoteAction = false;
@@ -4122,6 +4133,7 @@ function startGame(config = null, fromOnline = false) {
     clairvoyanceCooldownByPlayer = { 1: 0, 2: 0 };
     resetDrawRequests();
     playerKillCounts = { 1: 0, 2: 0 };
+    informationCollapseTurns = { 1: 0, 2: 0 };
 
     p1LastVision = { area1: new Set(), area2: new Set(), area3: new Set() };
     p2LastVision = { area1: new Set(), area2: new Set(), area3: new Set() };
@@ -4954,11 +4966,15 @@ function calculateVisibility() {
     const p1StatusEl = document.getElementById('p1-area2-status');
     const p2StatusEl = document.getElementById('p2-area2-status');
     if (p1StatusEl) {
-        p1StatusEl.textContent = p1InArea2 ? 'ONLINE (正常)' : 'COLLAPSE (情報崩壊)';
+        p1StatusEl.textContent = p1InArea2
+            ? `ONLINE (${informationCollapseTurns[1]}/${INFORMATION_COLLAPSE_TURN_LIMIT})`
+            : `COLLAPSE (${informationCollapseTurns[1]}/${INFORMATION_COLLAPSE_TURN_LIMIT})`;
         p1StatusEl.className = p1InArea2 ? 'status-val text-cyan' : 'status-val text-gold';
     }
     if (p2StatusEl) {
-        p2StatusEl.textContent = p2InArea2 ? 'ONLINE (正常)' : 'COLLAPSE (情報崩壊)';
+        p2StatusEl.textContent = p2InArea2
+            ? `ONLINE (${informationCollapseTurns[2]}/${INFORMATION_COLLAPSE_TURN_LIMIT})`
+            : `COLLAPSE (${informationCollapseTurns[2]}/${INFORMATION_COLLAPSE_TURN_LIMIT})`;
         p2StatusEl.className = p2InArea2 ? 'status-val text-magenta' : 'status-val text-gold';
     }
 
@@ -6244,6 +6260,25 @@ function shouldHideAiActionFeedback(player = currentPlayer) {
     return vsAI && !onlineMode && player === 2;
 }
 
+function countInformationCollapseTurn(player) {
+    const hasArea2Unit = units.some(unit => unit.player === player && unit.map === 'area2');
+    if (hasArea2Unit) return false;
+
+    informationCollapseTurns[player] = Math.min(
+        INFORMATION_COLLAPSE_TURN_LIMIT,
+        Number(informationCollapseTurns[player] || 0) + 1
+    );
+    addConsoleLog(
+        `INFORMATION COLLAPSE: Player ${player} ${informationCollapseTurns[player]}/${INFORMATION_COLLAPSE_TURN_LIMIT}`,
+        'destroy'
+    );
+
+    if (informationCollapseTurns[player] < INFORMATION_COLLAPSE_TURN_LIMIT) return false;
+    const winner = player === 1 ? 2 : 1;
+    triggerWin(winner, false, 'information-collapse');
+    return true;
+}
+
 function endTurn() {
     cancelSelection();
     if (isGameOver) return;
@@ -6269,6 +6304,8 @@ function endTurn() {
     updateFlagCarrierSurvival(currentPlayer);
 
     saveTurnVision();
+
+    if (countInformationCollapseTurn(currentPlayer)) return;
 
     if (currentPlayer === 1 && p1ClairvoyanceDir) {
         p1ClairvoyanceAge++;
@@ -6382,6 +6419,7 @@ function getScoutLimit(player) {
 
 // --- WIN / LOSE ---
 function triggerWin(winnerId, fromOnline = false, reason = 'core') {
+    if (isGameOver) return;
     isGameOver = true;
     resetDrawRequests();
     const subtitleEl = document.getElementById('game-over-subtitle');
@@ -6398,15 +6436,19 @@ function triggerWin(winnerId, fromOnline = false, reason = 'core') {
         setGameOverTitle('VICTORY', winnerId === 1 ? 'cyan' : 'magenta');
         subtitleEl.textContent = reason === 'forfeit'
             ? '対戦相手のコアが自壊しました。'
-            : `PLAYER ${winnerId} が敵のコア領域を完全破壊し、勝利を収めました。`;
+            : (reason === 'information-collapse'
+                ? '対戦相手の情報崩壊が累積15ターンに達しました。'
+                : `PLAYER ${winnerId} が敵のコア領域を完全破壊し、勝利を収めました。`);
         addConsoleLog(`SYSTEM OVERRIDE: PLAYER ${winnerId} VICTORY. ENEMY CORE PURGED.`, 'system');
     } else {
         setGameOverTitle('DEFEAT', winnerId === 1 ? 'cyan' : 'magenta');
         subtitleEl.textContent = reason === 'forfeit'
             ? '自身のコアを自壊しました。'
-            : (vsAI
-                ? '対戦AI (RED) によって自軍コアが崩壊しました。'
-                : `PLAYER ${winnerId} が敵のコア領域を完全破壊し、勝利を収めました。`);
+            : (reason === 'information-collapse'
+                ? '自軍の情報崩壊が累積15ターンに達しました。'
+                : (vsAI
+                    ? '対戦AI (RED) によって自軍コアが崩壊しました。'
+                    : `PLAYER ${winnerId} が敵のコア領域を完全破壊し、勝利を収めました。`));
         addConsoleLog(`SYSTEM OVERRIDE: PLAYER ${winnerId} VICTORY. HOME CORE PURGED.`, 'system');
     }
 
@@ -6414,7 +6456,7 @@ function triggerWin(winnerId, fromOnline = false, reason = 'core') {
     document.getElementById('game-over-overlay').classList.remove('hidden');
     recordMatchReplayEvent({ kind: 'result', winner: winnerId, reason });
     submitMatchHistory(reason, winnerId);
-    if (onlineMode && !fromOnline) sendOnlineMessage({ kind: 'win', winner: winnerId });
+    if (onlineMode && !fromOnline) sendOnlineMessage({ kind: 'win', winner: winnerId, reason });
     if (onlineMode) expireOnlineMatchSession();
     if (onlineMode && activePhase !== 'battle' && !isRandomMatchRoom()) {
         resetOnlineMatchmakingState(true);
@@ -6514,6 +6556,7 @@ function resetToSetup(fromOnline = false) {
     clairvoyanceZoneSerial = 0;
     clairvoyanceCooldownByPlayer = { 1: 0, 2: 0 };
     playerKillCounts = { 1: 0, 2: 0 };
+    informationCollapseTurns = { 1: 0, 2: 0 };
     resetDrawRequests();
 
     boards = { area1: [], area2: [], area3: [] };
