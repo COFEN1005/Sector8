@@ -385,6 +385,20 @@ header {
     box-sizing: border-box;
 }
 
+#game-over-overlay {
+    align-items: flex-start;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    box-sizing: border-box;
+    padding: max(0.5rem, env(safe-area-inset-top)) 0.5rem max(0.75rem, env(safe-area-inset-bottom));
+}
+
+#game-over-overlay:not(.replay-active) .modal {
+    flex: 0 0 auto;
+    margin: auto;
+}
+
 .match-summary-capture-row {
     display: flex;
     justify-content: space-between;
@@ -567,14 +581,46 @@ header {
 
 @media (max-width: 700px) {
     #game-over-overlay .modal {
-        width: calc(100vw - 1rem);
-        max-width: calc(100vw - 1rem);
-        padding: 1.2rem;
+        width: 100%;
+        max-width: 100%;
+        padding: 0.85rem;
     }
 
     .summary-stats,
     .summary-capture-grid {
         grid-template-columns: 1fr;
+    }
+
+    #game-over-overlay:not(.replay-active) .game-summary-panel {
+        margin-top: 0.5rem;
+        padding: 0.65rem;
+    }
+
+    #game-over-overlay:not(.replay-active) .summary-capture-grid {
+        gap: 0.5rem;
+        margin-top: 0.6rem;
+    }
+
+    #game-over-overlay:not(.replay-active) .summary-capture-card {
+        padding: 0.55rem;
+    }
+
+    #game-over-overlay:not(.replay-active) .summary-capture-list {
+        max-height: 7rem;
+    }
+
+    #game-over-overlay:not(.replay-active) .modal-buttons {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 0.5rem;
+        width: 100%;
+        margin-top: 0.7rem;
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    #game-over-overlay:not(.replay-active) .modal-buttons .neon-btn {
+        width: 100%;
+        min-height: 46px;
     }
 
     .replay-viewer {
