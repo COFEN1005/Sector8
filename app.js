@@ -21,7 +21,14 @@ const MAP_SIZES = {
 };
 const FIXED_MAP_PRESET_STORAGE_KEY = 'sector8-fixed-map-preset-v1';
 const MAP_SOURCE_STORAGE_KEY = 'sector8-map-source-mode-v2';
-const FIXED_MAP_BUNDLE_URL = 'sector8-map1.json';
+const FIXED_MAP_BUNDLE_URLS = {
+    fixed1: 'sector8-map1.json',
+    fixed2: 'sector8-map2.json'
+};
+const BUNDLED_FIXED_MAP_PRESETS = {
+    fixed1: window.SECTOR8_FIXED_MAP_PRESET || window.__SECTOR8_FIXED_MAP_PRESET || null,
+    fixed2: window.SECTOR8_FIXED_MAP_PRESET_2 || null
+};
 
 const PORTAL_COLS = [0, 1, 9, 10];
 const WALLS_PER_MAP = 12;
@@ -195,7 +202,7 @@ let currentMatchStartedAt = 0;
 let currentMatchStartProfile = null;
 let currentMatchOpponentStartProfile = null;
 let currentMatchRecord = null;
-let mapSourceMode = 'fixed';
+let mapSourceMode = 'fixed1';
 let fixedMapPreset = null;
 const REPLAY_FEATURE_ENABLED = true;
 let currentMatchReplay = null;
@@ -2578,7 +2585,9 @@ function withReplayRenderState(snapshotState, callback) {
         2: Number(snapshotState.playerKillCounts?.[2] || 0)
     };
     gameMode = snapshotState.gameMode || gameMode;
-    mapSourceMode = snapshotState.mapSourceMode === 'random' ? 'random' : (snapshotState.mapSourceMode === 'fixed' ? 'fixed' : mapSourceMode);
+    mapSourceMode = snapshotState.mapSourceMode
+        ? normalizeMapSourceMode(snapshotState.mapSourceMode)
+        : mapSourceMode;
     refreshSmokeCamouflageStates();
 
     try {
@@ -2827,11 +2836,20 @@ function setupUIEventListeners() {
     });
     const mapSourceFixedBtn = document.getElementById('btn-map-source-fixed');
     if (mapSourceFixedBtn) mapSourceFixedBtn.addEventListener('click', () => {
-        setMapSourceMode('fixed');
+        setMapSourceMode('fixed1');
         if (!fixedMapPreset) {
-            showStatusAlert('固定マップがまだ読み込まれていません。', 'warning', 2500);
+            showStatusAlert('FIXED MAP 1を読み込めませんでした。', 'warning', 2500);
         } else {
-            showStatusAlert('マップソースを FIXED に切り替えました。', 'success', 1800);
+            showStatusAlert('マップソースを FIXED MAP 1 に切り替えました。', 'success', 1800);
+        }
+    });
+    const mapSourceFixed2Btn = document.getElementById('btn-map-source-fixed-2');
+    if (mapSourceFixed2Btn) mapSourceFixed2Btn.addEventListener('click', () => {
+        setMapSourceMode('fixed2');
+        if (!fixedMapPreset) {
+            showStatusAlert('FIXED MAP 2を読み込めませんでした。', 'warning', 2500);
+        } else {
+            showStatusAlert('マップソースを FIXED MAP 2 に切り替えました。', 'success', 1800);
         }
     });
     const loadMapPresetBtn = document.getElementById('btn-load-map-preset');
@@ -3692,8 +3710,9 @@ function handleOnlineMessage(message) {
                 onlineMatchTier = message.matchTier === 'normal' ? 'normal' : 'rank';
                 setOnlineMatchTier(onlineMatchTier);
             }
-            if (message.mapSourceMode === 'fixed' || message.mapSourceMode === 'random') {
-                mapSourceMode = message.mapSourceMode;
+            if (['fixed', 'fixed1', 'fixed2', 'random'].includes(message.mapSourceMode)) {
+                mapSourceMode = normalizeMapSourceMode(message.mapSourceMode);
+                fixedMapPreset = loadFixedMapPreset(mapSourceMode);
                 updateMapSourceUI();
             }
             prepareOnlineMatchPreview(Number(message.seed) || hashStringToSeed(matchRoomId || onlineSession?.roomId || 'online'));
@@ -4044,10 +4063,12 @@ function applyRemoteAction(action) {
 
 function startGame(config = null, fromOnline = false) {
     if (onlineMode && localPlayer !== 1 && !fromOnline) return;
-    const requestedMapSourceMode = config?.mapSourceMode === 'random' ? 'random' : (config?.mapSourceMode === 'fixed' ? 'fixed' : mapSourceMode);
+    const requestedMapSourceMode = config?.mapSourceMode
+        ? normalizeMapSourceMode(config.mapSourceMode)
+        : mapSourceMode;
     const mapSourceChanged = requestedMapSourceMode !== mapSourceMode;
     mapSourceMode = requestedMapSourceMode;
-    if (mapSourceMode === 'fixed' && !fixedMapPreset) fixedMapPreset = loadFixedMapPreset();
+    if (mapSourceMode !== 'random') fixedMapPreset = loadFixedMapPreset(mapSourceMode);
     updateMapSourceUI();
     const reusePreview = onlineMode && !mapSourceChanged && onlineMatchPreviewActive && activePhase === 'setup' && boards.area1.length > 0;
 
@@ -4227,8 +4248,10 @@ function normalizeFixedMapPreset(raw) {
     return normalized;
 }
 
-function loadFixedMapPreset() {
-    const fromWindow = normalizeFixedMapPreset(window.SECTOR8_FIXED_MAP_PRESET || window.__SECTOR8_FIXED_MAP_PRESET || null);
+function loadFixedMapPreset(mode = mapSourceMode) {
+    const requestedMode = normalizeMapSourceMode(mode);
+    const bundledPreset = BUNDLED_FIXED_MAP_PRESETS[requestedMode];
+    const fromWindow = normalizeFixedMapPreset(bundledPreset || null);
     if (fromWindow) return fromWindow;
     try {
         const raw = localStorage.getItem(FIXED_MAP_PRESET_STORAGE_KEY);
@@ -4247,6 +4270,7 @@ function saveFixedMapPreset(preset) {
         } else {
             localStorage.removeItem(FIXED_MAP_PRESET_STORAGE_KEY);
             delete window.SECTOR8_FIXED_MAP_PRESET;
+            fixedMapPreset = loadFixedMapPreset(mapSourceMode);
         }
     } catch {}
     updateMapSourceUI();
@@ -4262,13 +4286,20 @@ function setMapSourceMode(mode) {
         addConsoleLog('ONLINE: 対戦成立後はマップ設定を変更できません。', 'warning');
         return;
     }
-    mapSourceMode = mode === 'fixed' ? 'fixed' : 'random';
+    mapSourceMode = normalizeMapSourceMode(mode);
+    fixedMapPreset = mapSourceMode === 'random' ? null : loadFixedMapPreset(mapSourceMode);
     try { localStorage.setItem(MAP_SOURCE_STORAGE_KEY, mapSourceMode); } catch {}
     updateMapSourceUI();
 }
 
 function shouldUseFixedMap() {
-    return mapSourceMode === 'fixed' && Boolean(fixedMapPreset);
+    return mapSourceMode !== 'random' && Boolean(fixedMapPreset);
+}
+
+function normalizeMapSourceMode(mode) {
+    if (mode === 'random') return 'random';
+    if (mode === 'fixed2') return 'fixed2';
+    return 'fixed1';
 }
 
 function applyFixedMapPresetToBoards() {
@@ -4295,9 +4326,9 @@ function applyFixedMapPresetToBoards() {
 function refreshMapSourceModeFromStorage() {
     try {
         const savedMode = localStorage.getItem(MAP_SOURCE_STORAGE_KEY);
-        mapSourceMode = savedMode === 'random' ? 'random' : 'fixed';
+        mapSourceMode = normalizeMapSourceMode(savedMode);
     } catch {
-        mapSourceMode = 'fixed';
+        mapSourceMode = 'fixed1';
     }
     fixedMapPreset = loadFixedMapPreset();
     updateMapSourceUI();
@@ -4306,13 +4337,15 @@ function refreshMapSourceModeFromStorage() {
 function updateMapSourceUI() {
     const randomBtn = document.getElementById('btn-map-source-random');
     const fixedBtn = document.getElementById('btn-map-source-fixed');
+    const fixed2Btn = document.getElementById('btn-map-source-fixed-2');
     const status = document.getElementById('map-source-status');
     if (randomBtn) randomBtn.classList.toggle('active', mapSourceMode === 'random');
-    if (fixedBtn) fixedBtn.classList.toggle('active', mapSourceMode === 'fixed');
+    if (fixedBtn) fixedBtn.classList.toggle('active', mapSourceMode === 'fixed1');
+    if (fixed2Btn) fixed2Btn.classList.toggle('active', mapSourceMode === 'fixed2');
     if (status) {
-        const fixedActive = mapSourceMode === 'fixed';
+        const fixedActive = mapSourceMode !== 'random';
         status.textContent = fixedActive
-            ? (fixedMapPreset ? 'FIXED MAP READY' : 'FIXED MAP NOT LOADED')
+            ? (fixedMapPreset ? `${mapSourceMode === 'fixed2' ? 'FIXED MAP 2' : 'FIXED MAP 1'} READY` : 'FIXED MAP NOT LOADED')
             : 'RANDOM MAP MODE';
     }
 }
@@ -4320,7 +4353,7 @@ function updateMapSourceUI() {
 async function preloadBundledFixedMapPreset() {
     if (fixedMapPreset) return fixedMapPreset;
     try {
-        const response = await fetch(FIXED_MAP_BUNDLE_URL, { cache: 'no-store' });
+        const response = await fetch(FIXED_MAP_BUNDLE_URLS[normalizeMapSourceMode(mapSourceMode)], { cache: 'no-store' });
         if (!response.ok) return null;
         const parsed = await response.json();
         return saveFixedMapPreset(parsed);
@@ -4338,7 +4371,9 @@ async function importMapPresetFromFile(file) {
         showStatusAlert('固定マップの読み込みに失敗しました。', 'warning', 3000);
         return;
     }
-    setMapSourceMode('fixed');
+    mapSourceMode = 'fixed1';
+    try { localStorage.setItem(MAP_SOURCE_STORAGE_KEY, mapSourceMode); } catch {}
+    updateMapSourceUI();
     showStatusAlert('固定マップを読み込みました。', 'success', 2500);
 }
 
