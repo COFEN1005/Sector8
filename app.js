@@ -31,6 +31,10 @@ const BUNDLED_FIXED_MAP_PRESETS = {
     fixed2: window.SECTOR8_FIXED_MAP_PRESET_2 || null
 };
 
+function clamp(value, min, max) {
+    return Math.min(max, Math.max(min, value));
+}
+
 const PORTAL_COLS = [0, 1, 9, 10];
 const WALLS_PER_MAP = 12;
 const SCOUT_REINFORCE_INTERVAL = 10;
