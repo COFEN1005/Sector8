@@ -535,12 +535,7 @@
                                 <button id="btn-dev-apply-minus" class="small-tool-btn" type="button">APPLY -</button>
                                 <button id="btn-dev-delete" class="small-tool-btn danger" type="button">DELETE</button>
                             </div>
-                            <div class="account-hint">MAP SOURCE はデバッグモード時のみ切り替えできます。固定マップを読み込んだときだけ使用できます。</div>
-                            <div class="account-actions">
-                                <button id="btn-map-source-random" class="small-tool-btn" type="button">RANDOM MAP</button>
-                                <button id="btn-map-source-fixed" class="small-tool-btn" type="button">FIXED MAP</button>
-                            </div>
-                            <div id="map-source-status" class="account-status">RANDOM MAP MODE</div>
+                            <div class="account-hint">固定マップJSONを読み込み、FIXED MAPで使用する盤面を開発用に差し替えます。</div>
                             <div class="account-actions">
                                 <button id="btn-load-map-preset" class="small-tool-btn" type="button">LOAD MAP FILE</button>
                                 <button id="btn-clear-map-preset" class="small-tool-btn danger" type="button">CLEAR PRESET</button>
@@ -555,6 +550,15 @@
                         <button id="tab-mode-debug" class="mode-tab hidden" onclick="setModeTab('debug')">DEBUG</button>
                         <button id="tab-mode-local" class="mode-tab active" onclick="setModeTab('local')">👥 オフライン</button>
                         <button id="tab-mode-online" class="mode-tab" onclick="setModeTab('online')">🌐 オンライン</button>
+                    </div>
+
+                    <div class="config-group map-source-group">
+                        <label>MAP</label>
+                        <div class="toggle-group">
+                            <button id="btn-map-source-fixed" class="toggle-btn active" type="button">FIXED MAP 1</button>
+                            <button id="btn-map-source-random" class="toggle-btn" type="button">RANDOM MAP</button>
+                        </div>
+                        <div id="map-source-status" class="account-status">FIXED MAP READY</div>
                     </div>
 
                     <!-- Local / AI panel -->

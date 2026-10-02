@@ -1,7 +1,7 @@
 {
   "version": 5,
   "type": "sector8-fixed-map-preset",
-  "createdAt": "2026-06-09T16:05:43.275Z",
+  "createdAt": "2026-10-02T10:14:17.837Z",
   "rules": {
     "teleport": {
       "syncMode": "pair",
@@ -36,7 +36,7 @@
           },
           {
             "terrain": "wall",
-            "teleportGroup": null
+            "teleportGroup": 1
           },
           {
             "terrain": "teleport",
@@ -44,7 +44,7 @@
           },
           {
             "terrain": "wall",
-            "teleportGroup": null
+            "teleportGroup": 1
           },
           {
             "terrain": null,
@@ -82,7 +82,7 @@
           },
           {
             "terrain": "wall",
-            "teleportGroup": null
+            "teleportGroup": 1
           },
           {
             "terrain": null,
@@ -90,7 +90,7 @@
           },
           {
             "terrain": "wall",
-            "teleportGroup": null
+            "teleportGroup": 1
           },
           {
             "terrain": null,
@@ -124,7 +124,7 @@
           },
           {
             "terrain": "wall",
-            "teleportGroup": null
+            "teleportGroup": 1
           },
           {
             "terrain": null,
@@ -140,7 +140,7 @@
           },
           {
             "terrain": "wall",
-            "teleportGroup": null
+            "teleportGroup": 1
           },
           {
             "terrain": null,
@@ -250,47 +250,47 @@
         [
           {
             "terrain": "wall",
-            "teleportGroup": null
-          },
-          {
-            "terrain": "wall",
-            "teleportGroup": null
-          },
-          {
-            "terrain": null,
-            "teleportGroup": 1
-          },
-          {
-            "terrain": null,
-            "teleportGroup": 1
-          },
-          {
-            "terrain": null,
-            "teleportGroup": 1
-          },
-          {
-            "terrain": null,
-            "teleportGroup": 1
-          },
-          {
-            "terrain": null,
-            "teleportGroup": 1
-          },
-          {
-            "terrain": null,
-            "teleportGroup": 1
-          },
-          {
-            "terrain": null,
             "teleportGroup": 1
           },
           {
             "terrain": "wall",
-            "teleportGroup": null
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
           },
           {
             "terrain": "wall",
-            "teleportGroup": null
+            "teleportGroup": 1
+          },
+          {
+            "terrain": "wall",
+            "teleportGroup": 1
           }
         ],
         [
@@ -316,7 +316,7 @@
           },
           {
             "terrain": "wall",
-            "teleportGroup": null
+            "teleportGroup": 1
           },
           {
             "terrain": null,
@@ -362,7 +362,7 @@
           },
           {
             "terrain": "wall",
-            "teleportGroup": null
+            "teleportGroup": 1
           },
           {
             "terrain": null,
@@ -480,7 +480,7 @@
         [
           {
             "terrain": "wall",
-            "teleportGroup": null
+            "teleportGroup": 1
           },
           {
             "terrain": null,
@@ -520,7 +520,7 @@
           },
           {
             "terrain": "wall",
-            "teleportGroup": null
+            "teleportGroup": 1
           }
         ]
       ],
@@ -647,7 +647,7 @@
           },
           {
             "terrain": "wall",
-            "teleportGroup": null
+            "teleportGroup": 1
           },
           {
             "terrain": null,
@@ -689,11 +689,11 @@
           },
           {
             "terrain": "wall",
-            "teleportGroup": null
+            "teleportGroup": 1
           },
           {
             "terrain": null,
-            "teleportGroup": null
+            "teleportGroup": 1
           },
           {
             "terrain": null,
@@ -723,7 +723,7 @@
         [
           {
             "terrain": null,
-            "teleportGroup": null
+            "teleportGroup": 1
           },
           {
             "terrain": null,
@@ -731,14 +731,6 @@
           },
           {
             "terrain": "wall",
-            "teleportGroup": null
-          },
-          {
-            "terrain": null,
-            "teleportGroup": null
-          },
-          {
-            "terrain": null,
             "teleportGroup": 1
           },
           {
@@ -763,7 +755,15 @@
           },
           {
             "terrain": null,
-            "teleportGroup": null
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
           }
         ],
         [
@@ -777,7 +777,7 @@
           },
           {
             "terrain": null,
-            "teleportGroup": null
+            "teleportGroup": 1
           },
           {
             "terrain": null,
@@ -789,10 +789,6 @@
           },
           {
             "terrain": "wall",
-            "teleportGroup": null
-          },
-          {
-            "terrain": null,
             "teleportGroup": 1
           },
           {
@@ -801,7 +797,11 @@
           },
           {
             "terrain": null,
-            "teleportGroup": null
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
           },
           {
             "terrain": null,
@@ -815,10 +815,6 @@
         [
           {
             "terrain": null,
-            "teleportGroup": null
-          },
-          {
-            "terrain": null,
             "teleportGroup": 1
           },
           {
@@ -843,11 +839,15 @@
           },
           {
             "terrain": null,
-            "teleportGroup": null
+            "teleportGroup": 1
+          },
+          {
+            "terrain": null,
+            "teleportGroup": 1
           },
           {
             "terrain": "wall",
-            "teleportGroup": null
+            "teleportGroup": 1
           },
           {
             "terrain": null,
@@ -855,7 +855,7 @@
           },
           {
             "terrain": null,
-            "teleportGroup": null
+            "teleportGroup": 1
           }
         ],
         [
@@ -885,11 +885,11 @@
           },
           {
             "terrain": null,
-            "teleportGroup": null
+            "teleportGroup": 1
           },
           {
             "terrain": "wall",
-            "teleportGroup": null
+            "teleportGroup": 1
           },
           {
             "terrain": null,
@@ -931,7 +931,7 @@
           },
           {
             "terrain": "wall",
-            "teleportGroup": null
+            "teleportGroup": 1
           },
           {
             "terrain": null,
@@ -1216,7 +1216,7 @@
           },
           {
             "terrain": "wall",
-            "teleportGroup": null
+            "teleportGroup": 1
           },
           {
             "terrain": null,
@@ -1262,7 +1262,7 @@
           },
           {
             "terrain": "wall",
-            "teleportGroup": null
+            "teleportGroup": 1
           },
           {
             "terrain": null,
@@ -1526,7 +1526,7 @@
           },
           {
             "terrain": null,
-            "teleportGroup": null
+            "teleportGroup": 1
           },
           {
             "terrain": null,

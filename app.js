@@ -20,7 +20,7 @@ const MAP_SIZES = {
     area3: { rows: 11, cols: 11 }
 };
 const FIXED_MAP_PRESET_STORAGE_KEY = 'sector8-fixed-map-preset-v1';
-const MAP_SOURCE_STORAGE_KEY = 'sector8-map-source-mode-v1';
+const MAP_SOURCE_STORAGE_KEY = 'sector8-map-source-mode-v2';
 const FIXED_MAP_BUNDLE_URL = 'sector8-map1.json';
 
 const PORTAL_COLS = [0, 1, 9, 10];
@@ -48,6 +48,23 @@ const LAST_PLAYER_ID_STORAGE_KEY = 'sector8_last_player_id';
 const UI_SETTINGS_STORAGE_KEY = 'sector8_ui_settings';
 
 function getPortalDestination(mapName, r, c) {
+    const sourceCell = boards?.[mapName]?.[r]?.[c];
+    const teleportGroup = Number(sourceCell?.teleportGroup || 0);
+    if (sourceCell?.isTeleport && teleportGroup > 0) {
+        for (const targetMap of Object.keys(MAP_SIZES)) {
+            const size = MAP_SIZES[targetMap];
+            for (let row = 0; row < size.rows; row++) {
+                for (let col = 0; col < size.cols; col++) {
+                    if (targetMap === mapName && row === r && col === c) continue;
+                    const candidate = boards?.[targetMap]?.[row]?.[col];
+                    if (candidate?.isTeleport && Number(candidate.teleportGroup) === teleportGroup) {
+                        return { map: targetMap, row, col };
+                    }
+                }
+            }
+        }
+    }
+
     if (!PORTAL_COLS.includes(c)) return null;
 
     if (mapName === 'area1' && r === 0) {
@@ -178,7 +195,7 @@ let currentMatchStartedAt = 0;
 let currentMatchStartProfile = null;
 let currentMatchOpponentStartProfile = null;
 let currentMatchRecord = null;
-let mapSourceMode = 'random';
+let mapSourceMode = 'fixed';
 let fixedMapPreset = null;
 const REPLAY_FEATURE_ENABLED = true;
 let currentMatchReplay = null;
@@ -540,7 +557,8 @@ function createMatchRecordBase() {
         config: {
             p1Ability,
             p2Ability,
-            seed: gameSeed
+            seed: gameSeed,
+            mapSourceMode
         },
         firstPlayer: currentPlayer,
         startProfile: authProfile ? {
@@ -569,7 +587,8 @@ function createMatchReplayBase() {
         config: {
             p1Ability,
             p2Ability,
-            seed: gameSeed
+            seed: gameSeed,
+            mapSourceMode
         },
         events: [],
         snapshots: []
@@ -2411,6 +2430,7 @@ function serializeReplaySnapshot(label = null) {
         activeMap,
         viewerPlayer: getViewerPlayer(),
         gameMode,
+        mapSourceMode,
         p1Ability,
         p2Ability,
         playerKillCounts: { ...playerKillCounts },
@@ -2536,7 +2556,8 @@ function withReplayRenderState(snapshotState, callback) {
         p1Ability,
         p2Ability,
         playerKillCounts,
-        gameMode
+        gameMode,
+        mapSourceMode
     };
 
     boards = snapshotState.boards;
@@ -2557,6 +2578,7 @@ function withReplayRenderState(snapshotState, callback) {
         2: Number(snapshotState.playerKillCounts?.[2] || 0)
     };
     gameMode = snapshotState.gameMode || gameMode;
+    mapSourceMode = snapshotState.mapSourceMode === 'random' ? 'random' : (snapshotState.mapSourceMode === 'fixed' ? 'fixed' : mapSourceMode);
     refreshSmokeCamouflageStates();
 
     try {
@@ -2577,6 +2599,7 @@ function withReplayRenderState(snapshotState, callback) {
         p2Ability = saved.p2Ability;
         playerKillCounts = saved.playerKillCounts;
         gameMode = saved.gameMode;
+        mapSourceMode = saved.mapSourceMode;
         refreshSmokeCamouflageStates();
     }
 }
@@ -3520,7 +3543,8 @@ function startOnlineBattle() {
         p2Ability: normalizeAbilityChoice(onlineAbilityChoices[2], '監視'),
         seed: gameSeed || hashStringToSeed(matchRoomId || onlineSession?.roomId || 'online'),
         matchType: getCurrentMatchType(),
-        matchKey: createOnlineMatchKey()
+        matchKey: createOnlineMatchKey(),
+        mapSourceMode
     };
 
     if (onlineMode && (!onlineAbilityChoices[1] || !onlineAbilityChoices[2])) {
@@ -3586,7 +3610,7 @@ function handleOnlineMessage(message) {
             if (localPlayer === 1) {
                 const previewSeed = hashStringToSeed(`${message.roomId || matchRoomId || onlineSession?.roomId || 'online'}:${Date.now()}`);
                 prepareOnlineMatchPreview(previewSeed);
-                sendOnlineMessage({ kind: 'preview_seed', seed: previewSeed, matchTier: getOnlineMatchTier() });
+                sendOnlineMessage({ kind: 'preview_seed', seed: previewSeed, matchTier: getOnlineMatchTier(), mapSourceMode });
             }
         }
         if (message.snapshot?.started && activePhase !== 'battle') {
@@ -3645,7 +3669,7 @@ function handleOnlineMessage(message) {
         if (onlineMode && !onlineMatchPreviewActive && localPlayer === 1) {
             const previewSeed = hashStringToSeed(`${matchRoomId || onlineSession?.roomId || 'online'}:${Date.now()}`);
             prepareOnlineMatchPreview(previewSeed);
-            sendOnlineMessage({ kind: 'preview_seed', seed: previewSeed, matchTier: getOnlineMatchTier() });
+            sendOnlineMessage({ kind: 'preview_seed', seed: previewSeed, matchTier: getOnlineMatchTier(), mapSourceMode });
         }
         updateMatchmakingPlayerSummary();
         updateOnlineStartAvailability();
@@ -3667,6 +3691,10 @@ function handleOnlineMessage(message) {
             if (message.matchTier) {
                 onlineMatchTier = message.matchTier === 'normal' ? 'normal' : 'rank';
                 setOnlineMatchTier(onlineMatchTier);
+            }
+            if (message.mapSourceMode === 'fixed' || message.mapSourceMode === 'random') {
+                mapSourceMode = message.mapSourceMode;
+                updateMapSourceUI();
             }
             prepareOnlineMatchPreview(Number(message.seed) || hashStringToSeed(matchRoomId || onlineSession?.roomId || 'online'));
         }
@@ -4016,7 +4044,12 @@ function applyRemoteAction(action) {
 
 function startGame(config = null, fromOnline = false) {
     if (onlineMode && localPlayer !== 1 && !fromOnline) return;
-    const reusePreview = onlineMode && onlineMatchPreviewActive && activePhase === 'setup' && boards.area1.length > 0;
+    const requestedMapSourceMode = config?.mapSourceMode === 'random' ? 'random' : (config?.mapSourceMode === 'fixed' ? 'fixed' : mapSourceMode);
+    const mapSourceChanged = requestedMapSourceMode !== mapSourceMode;
+    mapSourceMode = requestedMapSourceMode;
+    if (mapSourceMode === 'fixed' && !fixedMapPreset) fixedMapPreset = loadFixedMapPreset();
+    updateMapSourceUI();
+    const reusePreview = onlineMode && !mapSourceChanged && onlineMatchPreviewActive && activePhase === 'setup' && boards.area1.length > 0;
 
     if (onlineMode) {
         if (!reusePreview && localPlayer) {
@@ -4115,7 +4148,7 @@ function startGame(config = null, fromOnline = false) {
     updateAudioButtons();
 
     if (onlineMode && !fromOnline) {
-        sendOnlineMessage({ kind: 'start', config: { p1Ability, p2Ability, seed: gameSeed, matchKey: currentMatchKey } });
+        sendOnlineMessage({ kind: 'start', config: { p1Ability, p2Ability, seed: gameSeed, matchKey: currentMatchKey, mapSourceMode } });
     }
 }
 
@@ -4221,8 +4254,12 @@ function saveFixedMapPreset(preset) {
 }
 
 function setMapSourceMode(mode) {
-    if (mode === 'fixed' && !developModeEnabled) {
-        showStatusAlert('固定マップはデバッグモードでのみ使えます。', 'warning', 2500);
+    if (onlineMode && localPlayer && localPlayer !== 1) {
+        addConsoleLog('ONLINE: マップ設定は Player 1 が管理します。', 'warning');
+        return;
+    }
+    if (onlineMode && onlineMatchPreviewActive && activePhase === 'setup') {
+        addConsoleLog('ONLINE: 対戦成立後はマップ設定を変更できません。', 'warning');
         return;
     }
     mapSourceMode = mode === 'fixed' ? 'fixed' : 'random';
@@ -4231,7 +4268,7 @@ function setMapSourceMode(mode) {
 }
 
 function shouldUseFixedMap() {
-    return developModeEnabled && mapSourceMode === 'fixed' && Boolean(fixedMapPreset);
+    return mapSourceMode === 'fixed' && Boolean(fixedMapPreset);
 }
 
 function applyFixedMapPresetToBoards() {
@@ -4258,9 +4295,9 @@ function applyFixedMapPresetToBoards() {
 function refreshMapSourceModeFromStorage() {
     try {
         const savedMode = localStorage.getItem(MAP_SOURCE_STORAGE_KEY);
-        mapSourceMode = savedMode === 'fixed' ? 'fixed' : 'random';
+        mapSourceMode = savedMode === 'random' ? 'random' : 'fixed';
     } catch {
-        mapSourceMode = 'random';
+        mapSourceMode = 'fixed';
     }
     fixedMapPreset = loadFixedMapPreset();
     updateMapSourceUI();
@@ -4273,7 +4310,7 @@ function updateMapSourceUI() {
     if (randomBtn) randomBtn.classList.toggle('active', mapSourceMode === 'random');
     if (fixedBtn) fixedBtn.classList.toggle('active', mapSourceMode === 'fixed');
     if (status) {
-        const fixedActive = developModeEnabled && mapSourceMode === 'fixed';
+        const fixedActive = mapSourceMode === 'fixed';
         status.textContent = fixedActive
             ? (fixedMapPreset ? 'FIXED MAP READY' : 'FIXED MAP NOT LOADED')
             : 'RANDOM MAP MODE';
@@ -4301,9 +4338,7 @@ async function importMapPresetFromFile(file) {
         showStatusAlert('固定マップの読み込みに失敗しました。', 'warning', 3000);
         return;
     }
-    if (developModeEnabled) {
-        setMapSourceMode('fixed');
-    }
+    setMapSourceMode('fixed');
     showStatusAlert('固定マップを読み込みました。', 'success', 2500);
 }
 
@@ -4370,6 +4405,8 @@ function placeArea2Frontline(player, lineup, rng) {
     const candidates = [];
     rows.forEach(row => {
         for (let col = 0; col < MAP_SIZES.area2.cols; col++) {
+            const cell = boards.area2[row][col];
+            if (cell.isWall || cell.isTeleport || cell.isCoreTile || cell.unit) continue;
             candidates.push({ row, col });
         }
     });
