@@ -1758,6 +1758,19 @@ function clearOnlineSession() {
     try { window.localStorage.removeItem(ONLINE_SESSION_STORAGE_KEY); } catch {}
 }
 
+function clearOnlineJoinUrl() {
+    try {
+        const cleanUrl = new URL(window.location.href);
+        ['online', 'player', 'room', 'token'].forEach(key => cleanUrl.searchParams.delete(key));
+        window.history.replaceState({}, '', `${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`);
+    } catch {}
+}
+
+function expireOnlineMatchSession() {
+    clearOnlineSession();
+    clearOnlineJoinUrl();
+}
+
 function deactivateOnlineMode(clearSession = true) {
     manualDisconnect = true;
     if (onlineSocket) {
@@ -3490,6 +3503,7 @@ function handleOnlineMessage(message) {
         if (message.snapshot?.ended) {
             activePhase = 'setup';
             isGameOver = false;
+            expireOnlineMatchSession();
             resetOnlineMatchmakingState(true);
             document.getElementById('game-over-overlay')?.classList.add('hidden');
             showMatchmakingPanel();
@@ -6205,7 +6219,7 @@ function triggerWin(winnerId, fromOnline = false, reason = 'core') {
     recordMatchReplayEvent({ kind: 'result', winner: winnerId, reason });
     submitMatchHistory(reason, winnerId);
     if (onlineMode && !fromOnline) sendOnlineMessage({ kind: 'win', winner: winnerId });
-    if (onlineMode) clearOnlineSession();
+    if (onlineMode) expireOnlineMatchSession();
     if (onlineMode && activePhase !== 'battle' && !isRandomMatchRoom()) {
         resetOnlineMatchmakingState(true);
         window.setTimeout(() => {
@@ -6242,7 +6256,7 @@ function triggerDraw(fromOnline = false, reason = 'mutual') {
     recordMatchReplayEvent({ kind: 'result', result: 'draw', reason });
     submitMatchHistory('draw', null);
     if (onlineMode && !fromOnline) sendOnlineMessage({ kind: 'draw', reason });
-    if (onlineMode) clearOnlineSession();
+    if (onlineMode) expireOnlineMatchSession();
     if (onlineMode && activePhase !== 'battle' && !isRandomMatchRoom()) {
         resetOnlineMatchmakingState(true);
         window.setTimeout(() => {
@@ -6272,7 +6286,9 @@ function skipTurn() {
 }
 
 function resetToSetup(fromOnline = false) {
+    const completedOnlineMatch = onlineMode && isGameOver;
     activePhase = 'setup';
+    isGameOver = false;
     document.getElementById('game-over-overlay').classList.add('hidden');
     document.getElementById('game-info-panel').classList.add('hidden');
     document.getElementById('online-prebattle-panel')?.classList.add('hidden');
@@ -6313,6 +6329,14 @@ function resetToSetup(fromOnline = false) {
     clearStatusAlert();
     addConsoleLog("SYSTEM REBOOTED. STANDBY FOR CONFIGURATION...", 'system');
     updateLobbyPlayerCard();
+
+    if (completedOnlineMatch) {
+        deactivateOnlineMode(true);
+        clearOnlineJoinUrl();
+        showMatchmakingPanel();
+        setMatchmakingStatus('対局を終了しました。新しい対局を開始してください。', 'system');
+        return;
+    }
 
     if (onlineMode && !fromOnline) sendOnlineMessage({ kind: 'reset' });
 }

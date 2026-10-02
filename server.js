@@ -355,6 +355,7 @@ function trackRoomState(room, message, senderInfo) {
         return;
     }
     if (message.kind === 'reset') {
+        if (room.ended) return;
         room.started = false;
         room.ended = false;
         room.startConfig = null;
