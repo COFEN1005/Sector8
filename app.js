@@ -4722,7 +4722,8 @@ function hasOpaqueLineOfSight(mapName, fromRow, fromCol, toRow, toCol) {
         const col = Math.round(fromCol + (toCol - fromCol) * t);
         if (row === fromRow && col === fromCol) continue;
         if (row === toRow && col === toCol) continue;
-        if (boards[mapName][row]?.[col]?.isWall) return false;
+        const cell = boards[mapName][row]?.[col];
+        if (cell?.isWall || cell?.unit) return false;
     }
     return true;
 }
