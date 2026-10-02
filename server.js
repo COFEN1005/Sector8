@@ -46,6 +46,7 @@ function createRoom(roomId, random = false) {
         random,
         randomTier: null,
         started: false,
+        ended: false,
         startConfig: null,
         history: [],
         profiles: { 1: null, 2: null },
@@ -71,6 +72,7 @@ function roomSockets(room) {
 function getRoomSnapshot(room) {
     return {
         started: room.started,
+        ended: room.ended,
         config: room.startConfig,
         history: room.history,
         profiles: room.profiles,
@@ -244,7 +246,7 @@ function roomHasLiveConnections(room) {
 
 function cleanupRoomIfEmpty(room) {
     if (roomHasLiveConnections(room)) return;
-    if (!room.started) {
+    if (!room.started || room.ended) {
         if (pendingRandomRoomId === room.id) pendingRandomRoomId = null;
         if (room.randomTier && pendingRandomRoomIds[room.randomTier] === room.id) pendingRandomRoomIds[room.randomTier] = null;
         rooms.delete(room.id);
@@ -347,12 +349,14 @@ function joinRandomRoom(socket, token, matchTier = 'rank') {
 function trackRoomState(room, message, senderInfo) {
     if (message.kind === 'start') {
         room.started = true;
+        room.ended = false;
         room.startConfig = message.config;
         room.history = [];
         return;
     }
     if (message.kind === 'reset') {
         room.started = false;
+        room.ended = false;
         room.startConfig = null;
         room.history = [];
         return;
@@ -368,8 +372,11 @@ function trackRoomState(room, message, senderInfo) {
         sendRoomProfiles(room);
         return;
     }
-    if (room.started && (message.kind === 'action' || message.kind === 'forfeit' || message.kind === 'win' || message.kind === 'draw' || message.kind === 'draw_request')) {
+    if (room.started && !room.ended && (message.kind === 'action' || message.kind === 'forfeit' || message.kind === 'win' || message.kind === 'draw' || message.kind === 'draw_request')) {
         room.history.push(message);
+        if (message.kind === 'forfeit' || message.kind === 'win' || message.kind === 'draw') {
+            room.ended = true;
+        }
     }
 }
 
