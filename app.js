@@ -2659,7 +2659,7 @@ function setupUIEventListeners() {
     document.getElementById('btn-skip-turn')?.addEventListener('click', skipTurn);
     document.getElementById('btn-draw')?.addEventListener('click', requestDraw);
     document.getElementById('btn-forfeit')?.addEventListener('click', forfeitGame);
-    document.getElementById('btn-restart')?.addEventListener('click', resetToSetup);
+    document.getElementById('btn-restart')?.addEventListener('click', () => resetToSetup(false));
     const replayMatchBtn = document.getElementById('btn-replay-match');
     if (replayMatchBtn) replayMatchBtn.addEventListener('click', () => {
         const source = replayPlaybackSource || activeMatchSummaryView;
@@ -6299,6 +6299,7 @@ function resetToSetup(fromOnline = false) {
     document.getElementById('board').innerHTML = '';
     clearStatusAlert();
     addConsoleLog("SYSTEM REBOOTED. STANDBY FOR CONFIGURATION...", 'system');
+    updateLobbyPlayerCard();
 
     if (onlineMode && !fromOnline) sendOnlineMessage({ kind: 'reset' });
 }
