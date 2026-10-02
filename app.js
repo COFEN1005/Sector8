@@ -19,6 +19,7 @@ const MAP_SIZES = {
     area2: { rows: 11, cols: 11 },
     area3: { rows: 11, cols: 11 }
 };
+const MAP_ORDER = ['area1', 'area2', 'area3'];
 const FIXED_MAP_PRESET_STORAGE_KEY = 'sector8-fixed-map-preset-v1';
 const MAP_SOURCE_STORAGE_KEY = 'sector8-map-source-mode-v2';
 const FIXED_MAP_BUNDLE_URLS = {
