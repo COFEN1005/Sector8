@@ -2025,6 +2025,14 @@ details li {
     gap: 0.5rem;
 }
 
+.map-source-group .toggle-group {
+    flex-wrap: wrap;
+}
+
+.map-source-group .toggle-btn {
+    flex: 1 1 calc(50% - 0.25rem);
+}
+
 .toggle-btn {
     flex: 1;
     background: rgba(255, 255, 255, 0.02);

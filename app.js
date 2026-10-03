@@ -24,11 +24,13 @@ const FIXED_MAP_PRESET_STORAGE_KEY = 'sector8-fixed-map-preset-v1';
 const MAP_SOURCE_STORAGE_KEY = 'sector8-map-source-mode-v2';
 const FIXED_MAP_BUNDLE_URLS = {
     fixed1: 'sector8-map1.json',
-    fixed2: 'sector8-map2.json'
+    fixed2: 'sector8-map2.json',
+    fixed3: 'sector8-map3.json'
 };
 const BUNDLED_FIXED_MAP_PRESETS = {
     fixed1: window.SECTOR8_FIXED_MAP_PRESET || window.__SECTOR8_FIXED_MAP_PRESET || null,
-    fixed2: window.SECTOR8_FIXED_MAP_PRESET_2 || null
+    fixed2: window.SECTOR8_FIXED_MAP_PRESET_2 || null,
+    fixed3: window.SECTOR8_FIXED_MAP_PRESET_3 || null
 };
 
 function clamp(value, min, max) {
@@ -2867,6 +2869,15 @@ function setupUIEventListeners() {
             showStatusAlert('マップソースを FIXED MAP 2 に切り替えました。', 'success', 1800);
         }
     });
+    const mapSourceFixed3Btn = document.getElementById('btn-map-source-fixed-3');
+    if (mapSourceFixed3Btn) mapSourceFixed3Btn.addEventListener('click', () => {
+        setMapSourceMode('fixed3');
+        if (!fixedMapPreset) {
+            showStatusAlert('FIXED MAP 3を読み込めませんでした。', 'warning', 2500);
+        } else {
+            showStatusAlert('マップソースを FIXED MAP 3 に切り替えました。', 'success', 1800);
+        }
+    });
     const loadMapPresetBtn = document.getElementById('btn-load-map-preset');
     if (loadMapPresetBtn) loadMapPresetBtn.addEventListener('click', () => {
         document.getElementById('map-preset-file-input')?.click();
@@ -3726,7 +3737,7 @@ function handleOnlineMessage(message) {
                 onlineMatchTier = message.matchTier === 'normal' ? 'normal' : 'rank';
                 setOnlineMatchTier(onlineMatchTier);
             }
-            if (['fixed', 'fixed1', 'fixed2', 'random'].includes(message.mapSourceMode)) {
+            if (['fixed', 'fixed1', 'fixed2', 'fixed3', 'random'].includes(message.mapSourceMode)) {
                 mapSourceMode = normalizeMapSourceMode(message.mapSourceMode);
                 fixedMapPreset = loadFixedMapPreset(mapSourceMode);
                 updateMapSourceUI();
@@ -4315,6 +4326,7 @@ function shouldUseFixedMap() {
 
 function normalizeMapSourceMode(mode) {
     if (mode === 'random') return 'random';
+    if (mode === 'fixed3') return 'fixed3';
     if (mode === 'fixed2') return 'fixed2';
     return 'fixed1';
 }
@@ -4355,14 +4367,16 @@ function updateMapSourceUI() {
     const randomBtn = document.getElementById('btn-map-source-random');
     const fixedBtn = document.getElementById('btn-map-source-fixed');
     const fixed2Btn = document.getElementById('btn-map-source-fixed-2');
+    const fixed3Btn = document.getElementById('btn-map-source-fixed-3');
     const status = document.getElementById('map-source-status');
     if (randomBtn) randomBtn.classList.toggle('active', mapSourceMode === 'random');
     if (fixedBtn) fixedBtn.classList.toggle('active', mapSourceMode === 'fixed1');
     if (fixed2Btn) fixed2Btn.classList.toggle('active', mapSourceMode === 'fixed2');
+    if (fixed3Btn) fixed3Btn.classList.toggle('active', mapSourceMode === 'fixed3');
     if (status) {
         const fixedActive = mapSourceMode !== 'random';
         status.textContent = fixedActive
-            ? (fixedMapPreset ? `${mapSourceMode === 'fixed2' ? 'FIXED MAP 2' : 'FIXED MAP 1'} READY` : 'FIXED MAP NOT LOADED')
+            ? (fixedMapPreset ? `FIXED MAP ${mapSourceMode.slice(-1)} READY` : 'FIXED MAP NOT LOADED')
             : 'RANDOM MAP MODE';
     }
 }
