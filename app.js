@@ -22,6 +22,13 @@ const MAP_SIZES = {
 const MAP_ORDER = ['area1', 'area2', 'area3'];
 const FIXED_MAP_PRESET_STORAGE_KEY = 'sector8-fixed-map-preset-v1';
 const MAP_SOURCE_STORAGE_KEY = 'sector8-map-source-mode-v2';
+const FIXED_MAP_STAGE_NAMES = {
+    fixed1: 'ゲート',
+    fixed2: 'ミラージュ',
+    fixed3: 'ディバイド',
+    fixed4: 'シフト',
+    fixed5: 'カプセル'
+};
 const FIXED_MAP_BUNDLE_URLS = {
     fixed1: 'sector8-map1.json',
     fixed2: 'sector8-map2.json',
@@ -2859,45 +2866,45 @@ function setupUIEventListeners() {
     if (mapSourceFixedBtn) mapSourceFixedBtn.addEventListener('click', () => {
         setMapSourceMode('fixed1');
         if (!fixedMapPreset) {
-            showStatusAlert('FIXED MAP 1を読み込めませんでした。', 'warning', 2500);
+            showStatusAlert('ゲートを読み込めませんでした。', 'warning', 2500);
         } else {
-            showStatusAlert('マップソースを FIXED MAP 1 に切り替えました。', 'success', 1800);
+            showStatusAlert('ステージを「ゲート」に切り替えました。', 'success', 1800);
         }
     });
     const mapSourceFixed2Btn = document.getElementById('btn-map-source-fixed-2');
     if (mapSourceFixed2Btn) mapSourceFixed2Btn.addEventListener('click', () => {
         setMapSourceMode('fixed2');
         if (!fixedMapPreset) {
-            showStatusAlert('FIXED MAP 2を読み込めませんでした。', 'warning', 2500);
+            showStatusAlert('ミラージュを読み込めませんでした。', 'warning', 2500);
         } else {
-            showStatusAlert('マップソースを FIXED MAP 2 に切り替えました。', 'success', 1800);
+            showStatusAlert('ステージを「ミラージュ」に切り替えました。', 'success', 1800);
         }
     });
     const mapSourceFixed3Btn = document.getElementById('btn-map-source-fixed-3');
     if (mapSourceFixed3Btn) mapSourceFixed3Btn.addEventListener('click', () => {
         setMapSourceMode('fixed3');
         if (!fixedMapPreset) {
-            showStatusAlert('FIXED MAP 3を読み込めませんでした。', 'warning', 2500);
+            showStatusAlert('ディバイドを読み込めませんでした。', 'warning', 2500);
         } else {
-            showStatusAlert('マップソースを FIXED MAP 3 に切り替えました。', 'success', 1800);
+            showStatusAlert('ステージを「ディバイド」に切り替えました。', 'success', 1800);
         }
     });
     const mapSourceFixed4Btn = document.getElementById('btn-map-source-fixed-4');
     if (mapSourceFixed4Btn) mapSourceFixed4Btn.addEventListener('click', () => {
         setMapSourceMode('fixed4');
         if (!fixedMapPreset) {
-            showStatusAlert('FIXED MAP 4を読み込めませんでした。', 'warning', 2500);
+            showStatusAlert('シフトを読み込めませんでした。', 'warning', 2500);
         } else {
-            showStatusAlert('マップソースを FIXED MAP 4 に切り替えました。', 'success', 1800);
+            showStatusAlert('ステージを「シフト」に切り替えました。', 'success', 1800);
         }
     });
     const mapSourceFixed5Btn = document.getElementById('btn-map-source-fixed-5');
     if (mapSourceFixed5Btn) mapSourceFixed5Btn.addEventListener('click', () => {
         setMapSourceMode('fixed5');
         if (!fixedMapPreset) {
-            showStatusAlert('FIXED MAP 5を読み込めませんでした。', 'warning', 2500);
+            showStatusAlert('カプセルを読み込めませんでした。', 'warning', 2500);
         } else {
-            showStatusAlert('マップソースを FIXED MAP 5 に切り替えました。', 'success', 1800);
+            showStatusAlert('ステージを「カプセル」に切り替えました。', 'success', 1800);
         }
     });
     const loadMapPresetBtn = document.getElementById('btn-load-map-preset');
@@ -4404,7 +4411,7 @@ function updateMapSourceUI() {
     if (status) {
         const fixedActive = mapSourceMode !== 'random';
         status.textContent = fixedActive
-            ? (fixedMapPreset ? `FIXED MAP ${mapSourceMode.slice(-1)} READY` : 'FIXED MAP NOT LOADED')
+            ? (fixedMapPreset ? `${FIXED_MAP_STAGE_NAMES[mapSourceMode] || 'FIXED MAP'} READY` : 'FIXED MAP NOT LOADED')
             : 'RANDOM MAP MODE';
     }
 }
