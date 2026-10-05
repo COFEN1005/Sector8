@@ -418,22 +418,16 @@
                 <div><span class="workspace-kicker">UNIT DEPLOYMENT</span><h2>編成</h2></div>
                 <div id="formation-count" class="formation-count">16 / 16</div>
             </div>
-            <p class="workspace-copy">コマを選択し、配置エリアや順番を変更します。偵察兵はエリア2固定です。</p>
+            <p class="workspace-copy">盤面上のコマを移動して初期配置を保存します。PCはドラッグ、スマホはコマをタップしてから配置先をタップします。</p>
             <div class="formation-zones">
                 <div class="formation-zone cyan-zone">
                     <div class="formation-zone-head"><strong>AREA 1</strong><span>自軍拠点</span></div>
-                    <div id="formation-area1" class="formation-unit-list"></div>
+                    <div id="formation-area1" class="formation-board" aria-label="エリア1編成盤面"></div>
                 </div>
                 <div class="formation-zone purple-zone">
                     <div class="formation-zone-head"><strong>AREA 2</strong><span>中央前線</span></div>
-                    <div id="formation-area2" class="formation-unit-list"></div>
+                    <div id="formation-area2" class="formation-board" aria-label="エリア2編成盤面"></div>
                 </div>
-            </div>
-            <div class="formation-controls glass-panel">
-                <button id="formation-to-area1" class="small-tool-btn" type="button">← AREA 1</button>
-                <button id="formation-move-prev" class="small-tool-btn" type="button">◀ 前へ</button>
-                <button id="formation-move-next" class="small-tool-btn" type="button">後へ ▶</button>
-                <button id="formation-to-area2" class="small-tool-btn" type="button">AREA 2 →</button>
             </div>
             <div class="formation-actions">
                 <button id="formation-reset" class="neon-btn secondary" type="button">DEFAULT</button>

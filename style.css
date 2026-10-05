@@ -176,6 +176,63 @@ header {
     gap: 0.55rem;
 }
 
+.formation-board {
+    display: grid;
+    grid-template-columns: repeat(11, minmax(0, 1fr));
+    gap: 2px;
+    width: 100%;
+    aspect-ratio: 1;
+    padding: 0.35rem;
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 9px;
+    background: rgba(0, 0, 0, 0.32);
+}
+
+.formation-cell {
+    position: relative;
+    min-width: 0;
+    padding: 0;
+    border: 1px solid rgba(255, 255, 255, 0.045);
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.025);
+    color: var(--text-primary);
+}
+
+.formation-cell.deployable {
+    border-color: rgba(0, 240, 255, 0.16);
+    background: rgba(0, 240, 255, 0.045);
+    cursor: pointer;
+}
+
+.formation-cell.locked { opacity: 0.32; }
+.formation-cell.terrain-wall { opacity: 0.75; background: repeating-linear-gradient(135deg, rgba(255,255,255,0.11) 0 3px, rgba(0,0,0,0.2) 3px 6px); }
+.formation-cell.terrain-teleport { opacity: 0.8; border-color: rgba(0, 255, 153, 0.5); background: rgba(0, 255, 153, 0.09); }
+.formation-cell.terrain-core { opacity: 0.8; border-color: rgba(255, 183, 0, 0.5); background: rgba(255, 183, 0, 0.09); }
+
+.formation-piece {
+    position: absolute;
+    inset: 8%;
+    display: grid;
+    place-items: center;
+    border: 1px solid rgba(0, 240, 255, 0.72);
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, rgba(0, 240, 255, 0.34), rgba(2, 18, 28, 0.96) 72%);
+    color: #eaffff;
+    font-size: clamp(0.5rem, 1.25vw, 0.92rem);
+    font-weight: 800;
+    line-height: 1;
+    cursor: grab;
+    box-shadow: 0 0 8px rgba(0, 240, 255, 0.2);
+    z-index: 2;
+}
+
+.formation-piece.selected {
+    border-color: var(--neon-gold);
+    color: var(--neon-gold);
+    box-shadow: 0 0 14px rgba(255, 183, 0, 0.5);
+    transform: scale(1.08);
+}
+
 .formation-unit {
     position: relative;
     min-height: 4.6rem;

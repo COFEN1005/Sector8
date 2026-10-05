@@ -77,17 +77,20 @@ const ONLINE_SESSION_STORAGE_KEY = 'sector8_online_session';
 const AUTH_SESSION_STORAGE_KEY = 'sector8_auth_session';
 const LAST_PLAYER_ID_STORAGE_KEY = 'sector8_last_player_id';
 const UI_SETTINGS_STORAGE_KEY = 'sector8_ui_settings';
-const FORMATION_STORAGE_KEY = 'sector8_formation_v1';
+const FORMATION_STORAGE_KEY = 'sector8_formation_v2';
 const DEFAULT_FORMATION = Object.freeze({
     area1: Object.freeze([
-        { id: 'home_0', type: 'otsu' }, { id: 'home_1', type: 'hei' }, { id: 'home_2', type: 'tei' },
-        { id: 'home_3', type: 'tei' }, { id: 'home_4', type: 'hei' }, { id: 'home_5', type: 'tei' },
-        { id: 'home_6', type: 'tei' }, { id: 'home_7', type: 'hei' }, { id: 'home_8', type: 'otsu' }
+        { id: 'home_0', type: 'otsu', row: 9, col: 1 }, { id: 'home_1', type: 'hei', row: 9, col: 2 },
+        { id: 'home_2', type: 'tei', row: 9, col: 3 }, { id: 'home_3', type: 'tei', row: 9, col: 4 },
+        { id: 'home_4', type: 'hei', row: 9, col: 5 }, { id: 'home_5', type: 'tei', row: 9, col: 6 },
+        { id: 'home_6', type: 'tei', row: 9, col: 7 }, { id: 'home_7', type: 'hei', row: 9, col: 8 },
+        { id: 'home_8', type: 'otsu', row: 9, col: 9 }
     ]),
     area2: Object.freeze([
-        { id: 'scout_1', type: 'scout' }, { id: 'koh', type: 'koh' }, { id: 'front_hei_1', type: 'hei' },
-        { id: 'front_tei_1', type: 'tei' }, { id: 'front_hei_2', type: 'hei' },
-        { id: 'front_tei_2', type: 'tei' }, { id: 'scout_2', type: 'scout' }
+        { id: 'scout_1', type: 'scout', row: 9, col: 2 }, { id: 'koh', type: 'koh', row: 9, col: 3 },
+        { id: 'front_hei_1', type: 'hei', row: 9, col: 4 }, { id: 'front_tei_1', type: 'tei', row: 9, col: 5 },
+        { id: 'front_hei_2', type: 'hei', row: 9, col: 6 }, { id: 'front_tei_2', type: 'tei', row: 9, col: 7 },
+        { id: 'scout_2', type: 'scout', row: 9, col: 8 }
     ])
 });
 
@@ -584,22 +587,37 @@ function cloneDefaultFormation() {
 function normalizeFormation(value) {
     const expected = [...DEFAULT_FORMATION.area1, ...DEFAULT_FORMATION.area2];
     const typeById = new Map(expected.map(unit => [unit.id, unit.type]));
+    const defaultById = new Map(expected.map(unit => [unit.id, unit]));
     const source = value && Array.isArray(value.area1) && Array.isArray(value.area2) ? value : cloneDefaultFormation();
     const all = [...source.area1, ...source.area2];
     const ids = new Set(all.map(unit => unit?.id));
     if (all.length !== expected.length || ids.size !== expected.length || expected.some(unit => !ids.has(unit.id))) {
         return cloneDefaultFormation();
     }
-    const normalizeArea = (area, areaName) => area.map(unit => ({ id: unit.id, type: typeById.get(unit.id) }))
-        .filter(unit => unit.type && !(areaName === 'area1' && unit.type === 'scout'));
+    const normalizeArea = (area, areaName) => area.map(unit => {
+        const fallback = defaultById.get(unit.id) || { row: areaName === 'area1' ? 9 : 9, col: 5 };
+        const rawRow = Number.isInteger(Number(unit.row)) ? Number(unit.row) : fallback.row;
+        const col = Number.isInteger(Number(unit.col)) ? Number(unit.col) : fallback.col;
+        const row = isFormationPresetCellAllowed(areaName, clamp(rawRow, 0, 10), clamp(col, 0, 10)) ? rawRow : fallback.row;
+        return { id: unit.id, type: typeById.get(unit.id), row: clamp(row, 0, 10), col: clamp(col, 0, 10) };
+    }).filter(unit => unit.type && !(areaName === 'area1' && unit.type === 'scout'));
     const normalized = { area1: normalizeArea(source.area1, 'area1'), area2: normalizeArea(source.area2, 'area2') };
     if (normalized.area1.length + normalized.area2.length !== expected.length) return cloneDefaultFormation();
+    const occupied = new Set();
+    for (const areaName of ['area1', 'area2']) {
+        for (const unit of normalized[areaName]) {
+            const key = `${areaName}:${unit.row},${unit.col}`;
+            if (occupied.has(key)) return cloneDefaultFormation();
+            occupied.add(key);
+        }
+    }
     return normalized;
 }
 
 function loadSavedFormation() {
     try {
-        savedFormation = normalizeFormation(JSON.parse(window.localStorage.getItem(FORMATION_STORAGE_KEY) || 'null'));
+        const raw = window.localStorage.getItem(FORMATION_STORAGE_KEY) || window.localStorage.getItem('sector8_formation_v1');
+        savedFormation = normalizeFormation(JSON.parse(raw || 'null'));
     } catch {
         savedFormation = cloneDefaultFormation();
     }
@@ -625,15 +643,31 @@ function renderFormationEditor() {
     ['area1', 'area2'].forEach(area => {
         const container = document.getElementById(`formation-${area}`);
         if (!container) return;
-        container.innerHTML = editingFormation[area].map((unit, index) => `
-            <button class="formation-unit ${selectedFormationUnitId === unit.id ? 'selected' : ''}" type="button" data-unit-id="${unit.id}">
-                <span>${getFormationUnitLabel(unit.type)}</span><small>${unit.type === 'scout' ? 'SCOUT' : unit.type.toUpperCase()}</small><em>${index + 1}</em>
-            </button>
-        `).join('') || '<div class="formation-empty">EMPTY</div>';
+        const unitsByCell = new Map(editingFormation[area].map(unit => [`${unit.row},${unit.col}`, unit]));
+        const mapPreset = fixedMapPreset?.maps?.[area];
+        const cells = [];
+        for (let row = 0; row < 11; row++) {
+            for (let col = 0; col < 11; col++) {
+                const unit = unitsByCell.get(`${row},${col}`);
+                const terrain = mapPreset?.cells?.[row]?.[col]?.terrain || '';
+                const allowed = isFormationPresetCellAllowed(area, row, col) && !['wall', 'teleport', 'core'].includes(terrain);
+                cells.push(`
+                    <button class="formation-cell ${allowed ? 'deployable' : 'locked'} ${terrain ? `terrain-${terrain}` : ''}" type="button"
+                        data-area="${area}" data-row="${row}" data-col="${col}" ${allowed || unit ? '' : 'disabled'}>
+                        ${unit ? `<span class="formation-piece ${selectedFormationUnitId === unit.id ? 'selected' : ''}" draggable="true" data-unit-id="${unit.id}" title="${unit.type}">${getFormationUnitLabel(unit.type)}</span>` : ''}
+                    </button>
+                `);
+            }
+        }
+        container.innerHTML = cells.join('');
     });
     const total = editingFormation.area1.length + editingFormation.area2.length;
     const count = document.getElementById('formation-count');
     if (count) count.textContent = `${total} / 16`;
+}
+
+function isFormationPresetCellAllowed(area, row, col) {
+    return area === 'area1' ? row >= 7 && row <= 9 : row >= 8 && row <= 10;
 }
 
 function findEditingFormationUnit() {
@@ -644,27 +678,75 @@ function findEditingFormationUnit() {
     return null;
 }
 
-function moveFormationUnitTo(targetArea) {
+function moveFormationUnitOnBoard(targetArea, targetRow, targetCol) {
     const found = findEditingFormationUnit();
-    if (!found) return;
+    if (!found || !isFormationPresetCellAllowed(targetArea, targetRow, targetCol)) return;
     if (found.unit.type === 'scout' && targetArea === 'area1') {
-        document.getElementById('formation-status').textContent = '偵察兵はエリア2から移動できません。';
+        document.getElementById('formation-status').textContent = '偵察兵はエリア2へ配置してください。';
         return;
     }
-    if (found.area === targetArea) return;
+    let targetFound = null;
+    for (const area of ['area1', 'area2']) {
+        const index = editingFormation[area].findIndex(unit => unit.row === targetRow && unit.col === targetCol && area === targetArea);
+        if (index >= 0) targetFound = { area, index, unit: editingFormation[area][index] };
+    }
+    if (targetFound?.unit.type === 'scout' && found.area === 'area1') {
+        document.getElementById('formation-status').textContent = '交換すると偵察兵がエリア1へ移動するため配置できません。';
+        return;
+    }
+    const sourcePosition = { area: found.area, row: found.unit.row, col: found.unit.col };
     editingFormation[found.area].splice(found.index, 1);
+    found.unit.row = targetRow;
+    found.unit.col = targetCol;
     editingFormation[targetArea].push(found.unit);
+    if (targetFound) {
+        const currentIndex = editingFormation[targetArea].findIndex(unit => unit.id === targetFound.unit.id);
+        if (currentIndex >= 0) editingFormation[targetArea].splice(currentIndex, 1);
+        targetFound.unit.row = sourcePosition.row;
+        targetFound.unit.col = sourcePosition.col;
+        editingFormation[sourcePosition.area].push(targetFound.unit);
+    }
+    selectedFormationUnitId = null;
+    document.getElementById('formation-status').textContent = '配置を変更しました。SAVEでプリセットを確定します。';
     renderFormationEditor();
 }
 
-function shiftFormationUnit(delta) {
-    const found = findEditingFormationUnit();
-    if (!found) return;
-    const target = Math.max(0, Math.min(editingFormation[found.area].length - 1, found.index + delta));
-    if (target === found.index) return;
-    editingFormation[found.area].splice(found.index, 1);
-    editingFormation[found.area].splice(target, 0, found.unit);
-    renderFormationEditor();
+function handleFormationBoardClick(event) {
+    const piece = event.target.closest('[data-unit-id]');
+    if (piece) {
+        if (selectedFormationUnitId && selectedFormationUnitId !== piece.dataset.unitId) {
+            const targetCell = piece.closest('.formation-cell');
+            moveFormationUnitOnBoard(targetCell.dataset.area, Number(targetCell.dataset.row), Number(targetCell.dataset.col));
+            return;
+        }
+        selectedFormationUnitId = piece.dataset.unitId;
+        document.getElementById('formation-status').textContent = `${piece.textContent.trim()}を選択中。配置先マスをタップしてください。`;
+        renderFormationEditor();
+        return;
+    }
+    const cell = event.target.closest('.formation-cell');
+    if (!cell || cell.disabled || !selectedFormationUnitId) return;
+    moveFormationUnitOnBoard(cell.dataset.area, Number(cell.dataset.row), Number(cell.dataset.col));
+}
+
+function setupFormationBoardInteractions(container) {
+    if (!container) return;
+    container.addEventListener('click', handleFormationBoardClick);
+    container.addEventListener('dragstart', event => {
+        const piece = event.target.closest('[data-unit-id]');
+        if (!piece) return;
+        selectedFormationUnitId = piece.dataset.unitId;
+        event.dataTransfer?.setData('text/plain', selectedFormationUnitId);
+    });
+    container.addEventListener('dragover', event => {
+        if (event.target.closest('.formation-cell.deployable')) event.preventDefault();
+    });
+    container.addEventListener('drop', event => {
+        const cell = event.target.closest('.formation-cell.deployable');
+        if (!cell) return;
+        event.preventDefault();
+        moveFormationUnitOnBoard(cell.dataset.area, Number(cell.dataset.row), Number(cell.dataset.col));
+    });
 }
 
 function setWorkspaceView(view) {
@@ -2892,24 +2974,8 @@ function setupUIEventListeners() {
     document.getElementById('nav-battle')?.addEventListener('click', () => setWorkspaceView('battle'));
     document.getElementById('nav-formation')?.addEventListener('click', () => setWorkspaceView('formation'));
     document.getElementById('nav-options')?.addEventListener('click', () => setWorkspaceView('options'));
-    document.getElementById('formation-area1')?.addEventListener('click', event => {
-        const button = event.target.closest('[data-unit-id]');
-        if (!button) return;
-        selectedFormationUnitId = button.dataset.unitId;
-        document.getElementById('formation-status').textContent = `${button.textContent.trim()} を選択中`;
-        renderFormationEditor();
-    });
-    document.getElementById('formation-area2')?.addEventListener('click', event => {
-        const button = event.target.closest('[data-unit-id]');
-        if (!button) return;
-        selectedFormationUnitId = button.dataset.unitId;
-        document.getElementById('formation-status').textContent = `${button.textContent.trim()} を選択中`;
-        renderFormationEditor();
-    });
-    document.getElementById('formation-to-area1')?.addEventListener('click', () => moveFormationUnitTo('area1'));
-    document.getElementById('formation-to-area2')?.addEventListener('click', () => moveFormationUnitTo('area2'));
-    document.getElementById('formation-move-prev')?.addEventListener('click', () => shiftFormationUnit(-1));
-    document.getElementById('formation-move-next')?.addEventListener('click', () => shiftFormationUnit(1));
+    setupFormationBoardInteractions(document.getElementById('formation-area1'));
+    setupFormationBoardInteractions(document.getElementById('formation-area2'));
     document.getElementById('formation-save')?.addEventListener('click', saveFormation);
     document.getElementById('formation-reset')?.addEventListener('click', () => {
         editingFormation = cloneDefaultFormation();
@@ -4835,9 +4901,25 @@ function getFormationDeploymentCells(player, area) {
 function placePlayerFormation(player, rawFormation) {
     const formation = normalizeFormation(rawFormation);
     ['area1', 'area2'].forEach(area => {
-        const positions = getFormationDeploymentCells(player, area);
-        formation[area].forEach((entry, index) => {
-            const position = positions[index];
+        const availablePositions = getFormationDeploymentCells(player, area);
+        formation[area].forEach(entry => {
+            const desiredRow = player === 1 ? entry.row : 10 - entry.row;
+            const desiredCol = player === 1 ? entry.col : 10 - entry.col;
+            const desiredMap = area === 'area1' ? (player === 1 ? 'area1' : 'area3') : 'area2';
+            let positionIndex = availablePositions.findIndex(position => (
+                position.mapName === desiredMap && position.row === desiredRow && position.col === desiredCol
+            ));
+            if (positionIndex < 0) {
+                let bestDistance = Infinity;
+                availablePositions.forEach((position, index) => {
+                    const distance = Math.abs(position.row - desiredRow) + Math.abs(position.col - desiredCol);
+                    if (distance < bestDistance) {
+                        bestDistance = distance;
+                        positionIndex = index;
+                    }
+                });
+            }
+            const [position] = positionIndex >= 0 ? availablePositions.splice(positionIndex, 1) : [];
             if (!position) return;
             const unit = new Unit(`p${player}_${entry.id}`, entry.type, player, position.mapName, position.row, position.col, area === 'area2');
             addUnitToBoard(unit, position.mapName, position.row, position.col);
