@@ -22,6 +22,7 @@ const MAP_SIZES = {
 const MAP_ORDER = ['area1', 'area2', 'area3'];
 const FIXED_MAP_PRESET_STORAGE_KEY = 'sector8-fixed-map-preset-v1';
 const MAP_SOURCE_STORAGE_KEY = 'sector8-map-source-mode-v2';
+const RANDOM_FIXED_MAP_MODE = 'random-fixed';
 const FIXED_MAP_STAGE_NAMES = {
     fixed1: 'ゲート',
     fixed2: 'ミラージュ',
@@ -30,6 +31,7 @@ const FIXED_MAP_STAGE_NAMES = {
     fixed5: 'カプセル',
     fixed6: 'ラボ'
 };
+const FIXED_MAP_MODES = Object.freeze(Object.keys(FIXED_MAP_STAGE_NAMES));
 const FIXED_MAP_BUNDLE_URLS = {
     fixed1: 'sector8-map1.json',
     fixed2: 'sector8-map2.json',
@@ -226,6 +228,7 @@ let currentMatchStartProfile = null;
 let currentMatchOpponentStartProfile = null;
 let currentMatchRecord = null;
 let mapSourceMode = 'fixed1';
+let mapSelectionMode = 'fixed1';
 let fixedMapPreset = null;
 const REPLAY_FEATURE_ENABLED = true;
 let currentMatchReplay = null;
@@ -313,6 +316,7 @@ let onlineReadyState = { 1: false, 2: false };
 let localUsername = '';
 let onlineUsernames = { 1: null, 2: null };
 let onlineMatchTier = 'rank';
+let onlineMatchTab = 'random';
 let onlineMatchPreviewActive = false;
 let randomMatchAutoStarted = false;
 let privateMatchAutoStarted = false;
@@ -2917,6 +2921,11 @@ function setupUIEventListeners() {
             showStatusAlert('ステージを「ラボ」に切り替えました。', 'success', 1800);
         }
     });
+    const mapSourceRandomBtn = document.getElementById('btn-map-source-random');
+    if (mapSourceRandomBtn) mapSourceRandomBtn.addEventListener('click', () => {
+        setMapSourceMode(RANDOM_FIXED_MAP_MODE);
+        showStatusAlert('対戦開始時に6ステージから抽選します。', 'success', 1800);
+    });
     const loadMapPresetBtn = document.getElementById('btn-load-map-preset');
     if (loadMapPresetBtn) loadMapPresetBtn.addEventListener('click', () => {
         document.getElementById('map-preset-file-input')?.click();
@@ -3125,6 +3134,7 @@ function setGameMode(mode) {
         vsAI = false;
     }
     updateModeVisibility();
+    updateMapSourceAvailability();
 }
 
 window.setGameMode = setGameMode;
@@ -3175,6 +3185,7 @@ function showLocalPanel() {
     document.getElementById('matchmaking-panel').classList.add('hidden');
     document.getElementById('setup-local-panel').classList.remove('hidden');
     updateLobbyPlayerCard();
+    updateMapSourceAvailability();
 }
 
 function resetOnlineMatchmakingState(keepPanel = true) {
@@ -3215,6 +3226,7 @@ function resetOnlineMatchmakingState(keepPanel = true) {
 
 function setOnlineMatchTab(tab, options = {}) {
     const isRandom = tab === 'random';
+    onlineMatchTab = isRandom ? 'random' : 'private';
     if (!isRandom && (matchmakingRole === 'random' || isRandomMatchRoom() || randomQueuePending)) {
         resetOnlineMatchmakingState(true);
     }
@@ -3228,6 +3240,7 @@ function setOnlineMatchTab(tab, options = {}) {
     if (isRandom && !onlineSocket) {
         setMatchmakingStatus(onlineMatchTier === 'rank' ? 'ランクマッチを検索します。' : 'ノーマルマッチを検索します。');
     }
+    updateMapSourceAvailability();
 }
 
 function setOnlineMatchTier(tier) {
@@ -3558,6 +3571,9 @@ function revealAllPreviewVision() {
 function prepareOnlineMatchPreview(seed = null) {
     const previewSeed = Number.isFinite(seed) ? seed : hashStringToSeed(matchRoomId || onlineSession?.roomId || 'online');
     gameSeed = previewSeed;
+    if (localPlayer === 1) {
+        resolveMapSelectionForMatch(previewSeed, isRandomMatchRoom() || matchmakingRole === 'random');
+    }
     onlineMatchPreviewActive = true;
     resetOnlineAutoStartState();
     onlineAbilityChoices = { 1: null, 2: null };
@@ -4129,9 +4145,10 @@ function applyRemoteAction(action) {
 
 function startGame(config = null, fromOnline = false) {
     if (onlineMode && localPlayer !== 1 && !fromOnline) return;
+    gameSeed = config?.seed || Math.floor(Math.random() * 0xFFFFFFFF);
     const requestedMapSourceMode = config?.mapSourceMode
         ? normalizeMapSourceMode(config.mapSourceMode)
-        : mapSourceMode;
+        : resolveMapSelectionForMatch(gameSeed, onlineMode && isRandomMatchRoom());
     const mapSourceChanged = requestedMapSourceMode !== mapSourceMode;
     mapSourceMode = requestedMapSourceMode;
     fixedMapPreset = loadFixedMapPreset(mapSourceMode);
@@ -4148,7 +4165,6 @@ function startGame(config = null, fromOnline = false) {
         p1Ability = normalizeAbilityChoice(config ? config.p1Ability : document.getElementById('p1-ability-choice').value, '千里眼');
         p2Ability = normalizeAbilityChoice(config ? config.p2Ability : document.getElementById('p2-ability-choice').value, '監視');
     }
-    gameSeed = config?.seed || Math.floor(Math.random() * 0xFFFFFFFF);
     vsAI = onlineMode ? false : vsAI;
     startMatchTracking(config);
 
@@ -4353,10 +4369,35 @@ function setMapSourceMode(mode) {
         addConsoleLog('ONLINE: 対戦成立後はマップ設定を変更できません。', 'warning');
         return;
     }
+    mapSelectionMode = normalizeMapSelectionMode(mode);
+    if (mapSelectionMode !== RANDOM_FIXED_MAP_MODE) {
+        applyResolvedMapSourceMode(mapSelectionMode);
+    }
+    try { localStorage.setItem(MAP_SOURCE_STORAGE_KEY, mapSelectionMode); } catch {}
+    updateMapSourceUI();
+}
+
+function normalizeMapSelectionMode(mode) {
+    return mode === RANDOM_FIXED_MAP_MODE ? RANDOM_FIXED_MAP_MODE : normalizeMapSourceMode(mode);
+}
+
+function pickRandomFixedMapMode(seed) {
+    const rng = createRng((Number(seed) || 1) >>> 0);
+    return FIXED_MAP_MODES[Math.floor(rng() * FIXED_MAP_MODES.length)];
+}
+
+function applyResolvedMapSourceMode(mode) {
     mapSourceMode = normalizeMapSourceMode(mode);
     fixedMapPreset = loadFixedMapPreset(mapSourceMode);
-    try { localStorage.setItem(MAP_SOURCE_STORAGE_KEY, mapSourceMode); } catch {}
     updateMapSourceUI();
+    return mapSourceMode;
+}
+
+function resolveMapSelectionForMatch(seed, forceRandom = false) {
+    const selectedMode = forceRandom || mapSelectionMode === RANDOM_FIXED_MAP_MODE
+        ? pickRandomFixedMapMode(seed)
+        : mapSelectionMode;
+    return applyResolvedMapSourceMode(selectedMode);
 }
 
 function shouldUseFixedMap() {
@@ -4396,10 +4437,11 @@ function applyFixedMapPresetToBoards() {
 function refreshMapSourceModeFromStorage() {
     try {
         const savedMode = localStorage.getItem(MAP_SOURCE_STORAGE_KEY);
-        mapSourceMode = normalizeMapSourceMode(savedMode);
+        mapSelectionMode = normalizeMapSelectionMode(savedMode);
     } catch {
-        mapSourceMode = 'fixed1';
+        mapSelectionMode = 'fixed1';
     }
+    mapSourceMode = mapSelectionMode === RANDOM_FIXED_MAP_MODE ? 'fixed1' : mapSelectionMode;
     fixedMapPreset = loadFixedMapPreset();
     updateMapSourceUI();
 }
@@ -4411,18 +4453,27 @@ function updateMapSourceUI() {
     const fixed4Btn = document.getElementById('btn-map-source-fixed-4');
     const fixed5Btn = document.getElementById('btn-map-source-fixed-5');
     const fixed6Btn = document.getElementById('btn-map-source-fixed-6');
+    const randomBtn = document.getElementById('btn-map-source-random');
     const status = document.getElementById('map-source-status');
-    if (fixedBtn) fixedBtn.classList.toggle('active', mapSourceMode === 'fixed1');
-    if (fixed2Btn) fixed2Btn.classList.toggle('active', mapSourceMode === 'fixed2');
-    if (fixed3Btn) fixed3Btn.classList.toggle('active', mapSourceMode === 'fixed3');
-    if (fixed4Btn) fixed4Btn.classList.toggle('active', mapSourceMode === 'fixed4');
-    if (fixed5Btn) fixed5Btn.classList.toggle('active', mapSourceMode === 'fixed5');
-    if (fixed6Btn) fixed6Btn.classList.toggle('active', mapSourceMode === 'fixed6');
+    if (fixedBtn) fixedBtn.classList.toggle('active', mapSelectionMode === 'fixed1');
+    if (fixed2Btn) fixed2Btn.classList.toggle('active', mapSelectionMode === 'fixed2');
+    if (fixed3Btn) fixed3Btn.classList.toggle('active', mapSelectionMode === 'fixed3');
+    if (fixed4Btn) fixed4Btn.classList.toggle('active', mapSelectionMode === 'fixed4');
+    if (fixed5Btn) fixed5Btn.classList.toggle('active', mapSelectionMode === 'fixed5');
+    if (fixed6Btn) fixed6Btn.classList.toggle('active', mapSelectionMode === 'fixed6');
+    if (randomBtn) randomBtn.classList.toggle('active', mapSelectionMode === RANDOM_FIXED_MAP_MODE);
     if (status) {
-        status.textContent = fixedMapPreset
+        status.textContent = mapSelectionMode === RANDOM_FIXED_MAP_MODE
+            ? '6 STAGES RANDOM'
+            : fixedMapPreset
             ? `${FIXED_MAP_STAGE_NAMES[mapSourceMode] || 'FIXED MAP'} READY`
             : 'FIXED MAP NOT LOADED';
     }
+}
+
+function updateMapSourceAvailability() {
+    const forcedRandom = gameMode === 'online' && onlineMatchTab === 'random';
+    document.querySelector('.map-source-group')?.classList.toggle('hidden', forcedRandom);
 }
 
 async function preloadBundledFixedMapPreset() {
@@ -4447,6 +4498,7 @@ async function importMapPresetFromFile(file) {
         return;
     }
     mapSourceMode = 'fixed1';
+    mapSelectionMode = 'fixed1';
     try { localStorage.setItem(MAP_SOURCE_STORAGE_KEY, mapSourceMode); } catch {}
     updateMapSourceUI();
     showStatusAlert('固定マップを読み込みました。', 'success', 2500);

@@ -2033,6 +2033,12 @@ details li {
     flex: 1 1 calc(50% - 0.25rem);
 }
 
+.map-source-group .map-random-btn {
+    flex-basis: 100%;
+    border-color: rgba(0, 229, 255, 0.28);
+    letter-spacing: 0.12em;
+}
+
 .toggle-btn {
     flex: 1;
     background: rgba(255, 255, 255, 0.02);
