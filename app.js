@@ -2860,11 +2860,6 @@ function setupUIEventListeners() {
     if (openMapEditorBtn) openMapEditorBtn.addEventListener('click', () => {
         window.open('map-editor.html', '_blank', 'noopener');
     });
-    const mapSourceRandomBtn = document.getElementById('btn-map-source-random');
-    if (mapSourceRandomBtn) mapSourceRandomBtn.addEventListener('click', () => {
-        setMapSourceMode('random');
-        showStatusAlert('マップソースを RANDOM に切り替えました。', 'system', 1800);
-    });
     const mapSourceFixedBtn = document.getElementById('btn-map-source-fixed');
     if (mapSourceFixedBtn) mapSourceFixedBtn.addEventListener('click', () => {
         setMapSourceMode('fixed1');
@@ -3778,7 +3773,7 @@ function handleOnlineMessage(message) {
                 onlineMatchTier = message.matchTier === 'normal' ? 'normal' : 'rank';
                 setOnlineMatchTier(onlineMatchTier);
             }
-            if (['fixed', 'fixed1', 'fixed2', 'fixed3', 'fixed4', 'fixed5', 'fixed6', 'random'].includes(message.mapSourceMode)) {
+            if (['fixed', 'fixed1', 'fixed2', 'fixed3', 'fixed4', 'fixed5', 'fixed6'].includes(message.mapSourceMode)) {
                 mapSourceMode = normalizeMapSourceMode(message.mapSourceMode);
                 fixedMapPreset = loadFixedMapPreset(mapSourceMode);
                 updateMapSourceUI();
@@ -4136,7 +4131,7 @@ function startGame(config = null, fromOnline = false) {
         : mapSourceMode;
     const mapSourceChanged = requestedMapSourceMode !== mapSourceMode;
     mapSourceMode = requestedMapSourceMode;
-    if (mapSourceMode !== 'random') fixedMapPreset = loadFixedMapPreset(mapSourceMode);
+    fixedMapPreset = loadFixedMapPreset(mapSourceMode);
     updateMapSourceUI();
     const reusePreview = onlineMode && !mapSourceChanged && onlineMatchPreviewActive && activePhase === 'setup' && boards.area1.length > 0;
 
@@ -4356,17 +4351,16 @@ function setMapSourceMode(mode) {
         return;
     }
     mapSourceMode = normalizeMapSourceMode(mode);
-    fixedMapPreset = mapSourceMode === 'random' ? null : loadFixedMapPreset(mapSourceMode);
+    fixedMapPreset = loadFixedMapPreset(mapSourceMode);
     try { localStorage.setItem(MAP_SOURCE_STORAGE_KEY, mapSourceMode); } catch {}
     updateMapSourceUI();
 }
 
 function shouldUseFixedMap() {
-    return mapSourceMode !== 'random' && Boolean(fixedMapPreset);
+    return Boolean(fixedMapPreset);
 }
 
 function normalizeMapSourceMode(mode) {
-    if (mode === 'random') return 'random';
     if (mode === 'fixed6') return 'fixed6';
     if (mode === 'fixed5') return 'fixed5';
     if (mode === 'fixed4') return 'fixed4';
@@ -4408,7 +4402,6 @@ function refreshMapSourceModeFromStorage() {
 }
 
 function updateMapSourceUI() {
-    const randomBtn = document.getElementById('btn-map-source-random');
     const fixedBtn = document.getElementById('btn-map-source-fixed');
     const fixed2Btn = document.getElementById('btn-map-source-fixed-2');
     const fixed3Btn = document.getElementById('btn-map-source-fixed-3');
@@ -4416,7 +4409,6 @@ function updateMapSourceUI() {
     const fixed5Btn = document.getElementById('btn-map-source-fixed-5');
     const fixed6Btn = document.getElementById('btn-map-source-fixed-6');
     const status = document.getElementById('map-source-status');
-    if (randomBtn) randomBtn.classList.toggle('active', mapSourceMode === 'random');
     if (fixedBtn) fixedBtn.classList.toggle('active', mapSourceMode === 'fixed1');
     if (fixed2Btn) fixed2Btn.classList.toggle('active', mapSourceMode === 'fixed2');
     if (fixed3Btn) fixed3Btn.classList.toggle('active', mapSourceMode === 'fixed3');
@@ -4424,10 +4416,9 @@ function updateMapSourceUI() {
     if (fixed5Btn) fixed5Btn.classList.toggle('active', mapSourceMode === 'fixed5');
     if (fixed6Btn) fixed6Btn.classList.toggle('active', mapSourceMode === 'fixed6');
     if (status) {
-        const fixedActive = mapSourceMode !== 'random';
-        status.textContent = fixedActive
-            ? (fixedMapPreset ? `${FIXED_MAP_STAGE_NAMES[mapSourceMode] || 'FIXED MAP'} READY` : 'FIXED MAP NOT LOADED')
-            : 'RANDOM MAP MODE';
+        status.textContent = fixedMapPreset
+            ? `${FIXED_MAP_STAGE_NAMES[mapSourceMode] || 'FIXED MAP'} READY`
+            : 'FIXED MAP NOT LOADED';
     }
 }
 
@@ -4621,7 +4612,7 @@ function applyMapTerrainForCurrentMode(seed) {
         applyFixedMapPresetToBoards();
         return;
     }
-    generateRandomWalls(seed);
+    console.error('Fixed map preset is unavailable:', mapSourceMode, seed);
 }
 
 function placeSymmetricWalls(mapName, seed, mirrorMaps = []) {
@@ -4915,15 +4906,41 @@ function isCellInsideVisionShape(unit, row, col, shape, range) {
 }
 
 function hasOpaqueLineOfSight(mapName, fromRow, fromCol, toRow, toCol) {
-    const steps = Math.max(Math.abs(toRow - fromRow), Math.abs(toCol - fromCol));
-    if (steps <= 1) return true;
-    for (let step = 1; step < steps; step++) {
-        const t = step / steps;
-        const row = Math.round(fromRow + (toRow - fromRow) * t);
-        const col = Math.round(fromCol + (toCol - fromCol) * t);
-        if (row === fromRow && col === fromCol) continue;
-        if (row === toRow && col === toCol) continue;
-        const cell = boards[mapName][row]?.[col];
+    if (fromRow === toRow && fromCol === toCol) return true;
+
+    const rowDelta = toRow - fromRow;
+    const colDelta = toCol - fromCol;
+    const rowStep = Math.sign(rowDelta);
+    const colStep = Math.sign(colDelta);
+    const rowDistance = Math.abs(rowDelta);
+    const colDistance = Math.abs(colDelta);
+    const rowIncrement = rowDistance ? 1 / rowDistance : Infinity;
+    const colIncrement = colDistance ? 1 / colDistance : Infinity;
+    let rowBoundary = rowDistance ? 0.5 / rowDistance : Infinity;
+    let colBoundary = colDistance ? 0.5 / colDistance : Infinity;
+    let row = fromRow;
+    let col = fromCol;
+
+    while (row !== toRow || col !== toCol) {
+        if (Math.abs(rowBoundary - colBoundary) < 1e-9) {
+            // A ray crossing a tile corner cannot slip between either adjoining wall.
+            const horizontalCell = boards[mapName]?.[row]?.[col + colStep];
+            const verticalCell = boards[mapName]?.[row + rowStep]?.[col];
+            if (horizontalCell?.isWall || verticalCell?.isWall) return false;
+            row += rowStep;
+            col += colStep;
+            rowBoundary += rowIncrement;
+            colBoundary += colIncrement;
+        } else if (rowBoundary < colBoundary) {
+            row += rowStep;
+            rowBoundary += rowIncrement;
+        } else {
+            col += colStep;
+            colBoundary += colIncrement;
+        }
+
+        if (row === toRow && col === toCol) return true;
+        const cell = boards[mapName]?.[row]?.[col];
         if (cell?.isWall || cell?.unit) return false;
     }
     return true;
