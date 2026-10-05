@@ -27,21 +27,24 @@ const FIXED_MAP_STAGE_NAMES = {
     fixed2: 'ミラージュ',
     fixed3: 'ディバイド',
     fixed4: 'シフト',
-    fixed5: 'カプセル'
+    fixed5: 'カプセル',
+    fixed6: 'ラボ'
 };
 const FIXED_MAP_BUNDLE_URLS = {
     fixed1: 'sector8-map1.json',
     fixed2: 'sector8-map2.json',
     fixed3: 'sector8-map3.json',
     fixed4: 'sector8-map4.json',
-    fixed5: 'sector8-map5.json'
+    fixed5: 'sector8-map5.json',
+    fixed6: 'sector8-map6.json'
 };
 const BUNDLED_FIXED_MAP_PRESETS = {
     fixed1: window.SECTOR8_FIXED_MAP_PRESET || window.__SECTOR8_FIXED_MAP_PRESET || null,
     fixed2: window.SECTOR8_FIXED_MAP_PRESET_2 || null,
     fixed3: window.SECTOR8_FIXED_MAP_PRESET_3 || null,
     fixed4: window.SECTOR8_FIXED_MAP_PRESET_4 || null,
-    fixed5: window.SECTOR8_FIXED_MAP_PRESET_5 || null
+    fixed5: window.SECTOR8_FIXED_MAP_PRESET_5 || null,
+    fixed6: window.SECTOR8_FIXED_MAP_PRESET_6 || null
 };
 
 function clamp(value, min, max) {
@@ -2907,6 +2910,15 @@ function setupUIEventListeners() {
             showStatusAlert('ステージを「カプセル」に切り替えました。', 'success', 1800);
         }
     });
+    const mapSourceFixed6Btn = document.getElementById('btn-map-source-fixed-6');
+    if (mapSourceFixed6Btn) mapSourceFixed6Btn.addEventListener('click', () => {
+        setMapSourceMode('fixed6');
+        if (!fixedMapPreset) {
+            showStatusAlert('ラボを読み込めませんでした。', 'warning', 2500);
+        } else {
+            showStatusAlert('ステージを「ラボ」に切り替えました。', 'success', 1800);
+        }
+    });
     const loadMapPresetBtn = document.getElementById('btn-load-map-preset');
     if (loadMapPresetBtn) loadMapPresetBtn.addEventListener('click', () => {
         document.getElementById('map-preset-file-input')?.click();
@@ -3766,7 +3778,7 @@ function handleOnlineMessage(message) {
                 onlineMatchTier = message.matchTier === 'normal' ? 'normal' : 'rank';
                 setOnlineMatchTier(onlineMatchTier);
             }
-            if (['fixed', 'fixed1', 'fixed2', 'fixed3', 'fixed4', 'fixed5', 'random'].includes(message.mapSourceMode)) {
+            if (['fixed', 'fixed1', 'fixed2', 'fixed3', 'fixed4', 'fixed5', 'fixed6', 'random'].includes(message.mapSourceMode)) {
                 mapSourceMode = normalizeMapSourceMode(message.mapSourceMode);
                 fixedMapPreset = loadFixedMapPreset(mapSourceMode);
                 updateMapSourceUI();
@@ -4355,6 +4367,7 @@ function shouldUseFixedMap() {
 
 function normalizeMapSourceMode(mode) {
     if (mode === 'random') return 'random';
+    if (mode === 'fixed6') return 'fixed6';
     if (mode === 'fixed5') return 'fixed5';
     if (mode === 'fixed4') return 'fixed4';
     if (mode === 'fixed3') return 'fixed3';
@@ -4401,6 +4414,7 @@ function updateMapSourceUI() {
     const fixed3Btn = document.getElementById('btn-map-source-fixed-3');
     const fixed4Btn = document.getElementById('btn-map-source-fixed-4');
     const fixed5Btn = document.getElementById('btn-map-source-fixed-5');
+    const fixed6Btn = document.getElementById('btn-map-source-fixed-6');
     const status = document.getElementById('map-source-status');
     if (randomBtn) randomBtn.classList.toggle('active', mapSourceMode === 'random');
     if (fixedBtn) fixedBtn.classList.toggle('active', mapSourceMode === 'fixed1');
@@ -4408,6 +4422,7 @@ function updateMapSourceUI() {
     if (fixed3Btn) fixed3Btn.classList.toggle('active', mapSourceMode === 'fixed3');
     if (fixed4Btn) fixed4Btn.classList.toggle('active', mapSourceMode === 'fixed4');
     if (fixed5Btn) fixed5Btn.classList.toggle('active', mapSourceMode === 'fixed5');
+    if (fixed6Btn) fixed6Btn.classList.toggle('active', mapSourceMode === 'fixed6');
     if (status) {
         const fixedActive = mapSourceMode !== 'random';
         status.textContent = fixedActive
