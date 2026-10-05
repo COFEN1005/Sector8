@@ -1294,6 +1294,34 @@ details li {
     min-height: 0;
 }
 
+.stage-map-label {
+    width: 100%;
+    max-width: 640px;
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    margin-bottom: 0.45rem;
+    padding-left: 0.45rem;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.18em;
+    color: var(--text-muted);
+}
+
+.stage-map-label::after {
+    content: '';
+    height: 1px;
+    flex: 1;
+    background: linear-gradient(90deg, rgba(0, 240, 255, 0.35), transparent);
+}
+
+.stage-map-label strong {
+    color: var(--neon-cyan);
+    font-size: 0.82rem;
+    letter-spacing: 0.12em;
+    text-shadow: 0 0 10px rgba(0, 240, 255, 0.32);
+}
+
 #game-board-wrapper {
     position: relative;
     aspect-ratio: 1 / 1;
@@ -2465,6 +2493,11 @@ body.opponent-turn #turn-indicator {
     z-index: 5000;
 }
 
+#stage-intro-overlay {
+    z-index: 5100;
+    background: rgba(3, 4, 6, 0.88);
+}
+
 .overlay.hidden {
     opacity: 0;
     pointer-events: none;
@@ -2490,6 +2523,47 @@ body.opponent-turn #turn-indicator {
     border-color: rgba(0, 240, 255, 0.28);
     background: radial-gradient(circle at top, rgba(0, 240, 255, 0.1), rgba(7, 10, 18, 0.96) 70%);
     box-shadow: 0 0 40px rgba(0, 240, 255, 0.12), inset 0 0 0 1px rgba(255,255,255,0.03);
+}
+
+.stage-intro-panel {
+    width: min(38rem, calc(100vw - 2rem));
+    padding: 2rem 1.6rem 1.7rem;
+    text-align: center;
+    overflow: hidden;
+    border-color: rgba(0, 240, 255, 0.4);
+    background: linear-gradient(135deg, rgba(0, 240, 255, 0.08), rgba(7, 10, 18, 0.98) 48%, rgba(255, 184, 0, 0.06));
+    box-shadow: 0 0 55px rgba(0, 240, 255, 0.15), inset 0 0 0 1px rgba(255, 255, 255, 0.035);
+    animation: stage-intro-enter 0.38s ease-out both;
+}
+
+.stage-intro-tag,
+.stage-intro-code {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.32em;
+    color: var(--text-muted);
+}
+
+.stage-intro-line {
+    width: 5rem;
+    height: 2px;
+    margin: 0.9rem auto 1rem;
+    background: var(--neon-cyan);
+    box-shadow: 0 0 14px var(--neon-cyan);
+}
+
+.stage-intro-panel h2 {
+    margin: 0 0 1rem;
+    font-size: clamp(2.2rem, 8vw, 4.8rem);
+    font-weight: 800;
+    letter-spacing: 0.16em;
+    color: var(--text-primary);
+    text-shadow: 0 0 24px rgba(0, 240, 255, 0.28);
+}
+
+@keyframes stage-intro-enter {
+    from { opacity: 0; transform: scale(0.94) translateY(10px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
 }
 
 .match-intro-tag {

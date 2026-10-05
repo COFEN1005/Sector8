@@ -455,6 +455,10 @@
 
             <!-- CENTER COLUMN: THE BOARD -->
             <section id="board-container">
+                <div class="stage-map-label" aria-label="現在のマップ">
+                    <span>MAP</span>
+                    <strong id="stage-map-name">ゲート</strong>
+                </div>
                 <!-- Area Map Tabs -->
                 <div id="map-tabs" class="glass-panel">
                     <button class="map-tab active" data-map="area1">
@@ -756,6 +760,16 @@
                     <button id="btn-replay-close" class="neon-btn secondary hidden" type="button">SUMMARY</button>
                     <button id="btn-restart" class="neon-btn">RELOAD SYSTEM</button>
                 </div>
+            </div>
+        </div>
+
+        <!-- STAGE INTRO -->
+        <div id="stage-intro-overlay" class="overlay hidden">
+            <div class="stage-intro-panel glass-panel">
+                <div class="stage-intro-tag">BATTLEFIELD SELECTED</div>
+                <div class="stage-intro-line" aria-hidden="true"></div>
+                <h2 id="stage-intro-name">ゲート</h2>
+                <div class="stage-intro-code">SECTOR MAP // READY</div>
             </div>
         </div>
 

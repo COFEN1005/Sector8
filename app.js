@@ -306,6 +306,9 @@ let matchIntroActive = false;
 let matchIntroTimer = null;
 let pendingMatchIntroCutIn = false;
 let matchIntroProfileSnapshot = null;
+let stageIntroActive = false;
+let stageIntroPending = false;
+let stageIntroTimer = null;
 let drawRequestTurnByPlayer = { 1: null, 2: null };
 // Matchmaking state
 let matchmakingMode = false;
@@ -1790,6 +1793,7 @@ function refreshMatchIntroCutIn(profileOverride = null) {
 
 function queueMatchIntroCutIn() {
     pendingMatchIntroCutIn = true;
+    if (stageIntroActive || stageIntroPending) return;
     window.clearTimeout(matchIntroTimer);
     window.requestAnimationFrame(() => {
         window.requestAnimationFrame(() => {
@@ -1797,6 +1801,31 @@ function queueMatchIntroCutIn() {
             pendingMatchIntroCutIn = false;
             showMatchIntroCutIn();
         });
+    });
+}
+
+function showStageIntroCutIn() {
+    const overlay = document.getElementById('stage-intro-overlay');
+    const nameEl = document.getElementById('stage-intro-name');
+    if (!overlay || !nameEl) return;
+    stageIntroPending = false;
+    window.clearTimeout(stageIntroTimer);
+    nameEl.textContent = FIXED_MAP_STAGE_NAMES[mapSourceMode] || 'UNKNOWN MAP';
+    overlay.classList.remove('hidden');
+    overlay.getBoundingClientRect();
+    stageIntroActive = true;
+    stageIntroTimer = window.setTimeout(() => {
+        overlay.classList.add('hidden');
+        stageIntroActive = false;
+        stageIntroTimer = null;
+        if (pendingMatchIntroCutIn) queueMatchIntroCutIn();
+    }, 1800);
+}
+
+function queueStageIntroCutIn() {
+    stageIntroPending = true;
+    window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(showStageIntroCutIn);
     });
 }
 
@@ -3214,6 +3243,11 @@ function resetOnlineMatchmakingState(keepPanel = true) {
     pendingMatchIntroCutIn = false;
     matchIntroProfileSnapshot = null;
     document.getElementById('match-intro-overlay')?.classList.add('hidden');
+    stageIntroActive = false;
+    stageIntroPending = false;
+    window.clearTimeout(stageIntroTimer);
+    stageIntroTimer = null;
+    document.getElementById('stage-intro-overlay')?.classList.add('hidden');
     onlineMatchPreviewActive = false;
     clearOnlineSession();
     updateRandomQueueCount(0);
@@ -3635,6 +3669,7 @@ function prepareOnlineMatchPreview(seed = null) {
     syncBgmPlayback();
     updateAudioButtons();
     setMatchmakingStatus('盤面を確認して、甲アビリティを選択してください。', 'success');
+    queueStageIntroCutIn();
 }
 
 function startOnlineBattle() {
@@ -4234,8 +4269,10 @@ function startGame(config = null, fromOnline = false) {
         (!onlineMode && vsAI)
     );
     if (shouldShowMatchIntro) {
+        if (!onlineMode) queueStageIntroCutIn();
         queueMatchIntroCutIn();
     } else {
+        if (!onlineMode) queueStageIntroCutIn();
         matchIntroActive = false;
         matchIntroProfileSnapshot = null;
         document.getElementById('match-intro-overlay')?.classList.add('hidden');
@@ -4455,6 +4492,7 @@ function updateMapSourceUI() {
     const fixed6Btn = document.getElementById('btn-map-source-fixed-6');
     const randomBtn = document.getElementById('btn-map-source-random');
     const status = document.getElementById('map-source-status');
+    const stageMapName = document.getElementById('stage-map-name');
     if (fixedBtn) fixedBtn.classList.toggle('active', mapSelectionMode === 'fixed1');
     if (fixed2Btn) fixed2Btn.classList.toggle('active', mapSelectionMode === 'fixed2');
     if (fixed3Btn) fixed3Btn.classList.toggle('active', mapSelectionMode === 'fixed3');
@@ -4469,6 +4507,7 @@ function updateMapSourceUI() {
             ? `${FIXED_MAP_STAGE_NAMES[mapSourceMode] || 'FIXED MAP'} READY`
             : 'FIXED MAP NOT LOADED';
     }
+    if (stageMapName) stageMapName.textContent = FIXED_MAP_STAGE_NAMES[mapSourceMode] || 'UNKNOWN';
 }
 
 function updateMapSourceAvailability() {
