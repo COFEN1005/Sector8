@@ -700,6 +700,11 @@ function findEditingFormationUnit() {
 function moveFormationUnitOnBoard(targetArea, targetRow, targetCol) {
     const found = findEditingFormationUnit();
     if (!found || !isFormationPresetCellAllowed(targetArea, targetRow, targetCol)) return;
+    const crossesArea = found.area !== targetArea;
+    if (crossesArea && found.unit.type !== 'otsu') {
+        document.getElementById('formation-status').textContent = 'エリア間を移動できるのは乙のみです。';
+        return;
+    }
     if (found.unit.type === 'scout' && targetArea === 'area1') {
         document.getElementById('formation-status').textContent = '偵察兵はエリア2へ配置してください。';
         return;
@@ -711,6 +716,10 @@ function moveFormationUnitOnBoard(targetArea, targetRow, targetCol) {
     }
     if (targetFound?.unit.type === 'scout' && found.area === 'area1') {
         document.getElementById('formation-status').textContent = '交換すると偵察兵がエリア1へ移動するため配置できません。';
+        return;
+    }
+    if (crossesArea && targetFound && targetFound.unit.type !== 'otsu') {
+        document.getElementById('formation-status').textContent = '交換先のコマもエリア移動するため、乙同士でのみ交換できます。';
         return;
     }
     const sourcePosition = { area: found.area, row: found.unit.row, col: found.unit.col };
