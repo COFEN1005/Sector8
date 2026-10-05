@@ -640,6 +640,7 @@ function getFormationUnitLabel(type) {
 
 function renderFormationEditor() {
     if (!editingFormation) editingFormation = normalizeFormation(savedFormation);
+    updateFormationMapSelector();
     ['area1', 'area2'].forEach(area => {
         const container = document.getElementById(`formation-${area}`);
         if (!container) return;
@@ -664,6 +665,24 @@ function renderFormationEditor() {
     const total = editingFormation.area1.length + editingFormation.area2.length;
     const count = document.getElementById('formation-count');
     if (count) count.textContent = `${total} / 16`;
+}
+
+function updateFormationMapSelector() {
+    document.querySelectorAll('.formation-map-btn[data-map-mode]').forEach(button => {
+        button.classList.toggle('active', button.dataset.mapMode === mapSourceMode);
+    });
+    const name = document.getElementById('formation-map-name');
+    if (name) name.textContent = FIXED_MAP_STAGE_NAMES[mapSourceMode] || 'UNKNOWN';
+}
+
+function selectFormationMap(mode) {
+    const normalizedMode = normalizeMapSourceMode(mode);
+    setMapSourceMode(normalizedMode);
+    if (mapSourceMode !== normalizedMode) return;
+    selectedFormationUnitId = null;
+    renderFormationEditor();
+    const status = document.getElementById('formation-status');
+    if (status) status.textContent = `${FIXED_MAP_STAGE_NAMES[mapSourceMode]}の配置を編集中です。`;
 }
 
 function isFormationPresetCellAllowed(area, row, col) {
@@ -2976,6 +2995,10 @@ function setupUIEventListeners() {
     document.getElementById('nav-options')?.addEventListener('click', () => setWorkspaceView('options'));
     setupFormationBoardInteractions(document.getElementById('formation-area1'));
     setupFormationBoardInteractions(document.getElementById('formation-area2'));
+    document.getElementById('formation-map-buttons')?.addEventListener('click', event => {
+        const button = event.target.closest('.formation-map-btn[data-map-mode]');
+        if (button) selectFormationMap(button.dataset.mapMode);
+    });
     document.getElementById('formation-save')?.addEventListener('click', saveFormation);
     document.getElementById('formation-reset')?.addEventListener('click', () => {
         editingFormation = cloneDefaultFormation();
@@ -4827,6 +4850,7 @@ function updateMapSourceUI() {
             : 'FIXED MAP NOT LOADED';
     }
     if (stageMapName) stageMapName.textContent = FIXED_MAP_STAGE_NAMES[mapSourceMode] || 'UNKNOWN';
+    updateFormationMapSelector();
 }
 
 function updateMapSourceAvailability() {
