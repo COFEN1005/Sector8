@@ -686,7 +686,7 @@ function selectFormationMap(mode) {
 }
 
 function isFormationPresetCellAllowed(area, row, col) {
-    return area === 'area1' ? row >= 7 && row <= 9 : row >= 8 && row <= 10;
+    return area === 'area1' ? row >= 0 && row <= 10 : row >= 8 && row <= 10;
 }
 
 function findEditingFormationUnit() {
