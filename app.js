@@ -1887,6 +1887,7 @@ class Unit {
         this.carryingFlagAbility = null;
         this.flagSurvivalTurns = 0;
         this.medicScoutReinforceTurns = 0;
+        this.archerMovedThisTurn = false;
 
         this.configureTypeStats(type);
     }
@@ -1960,7 +1961,7 @@ class Unit {
                 '盲目': '【甲特有: 盲目 / パッシブ型】マンハッタン移動4、視界1。',
                 '衛生兵': '【甲特有: 衛生兵 / パッシブ型】生存中、偵察兵の補充周期が7ターンになり上限が3になる。補充状況は甲の右上カウンターで確認できる。',
                 '監視': '【甲特有: 監視 / パッシブ】正方形視界2・直線移動1。視界内の敵移動-1。',
-                '弓兵': '【甲特有: 弓兵 / アクティブ・パッシブ】菱形移動2・菱形視界3。通常攻撃では撃破不可。視界内かつ菱形距離3の敵を射撃する。',
+                '弓兵': '【甲特有: 弓兵 / アクティブ・パッシブ】菱形移動2・菱形視界3。通常攻撃では撃破不可。移動前のみ、視界内かつ菱形距離3の敵を射撃できる。射撃は1アクションを消費し、使用後に行動済みを解除する。',
                 '迷彩': '【甲特有: 迷彩 / 発動型】使用後はマンハッタン視界1になり、動かない限り敵視界に出ない。',
                 '煙幕': '【甲特有: 煙幕 / 発動型】マンハッタン視界3。直線移動4＋周囲1。3×3の煙幕を設置し、煙幕内の敵味方を迷彩状態にする。',
                 '憑依': '【甲特有: 憑依 / 発動型】マンハッタン移動3・視界3。好きなコマの見た目に変えられる。敵撃破で元に戻り、再変更は10ターン後。',
@@ -2438,6 +2439,7 @@ function serializeReplayUnit(unit) {
         glowUntilTurn: Number(unit.glowUntilTurn || 0),
         veteranMomentumPenalty: Boolean(unit.veteranMomentumPenalty),
         assassinMomentumPenalty: Boolean(unit.assassinMomentumPenalty),
+        archerMovedThisTurn: Boolean(unit.archerMovedThisTurn),
         carryingFlagPlayer: unit.carryingFlagPlayer || null,
         carryingFlagAbility: unit.carryingFlagAbility || null,
         flagSurvivalTurns: unit.flagSurvivalTurns || 0
@@ -2511,6 +2513,7 @@ function hydrateReplayUnit(raw) {
     unit.glowUntilTurn = Number(raw.glowUntilTurn || 0);
     unit.bruteVisionBonus = Number(raw.bruteVisionBonus || 0);
     unit.assassinMomentumPenalty = Boolean(raw.assassinMomentumPenalty);
+    unit.archerMovedThisTurn = Boolean(raw.archerMovedThisTurn);
     return unit;
 }
 
@@ -5839,6 +5842,10 @@ function selectActionType(type) {
                         if (el) el.classList.add('highlight-ability');
                     });
                 } else if (abilityName === '弓兵') {
+                    if (selectedUnit.archerMovedThisTurn) {
+                        showStatusAlert('弓兵は移動後に射撃できません。', 'warning', 2400);
+                        return;
+                    }
                     if (actedUnitIds.has(selectedUnit.id)) {
                         showStatusAlert('弓兵は行動済み状態では射撃できません。', 'warning', 2400);
                         return;
@@ -5991,6 +5998,9 @@ function executeMove(unit, destRow, destCol) {
     boards[finalMap][finalRow][finalCol].unit = unit;
     tryPickupMilitaryFlag(unit);
     applyWarPrincessKills(unit, captured.length);
+    if (unit.type === 'koh' && getPlayerAbility(unit.player) === '弓兵') {
+        unit.archerMovedThisTurn = true;
+    }
 
     let logMsg;
     if (resolved.portalDest) {
@@ -6060,6 +6070,10 @@ function executeAbility(unit, destRow, destCol, actionMeta = {}) {
         const abilityName = getPlayerAbility(unit.player);
 
         if (abilityName === '弓兵') {
+            if (unit.archerMovedThisTurn) {
+                addConsoleLog('ERROR: 弓兵は移動後に射撃できません。', 'warning');
+                return;
+            }
             if (actedUnitIds.has(unit.id)) {
                 addConsoleLog('ERROR: 弓兵は行動済み状態では射撃できません。', 'warning');
                 return;
@@ -6085,7 +6099,10 @@ function executeAbility(unit, destRow, destCol, actionMeta = {}) {
             if (!shouldHideAiActionFeedback(unit.player)) playMoveSfx();
             recordMatchReplayEvent({ kind: 'action', action: { type: 'ability', unitId: unit.id, row: destRow, col: destCol } });
             sendOnlineMessage({ kind: 'action', action: { type: 'ability', unitId: unit.id, row: destRow, col: destCol } });
-            if (!won) completeUnitAction(unit);
+            if (!won) {
+                unit.refreshActedAfterAction = true;
+                completeUnitAction(unit);
+            }
             return;
 
         } else if (abilityName === '千里眼') {
@@ -6402,6 +6419,7 @@ function endTurn() {
     units.forEach(u => {
         u.veteranMomentumPenalty = false;
         u.assassinMomentumPenalty = false;
+        u.archerMovedThisTurn = false;
     });
     if (currentPlayer === 1) {
         gameTurn++;
@@ -6855,6 +6873,7 @@ function executeAITurn() {
             } else if (aiAbility === '脳筋') {
                 // パッシブのみ
             } else if (aiAbility === '弓兵') {
+                if (u.archerMovedThisTurn) return;
                 const target = getArcherTargets(u)
                     .map(candidate => boards[map][candidate.row][candidate.col].unit)
                     .filter(Boolean)
