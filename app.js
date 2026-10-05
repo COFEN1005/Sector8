@@ -77,6 +77,19 @@ const ONLINE_SESSION_STORAGE_KEY = 'sector8_online_session';
 const AUTH_SESSION_STORAGE_KEY = 'sector8_auth_session';
 const LAST_PLAYER_ID_STORAGE_KEY = 'sector8_last_player_id';
 const UI_SETTINGS_STORAGE_KEY = 'sector8_ui_settings';
+const FORMATION_STORAGE_KEY = 'sector8_formation_v1';
+const DEFAULT_FORMATION = Object.freeze({
+    area1: Object.freeze([
+        { id: 'home_0', type: 'otsu' }, { id: 'home_1', type: 'hei' }, { id: 'home_2', type: 'tei' },
+        { id: 'home_3', type: 'tei' }, { id: 'home_4', type: 'hei' }, { id: 'home_5', type: 'tei' },
+        { id: 'home_6', type: 'tei' }, { id: 'home_7', type: 'hei' }, { id: 'home_8', type: 'otsu' }
+    ]),
+    area2: Object.freeze([
+        { id: 'scout_1', type: 'scout' }, { id: 'koh', type: 'koh' }, { id: 'front_hei_1', type: 'hei' },
+        { id: 'front_tei_1', type: 'tei' }, { id: 'front_hei_2', type: 'hei' },
+        { id: 'front_tei_2', type: 'tei' }, { id: 'scout_2', type: 'scout' }
+    ])
+});
 
 function getPortalDestination(mapName, r, c) {
     const sourceCell = boards?.[mapName]?.[r]?.[c];
@@ -242,6 +255,9 @@ let replayViewerIndex = 0;
 let replayViewerEntry = null;
 let replayViewerOpen = false;
 let pendingImpersonationUnitId = null;
+let savedFormation = null;
+let editingFormation = null;
+let selectedFormationUnitId = null;
 
 let selectedUnit = null;
 let previewUnit = null;
@@ -316,11 +332,14 @@ let matchmakingRole = null; // 'host' or 'guest'
 let matchRoomId = null;
 let onlineAbilityChoices = { 1: null, 2: null };
 let onlineReadyState = { 1: false, 2: false };
+let onlineFormations = { 1: null, 2: null };
 let localUsername = '';
 let onlineUsernames = { 1: null, 2: null };
 let onlineMatchTier = 'rank';
 let onlineMatchTab = 'random';
 let onlineMatchPreviewActive = false;
+let onlinePreparationDeadline = 0;
+let onlinePreparationTimer = null;
 let randomMatchAutoStarted = false;
 let privateMatchAutoStarted = false;
 let privateMatchAutoStartTimer = null;
@@ -553,6 +572,115 @@ function loadSavedUiSettings() {
         if (Number.isFinite(Number(saved.visionSaturation))) visionSaturation = Math.min(1.6, Math.max(0.2, Number(saved.visionSaturation)));
     } catch {}
     document.documentElement.style.setProperty('--vision-brightness', String(visionSaturation));
+}
+
+function cloneDefaultFormation() {
+    return {
+        area1: DEFAULT_FORMATION.area1.map(unit => ({ ...unit })),
+        area2: DEFAULT_FORMATION.area2.map(unit => ({ ...unit }))
+    };
+}
+
+function normalizeFormation(value) {
+    const expected = [...DEFAULT_FORMATION.area1, ...DEFAULT_FORMATION.area2];
+    const typeById = new Map(expected.map(unit => [unit.id, unit.type]));
+    const source = value && Array.isArray(value.area1) && Array.isArray(value.area2) ? value : cloneDefaultFormation();
+    const all = [...source.area1, ...source.area2];
+    const ids = new Set(all.map(unit => unit?.id));
+    if (all.length !== expected.length || ids.size !== expected.length || expected.some(unit => !ids.has(unit.id))) {
+        return cloneDefaultFormation();
+    }
+    const normalizeArea = (area, areaName) => area.map(unit => ({ id: unit.id, type: typeById.get(unit.id) }))
+        .filter(unit => unit.type && !(areaName === 'area1' && unit.type === 'scout'));
+    const normalized = { area1: normalizeArea(source.area1, 'area1'), area2: normalizeArea(source.area2, 'area2') };
+    if (normalized.area1.length + normalized.area2.length !== expected.length) return cloneDefaultFormation();
+    return normalized;
+}
+
+function loadSavedFormation() {
+    try {
+        savedFormation = normalizeFormation(JSON.parse(window.localStorage.getItem(FORMATION_STORAGE_KEY) || 'null'));
+    } catch {
+        savedFormation = cloneDefaultFormation();
+    }
+    editingFormation = normalizeFormation(savedFormation);
+    renderFormationEditor();
+}
+
+function saveFormation() {
+    savedFormation = normalizeFormation(editingFormation);
+    editingFormation = normalizeFormation(savedFormation);
+    try { window.localStorage.setItem(FORMATION_STORAGE_KEY, JSON.stringify(savedFormation)); } catch {}
+    document.getElementById('formation-status').textContent = '編成を保存しました。次の対戦から反映されます。';
+    showStatusAlert('編成を保存しました。', 'success', 1800);
+    renderFormationEditor();
+}
+
+function getFormationUnitLabel(type) {
+    return ({ koh: '甲', otsu: '乙', hei: '丙', tei: '丁', scout: '偵' })[type] || '?';
+}
+
+function renderFormationEditor() {
+    if (!editingFormation) editingFormation = normalizeFormation(savedFormation);
+    ['area1', 'area2'].forEach(area => {
+        const container = document.getElementById(`formation-${area}`);
+        if (!container) return;
+        container.innerHTML = editingFormation[area].map((unit, index) => `
+            <button class="formation-unit ${selectedFormationUnitId === unit.id ? 'selected' : ''}" type="button" data-unit-id="${unit.id}">
+                <span>${getFormationUnitLabel(unit.type)}</span><small>${unit.type === 'scout' ? 'SCOUT' : unit.type.toUpperCase()}</small><em>${index + 1}</em>
+            </button>
+        `).join('') || '<div class="formation-empty">EMPTY</div>';
+    });
+    const total = editingFormation.area1.length + editingFormation.area2.length;
+    const count = document.getElementById('formation-count');
+    if (count) count.textContent = `${total} / 16`;
+}
+
+function findEditingFormationUnit() {
+    for (const area of ['area1', 'area2']) {
+        const index = editingFormation?.[area]?.findIndex(unit => unit.id === selectedFormationUnitId) ?? -1;
+        if (index >= 0) return { area, index, unit: editingFormation[area][index] };
+    }
+    return null;
+}
+
+function moveFormationUnitTo(targetArea) {
+    const found = findEditingFormationUnit();
+    if (!found) return;
+    if (found.unit.type === 'scout' && targetArea === 'area1') {
+        document.getElementById('formation-status').textContent = '偵察兵はエリア2から移動できません。';
+        return;
+    }
+    if (found.area === targetArea) return;
+    editingFormation[found.area].splice(found.index, 1);
+    editingFormation[targetArea].push(found.unit);
+    renderFormationEditor();
+}
+
+function shiftFormationUnit(delta) {
+    const found = findEditingFormationUnit();
+    if (!found) return;
+    const target = Math.max(0, Math.min(editingFormation[found.area].length - 1, found.index + delta));
+    if (target === found.index) return;
+    editingFormation[found.area].splice(found.index, 1);
+    editingFormation[found.area].splice(target, 0, found.unit);
+    renderFormationEditor();
+}
+
+function setWorkspaceView(view) {
+    const next = ['battle', 'formation', 'options'].includes(view) ? view : 'battle';
+    document.getElementById('battle-screen')?.classList.toggle('hidden', next !== 'battle');
+    document.getElementById('formation-screen')?.classList.toggle('hidden', next !== 'formation');
+    document.getElementById('options-screen')?.classList.toggle('hidden', next !== 'options');
+    document.querySelectorAll('.workspace-nav-btn').forEach(button => {
+        button.classList.toggle('active', button.id === `nav-${next}`);
+    });
+    if (next === 'formation') {
+        editingFormation = normalizeFormation(savedFormation);
+        selectedFormationUnitId = null;
+        renderFormationEditor();
+    }
+    if (next === 'options') updateAudioButtons();
 }
 
 function saveUiSettings() {
@@ -1871,6 +1999,7 @@ function deactivateOnlineMode(clearSession = true) {
     randomMatchAutoStarted = false;
     onlineAbilityChoices = { 1: null, 2: null };
     onlineReadyState = { 1: false, 2: false };
+    onlineFormations = { 1: null, 2: null };
     onlineUsernames = { 1: null, 2: null };
     onlineProfileDetails = { 1: null, 2: null };
     matchIntroActive = false;
@@ -2112,6 +2241,7 @@ document.addEventListener('DOMContentLoaded', () => {
     runUiInitStep('saved auth session', loadSavedAuthSession);
     runUiInitStep('saved online session', loadSavedOnlineSession);
     runUiInitStep('saved UI settings', loadSavedUiSettings);
+    runUiInitStep('saved formation', loadSavedFormation);
     runUiInitStep('map source mode', refreshMapSourceModeFromStorage);
 
     // Keep each control group independent. One missing optional element must not
@@ -2759,6 +2889,39 @@ function registerMapTabSequence(mapName) {
 function setupUIEventListeners() {
     document.addEventListener('pointerdown', initializeAudio, { once: true });
     document.getElementById('btn-start-game')?.addEventListener('click', () => startGame());
+    document.getElementById('nav-battle')?.addEventListener('click', () => setWorkspaceView('battle'));
+    document.getElementById('nav-formation')?.addEventListener('click', () => setWorkspaceView('formation'));
+    document.getElementById('nav-options')?.addEventListener('click', () => setWorkspaceView('options'));
+    document.getElementById('formation-area1')?.addEventListener('click', event => {
+        const button = event.target.closest('[data-unit-id]');
+        if (!button) return;
+        selectedFormationUnitId = button.dataset.unitId;
+        document.getElementById('formation-status').textContent = `${button.textContent.trim()} を選択中`;
+        renderFormationEditor();
+    });
+    document.getElementById('formation-area2')?.addEventListener('click', event => {
+        const button = event.target.closest('[data-unit-id]');
+        if (!button) return;
+        selectedFormationUnitId = button.dataset.unitId;
+        document.getElementById('formation-status').textContent = `${button.textContent.trim()} を選択中`;
+        renderFormationEditor();
+    });
+    document.getElementById('formation-to-area1')?.addEventListener('click', () => moveFormationUnitTo('area1'));
+    document.getElementById('formation-to-area2')?.addEventListener('click', () => moveFormationUnitTo('area2'));
+    document.getElementById('formation-move-prev')?.addEventListener('click', () => shiftFormationUnit(-1));
+    document.getElementById('formation-move-next')?.addEventListener('click', () => shiftFormationUnit(1));
+    document.getElementById('formation-save')?.addEventListener('click', saveFormation);
+    document.getElementById('formation-reset')?.addEventListener('click', () => {
+        editingFormation = cloneDefaultFormation();
+        selectedFormationUnitId = null;
+        renderFormationEditor();
+        document.getElementById('formation-status').textContent = '初期編成へ戻しました。SAVEで確定します。';
+    });
+    document.getElementById('options-toggle-sfx')?.addEventListener('click', toggleMoveSfx);
+    document.getElementById('options-toggle-bgm')?.addEventListener('click', toggleBgm);
+    document.getElementById('options-sfx-volume')?.addEventListener('input', handleSfxVolumeChange);
+    document.getElementById('options-bgm-volume')?.addEventListener('input', handleBgmVolumeChange);
+    document.getElementById('options-vision-saturation')?.addEventListener('input', handleVisionSaturationChange);
     const menuToggle = document.getElementById('btn-toggle-menu');
     const menuPanel = document.getElementById('menu-panel');
     const newsMenu = document.querySelector('.news-menu');
@@ -3218,6 +3381,7 @@ function showLocalPanel() {
 }
 
 function resetOnlineMatchmakingState(keepPanel = true) {
+    stopOnlinePreparationTimer();
     manualDisconnect = true;
     if (onlineSocket) {
         try { onlineSocket.close(); } catch {}
@@ -3370,6 +3534,7 @@ function startRandomMatch() {
 }
 
 function cancelMatchmaking() {
+    stopOnlinePreparationTimer();
     manualDisconnect = true;
     if (onlineSocket) onlineSocket.close();
     onlineMode = false;
@@ -3510,6 +3675,36 @@ function resetOnlineAutoStartState() {
     privateMatchAutoStartTimer = null;
 }
 
+function stopOnlinePreparationTimer() {
+    window.clearInterval(onlinePreparationTimer);
+    onlinePreparationTimer = null;
+    onlinePreparationDeadline = 0;
+}
+
+function updateOnlinePreparationTimer() {
+    const timer = document.getElementById('preparation-timer');
+    const value = document.getElementById('preparation-time-value');
+    if (!timer || !value || !onlinePreparationDeadline) return;
+    const remainingMs = Math.max(0, onlinePreparationDeadline - Date.now());
+    const seconds = Math.ceil(remainingMs / 1000);
+    value.textContent = `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
+    timer.classList.toggle('warning', seconds <= 10);
+    if (remainingMs > 0) return;
+    window.clearInterval(onlinePreparationTimer);
+    onlinePreparationTimer = null;
+    if (onlineMode && onlineMatchPreviewActive && localPlayer && !onlineReadyState[localPlayer]) {
+        showStatusAlert('準備時間終了。現在の甲と編成でREADYしました。', 'warning', 2500);
+        markOnlineReady();
+    }
+}
+
+function startOnlinePreparationTimer(deadline = null) {
+    stopOnlinePreparationTimer();
+    onlinePreparationDeadline = Number(deadline) > Date.now() ? Number(deadline) : Date.now() + 60000;
+    updateOnlinePreparationTimer();
+    onlinePreparationTimer = window.setInterval(updateOnlinePreparationTimer, 250);
+}
+
 function maybeAutoStartRandomMatch() {
     const ready = Boolean(onlineAbilityChoices[1] && onlineAbilityChoices[2] && onlineReadyState[1] && onlineReadyState[2]);
     if (!onlineMode || activePhase !== 'setup') {
@@ -3567,6 +3762,7 @@ function connectOnlineSocket({ roomId = null, player = null, random = false, rec
         updateReadyButton();
         updateMatchmakingPlayerSummary();
         sendOnlineMessage({ kind: 'profile', username: localUsername });
+        sendOnlineMessage({ kind: 'formation_choice', formation: normalizeFormation(savedFormation) });
     });
 
     onlineSocket.addEventListener('message', (event) => {
@@ -3602,7 +3798,8 @@ function revealAllPreviewVision() {
     p2Vision = { area1: new Set(allCells), area2: new Set(allCells), area3: new Set(allCells) };
 }
 
-function prepareOnlineMatchPreview(seed = null) {
+function prepareOnlineMatchPreview(seed = null, preparationDeadline = null) {
+    setWorkspaceView('battle');
     const previewSeed = Number.isFinite(seed) ? seed : hashStringToSeed(matchRoomId || onlineSession?.roomId || 'online');
     gameSeed = previewSeed;
     if (localPlayer === 1) {
@@ -3652,8 +3849,8 @@ function prepareOnlineMatchPreview(seed = null) {
 
     initializeAudio();
     initializeBoards();
-    initializeUnits();
     applyMapTerrainForCurrentMode(gameSeed);
+    initializeUnits();
     revealAllPreviewVision();
     calculateVisibility();
 
@@ -3669,6 +3866,7 @@ function prepareOnlineMatchPreview(seed = null) {
     syncBgmPlayback();
     updateAudioButtons();
     setMatchmakingStatus('盤面を確認して、甲アビリティを選択してください。', 'success');
+    startOnlinePreparationTimer(preparationDeadline);
     queueStageIntroCutIn();
 }
 
@@ -3679,7 +3877,11 @@ function startOnlineBattle() {
         seed: gameSeed || hashStringToSeed(matchRoomId || onlineSession?.roomId || 'online'),
         matchType: getCurrentMatchType(),
         matchKey: createOnlineMatchKey(),
-        mapSourceMode
+        mapSourceMode,
+        formations: {
+            1: normalizeFormation(onlineFormations[1] || savedFormation),
+            2: normalizeFormation(onlineFormations[2] || savedFormation)
+        }
     };
 
     if (onlineMode && (!onlineAbilityChoices[1] || !onlineAbilityChoices[2])) {
@@ -3738,6 +3940,8 @@ function handleOnlineMessage(message) {
         if (localPlayer) onlineUsernames[localPlayer] = localUsername;
         if (localPlayer && onlineSocket?.readyState === WebSocket.OPEN) {
             sendOnlineMessage({ kind: 'profile', username: localUsername });
+            onlineFormations[localPlayer] = normalizeFormation(savedFormation);
+            sendOnlineMessage({ kind: 'formation_choice', formation: onlineFormations[localPlayer] });
         }
         updateMatchmakingPlayerSummary();
         if (isRandomMatchRoom()) setMatchmakingStatus('マッチング中...', 'searching');
@@ -3745,7 +3949,7 @@ function handleOnlineMessage(message) {
             if (localPlayer === 1) {
                 const previewSeed = hashStringToSeed(`${message.roomId || matchRoomId || onlineSession?.roomId || 'online'}:${Date.now()}`);
                 prepareOnlineMatchPreview(previewSeed);
-                sendOnlineMessage({ kind: 'preview_seed', seed: previewSeed, matchTier: getOnlineMatchTier(), mapSourceMode });
+                sendOnlineMessage({ kind: 'preview_seed', seed: previewSeed, matchTier: getOnlineMatchTier(), mapSourceMode, preparationDeadline: onlinePreparationDeadline });
             }
         }
         if (message.snapshot?.started && activePhase !== 'battle') {
@@ -3804,7 +4008,7 @@ function handleOnlineMessage(message) {
         if (onlineMode && !onlineMatchPreviewActive && localPlayer === 1) {
             const previewSeed = hashStringToSeed(`${matchRoomId || onlineSession?.roomId || 'online'}:${Date.now()}`);
             prepareOnlineMatchPreview(previewSeed);
-            sendOnlineMessage({ kind: 'preview_seed', seed: previewSeed, matchTier: getOnlineMatchTier(), mapSourceMode });
+            sendOnlineMessage({ kind: 'preview_seed', seed: previewSeed, matchTier: getOnlineMatchTier(), mapSourceMode, preparationDeadline: onlinePreparationDeadline });
         }
         updateMatchmakingPlayerSummary();
         updateOnlineStartAvailability();
@@ -3832,7 +4036,7 @@ function handleOnlineMessage(message) {
                 fixedMapPreset = loadFixedMapPreset(mapSourceMode);
                 updateMapSourceUI();
             }
-            prepareOnlineMatchPreview(Number(message.seed) || hashStringToSeed(matchRoomId || onlineSession?.roomId || 'online'));
+            prepareOnlineMatchPreview(Number(message.seed) || hashStringToSeed(matchRoomId || onlineSession?.roomId || 'online'), message.preparationDeadline);
         }
         return;
     }
@@ -3848,6 +4052,13 @@ function handleOnlineMessage(message) {
         updateMatchmakingPlayerSummary();
         maybeAutoStartRandomMatch();
         updateUI();
+        return;
+    }
+
+    if (message.kind === 'formation_choice') {
+        onlineFormations[message.player] = normalizeFormation(message.formation);
+        if (onlineMatchPreviewActive && activePhase === 'setup') refreshOnlineFormationPreview();
+        addConnectionLog(`P${message.player} の編成を受信しました。`);
         return;
     }
 
@@ -3908,6 +4119,16 @@ function sendOnlineMessage(message) {
     onlineSocket.send(JSON.stringify({ ...message, player: localPlayer }));
 }
 
+function refreshOnlineFormationPreview() {
+    Object.values(boards).forEach(rows => rows.forEach(row => row.forEach(cell => { cell.unit = null; })));
+    protectedWallCells = new Set();
+    initializeUnits();
+    revealAllPreviewVision();
+    calculateVisibility();
+    renderBoard();
+    updateUI();
+}
+
 function updateOnlineStartAvailability() {
     const btnStart = document.getElementById('btn-start-online-match');
     if (btnStart) {
@@ -3932,6 +4153,8 @@ function markOnlineReady() {
     if (!onlineMode || !localPlayer || !onlineMatchPreviewActive) return;
     onlineAbilityChoices[localPlayer] = getOnlineAbilityChoice();
     onlineReadyState[localPlayer] = true;
+    onlineFormations[localPlayer] = normalizeFormation(savedFormation);
+    sendOnlineMessage({ kind: 'formation_choice', formation: onlineFormations[localPlayer] });
     sendOnlineMessage({ kind: 'ability_choice', ability: onlineAbilityChoices[localPlayer] });
     sendOnlineMessage({ kind: 'ready_state', ready: true });
     setMatchmakingStatus(isRandomMatchRoom() ? 'マッチング中...' : '準備完了しました。相手を待っています。', isRandomMatchRoom() ? 'searching' : '');
@@ -4056,10 +4279,20 @@ function updateAudioButtons() {
     const bgmBtn = document.getElementById('btn-toggle-bgm');
     const sfxVolumeSlider = document.getElementById('sfx-volume');
     const bgmVolumeSlider = document.getElementById('bgm-volume');
+    const optionsSfxState = document.getElementById('options-sfx-state');
+    const optionsBgmState = document.getElementById('options-bgm-state');
+    const optionsSfxVolume = document.getElementById('options-sfx-volume');
+    const optionsBgmVolume = document.getElementById('options-bgm-volume');
+    const optionsVision = document.getElementById('options-vision-saturation');
     if (sfxBtn) sfxBtn.textContent = moveSfxEnabled ? 'SE ON' : 'SE OFF';
     if (bgmBtn) bgmBtn.textContent = bgmEnabled ? 'BGM ON' : 'BGM OFF';
     if (sfxVolumeSlider) sfxVolumeSlider.value = String(Math.round(moveSfxVolume * 100));
     if (bgmVolumeSlider) bgmVolumeSlider.value = String(Math.round(bgmVolume * 100));
+    if (optionsSfxState) optionsSfxState.textContent = moveSfxEnabled ? 'ON' : 'OFF';
+    if (optionsBgmState) optionsBgmState.textContent = bgmEnabled ? 'ON' : 'OFF';
+    if (optionsSfxVolume) optionsSfxVolume.value = String(Math.round(moveSfxVolume * 100));
+    if (optionsBgmVolume) optionsBgmVolume.value = String(Math.round(bgmVolume * 100));
+    if (optionsVision) optionsVision.value = String(Math.round(visionSaturation * 100));
 }
 
 function playMoveSfx() {
@@ -4180,6 +4413,7 @@ function applyRemoteAction(action) {
 
 function startGame(config = null, fromOnline = false) {
     if (onlineMode && localPlayer !== 1 && !fromOnline) return;
+    setWorkspaceView('battle');
     gameSeed = config?.seed || Math.floor(Math.random() * 0xFFFFFFFF);
     const requestedMapSourceMode = config?.mapSourceMode
         ? normalizeMapSourceMode(config.mapSourceMode)
@@ -4191,6 +4425,11 @@ function startGame(config = null, fromOnline = false) {
     const reusePreview = onlineMode && !mapSourceChanged && onlineMatchPreviewActive && activePhase === 'setup' && boards.area1.length > 0;
 
     if (onlineMode) {
+        if (config?.formations) {
+            onlineFormations[1] = normalizeFormation(config.formations[1]);
+            onlineFormations[2] = normalizeFormation(config.formations[2]);
+            if (reusePreview) refreshOnlineFormationPreview();
+        }
         if (!reusePreview && localPlayer) {
             onlineAbilityChoices[localPlayer] = getOnlineAbilityChoice();
         }
@@ -4204,6 +4443,7 @@ function startGame(config = null, fromOnline = false) {
     startMatchTracking(config);
 
     activePhase = 'battle';
+    stopOnlinePreparationTimer();
     resetOnlineAutoStartState();
     isGameOver = false;
     currentPlayer = 1;
@@ -4241,8 +4481,8 @@ function startGame(config = null, fromOnline = false) {
 
     if (!reusePreview) {
         initializeBoards();
-        initializeUnits();
         applyMapTerrainForCurrentMode(gameSeed);
+        initializeUnits();
     } else {
         hideOnlineMatchPreview();
     }
@@ -4289,7 +4529,20 @@ function startGame(config = null, fromOnline = false) {
     updateAudioButtons();
 
     if (onlineMode && !fromOnline) {
-        sendOnlineMessage({ kind: 'start', config: { p1Ability, p2Ability, seed: gameSeed, matchKey: currentMatchKey, mapSourceMode } });
+        sendOnlineMessage({
+            kind: 'start',
+            config: {
+                p1Ability,
+                p2Ability,
+                seed: gameSeed,
+                matchKey: currentMatchKey,
+                mapSourceMode,
+                formations: {
+                    1: normalizeFormation(onlineFormations[1] || savedFormation),
+                    2: normalizeFormation(onlineFormations[2] || savedFormation)
+                }
+            }
+        });
     }
 }
 
@@ -4546,7 +4799,6 @@ async function importMapPresetFromFile(file) {
 // --- UNIT INITIALIZATION ---
 function initializeUnits() {
     units = [];
-    const rng = createRng(gameSeed);
 
     // --- PLAYER 1 (Blue) ---
     const p1Core = new Unit('p1_core', 'core', 1, 'area1', 10, 5);
@@ -4554,20 +4806,7 @@ function initializeUnits() {
     addUnitToBoard(p1Core, 'area1', 10, 5);
     addUnitToBoard(p1Core, 'area1', 10, 6);
 
-    const p1Lineup = ['otsu','hei','tei','tei','hei','tei','tei','hei','otsu'];
-    p1Lineup.forEach((type, i) => {
-        addUnitToBoard(new Unit(`p1_home_${i}`, type, 1, 'area1', 9, i + 1), 'area1', 9, i + 1);
-    });
-
-    placeArea2Frontline(1, [
-        ['p1_scout_1', 'scout'],
-        ['p1_koh', 'koh'],
-        ['p1_hei_front', 'hei'],
-        ['p1_tei_front', 'tei'],
-        ['p1_hei_front_extra', 'hei'],
-        ['p1_tei_front_extra', 'tei'],
-        ['p1_scout_2', 'scout']
-    ], rng);
+    placePlayerFormation(1, onlineMode ? onlineFormations[1] : savedFormation);
 
     // --- PLAYER 2 (Magenta) ---
     const p2Core = new Unit('p2_core', 'core', 2, 'area3', 0, 5);
@@ -4575,21 +4814,35 @@ function initializeUnits() {
     addUnitToBoard(p2Core, 'area3', 0, 5);
     addUnitToBoard(p2Core, 'area3', 0, 6);
 
-    const p2Lineup = ['otsu','hei','tei','tei','hei','tei','tei','hei','otsu'];
-    p2Lineup.forEach((type, i) => {
-        const col = 9 - i;
-        addUnitToBoard(new Unit(`p2_home_${i}`, type, 2, 'area3', 1, col), 'area3', 1, col);
-    });
+    placePlayerFormation(2, onlineMode ? onlineFormations[2] : savedFormation);
+}
 
-    placeArea2Frontline(2, [
-        ['p2_scout_1', 'scout'],
-        ['p2_koh', 'koh'],
-        ['p2_hei_front', 'hei'],
-        ['p2_tei_front', 'tei'],
-        ['p2_hei_front_extra', 'hei'],
-        ['p2_tei_front_extra', 'tei'],
-        ['p2_scout_2', 'scout']
-    ], rng);
+function getFormationDeploymentCells(player, area) {
+    const mapName = area === 'area1' ? (player === 1 ? 'area1' : 'area3') : 'area2';
+    const rows = area === 'area1'
+        ? (player === 1 ? [9, 8, 7] : [1, 2, 3])
+        : (player === 1 ? [10, 9, 8] : [0, 1, 2]);
+    const centerOrder = [5, 4, 6, 3, 7, 2, 8, 1, 9, 0, 10];
+    const cells = [];
+    rows.forEach(row => centerOrder.forEach(col => {
+        const cell = boards[mapName]?.[row]?.[col];
+        if (!cell || cell.isWall || cell.isTeleport || cell.isCoreTile || cell.unit) return;
+        cells.push({ mapName, row, col });
+    }));
+    return cells;
+}
+
+function placePlayerFormation(player, rawFormation) {
+    const formation = normalizeFormation(rawFormation);
+    ['area1', 'area2'].forEach(area => {
+        const positions = getFormationDeploymentCells(player, area);
+        formation[area].forEach((entry, index) => {
+            const position = positions[index];
+            if (!position) return;
+            const unit = new Unit(`p${player}_${entry.id}`, entry.type, player, position.mapName, position.row, position.col, area === 'area2');
+            addUnitToBoard(unit, position.mapName, position.row, position.col);
+        });
+    });
 }
 
 function addUnitToBoard(unit, mapName, r, c) {
@@ -6714,6 +6967,7 @@ function skipTurn() {
 }
 
 function resetToSetup(fromOnline = false) {
+    stopOnlinePreparationTimer();
     const completedOnlineMatch = onlineMode && isGameOver;
     activePhase = 'setup';
     isGameOver = false;

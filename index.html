@@ -407,8 +407,54 @@
         </header>
         <div id="status-alert" class="status-alert hidden"></div>
 
+        <nav class="workspace-nav" aria-label="メインメニュー">
+            <button id="nav-battle" class="workspace-nav-btn active" type="button">BATTLE</button>
+            <button id="nav-formation" class="workspace-nav-btn" type="button">FORMATION</button>
+            <button id="nav-options" class="workspace-nav-btn" type="button">OPTIONS</button>
+        </nav>
+
+        <section id="formation-screen" class="workspace-screen hidden">
+            <div class="workspace-heading">
+                <div><span class="workspace-kicker">UNIT DEPLOYMENT</span><h2>編成</h2></div>
+                <div id="formation-count" class="formation-count">16 / 16</div>
+            </div>
+            <p class="workspace-copy">コマを選択し、配置エリアや順番を変更します。偵察兵はエリア2固定です。</p>
+            <div class="formation-zones">
+                <div class="formation-zone cyan-zone">
+                    <div class="formation-zone-head"><strong>AREA 1</strong><span>自軍拠点</span></div>
+                    <div id="formation-area1" class="formation-unit-list"></div>
+                </div>
+                <div class="formation-zone purple-zone">
+                    <div class="formation-zone-head"><strong>AREA 2</strong><span>中央前線</span></div>
+                    <div id="formation-area2" class="formation-unit-list"></div>
+                </div>
+            </div>
+            <div class="formation-controls glass-panel">
+                <button id="formation-to-area1" class="small-tool-btn" type="button">← AREA 1</button>
+                <button id="formation-move-prev" class="small-tool-btn" type="button">◀ 前へ</button>
+                <button id="formation-move-next" class="small-tool-btn" type="button">後へ ▶</button>
+                <button id="formation-to-area2" class="small-tool-btn" type="button">AREA 2 →</button>
+            </div>
+            <div class="formation-actions">
+                <button id="formation-reset" class="neon-btn secondary" type="button">DEFAULT</button>
+                <button id="formation-save" class="neon-btn" type="button">SAVE FORMATION</button>
+            </div>
+            <div id="formation-status" class="account-status">コマを選択してください。</div>
+        </section>
+
+        <section id="options-screen" class="workspace-screen hidden">
+            <div class="workspace-heading"><div><span class="workspace-kicker">SYSTEM CONFIGURATION</span><h2>オプション</h2></div></div>
+            <div class="options-workspace-grid">
+                <button id="options-toggle-sfx" class="option-card" type="button"><span>SE</span><strong id="options-sfx-state">ON</strong></button>
+                <button id="options-toggle-bgm" class="option-card" type="button"><span>BGM</span><strong id="options-bgm-state">ON</strong></button>
+                <label class="option-slider-card"><span>SE VOLUME</span><input id="options-sfx-volume" type="range" min="0" max="100" value="55"></label>
+                <label class="option-slider-card"><span>BGM VOLUME</span><input id="options-bgm-volume" type="range" min="0" max="100" value="35"></label>
+                <label class="option-slider-card wide"><span>VISION BRIGHTNESS</span><input id="options-vision-saturation" type="range" min="20" max="160" value="100"></label>
+            </div>
+        </section>
+
         <!-- MAIN LAYOUT -->
-        <main>
+        <main id="battle-screen">
             <!-- LEFT COLUMN: RULES & INFO -->
             <section id="sidebar-left" class="glass-panel">
                 <div class="panel-header">
@@ -676,6 +722,7 @@
 
                     <div id="online-prebattle-panel" class="hub-section hidden">
                         <h3>ONLINE PRE-BATTLE</h3>
+                        <div id="preparation-timer" class="preparation-timer"><span>PREP TIME</span><strong id="preparation-time-value">01:00</strong></div>
                         <p class="room-hint">マッチ成立後は、盤面を確認してから甲アビリティを選択してください。</p>
                         <div class="matchmaking-section">
                             <h4 class="match-subhead">甲アビリティ選択</h4>
