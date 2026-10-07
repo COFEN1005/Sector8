@@ -1238,11 +1238,10 @@ header {
 .retreat-row i.return { border-color: var(--neon-gold); background: rgba(255, 183, 0, 0.78); color: #07131c; }
 .assassin-retreat-figure figcaption { color: #ff83bb; font-size: 0.66rem; text-align: center; }
 
-.ability-base-range { padding: 0.45rem 0.6rem; border: 1px solid rgba(0, 240, 255, 0.2); border-radius: 5px; color: var(--neon-cyan); font-family: var(--font-mono); font-size: 0.72rem; }
-.ability-evolution-ranges { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.65rem; }
+.ability-evolution-ranges { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.35rem; }
 .ability-evolution-ranges figure { min-width: 0; }
-.ability-evolution-ranges figcaption { margin-top: 0.35rem; color: var(--neon-gold); font-family: var(--font-mono); font-size: 0.7rem; text-align: center; }
-.ability-evolution-ranges figcaption strong { display: block; margin-top: 0.2rem; color: #f6fbff; font-size: 0.67rem; font-weight: 500; }
+.ability-evolution-ranges figcaption { margin-top: 0.35rem; color: var(--neon-gold); font-family: var(--font-mono); font-size: 0.66rem; text-align: center; }
+.ability-evolution-ranges figcaption strong { display: block; margin-top: 0.2rem; color: #f6fbff; font-size: 0.6rem; font-weight: 500; }
 .ability-evolution-legend { display: flex; justify-content: center; flex-wrap: wrap; gap: 0.4rem 1rem; margin-top: 0.6rem; color: var(--text-muted); font-size: 0.66rem; }
 .ability-evolution-legend span::before { content: ''; display: inline-block; width: 0.65rem; height: 0.65rem; margin-right: 0.3rem; border: 1px solid rgba(0, 240, 255, 0.62); border-radius: 2px; background: rgba(0, 240, 255, 0.24); vertical-align: -0.08rem; }
 .ability-evolution-legend span:last-child::before { border-color: rgba(255, 183, 0, 0.8); background: rgba(255, 183, 0, 0.38); }
