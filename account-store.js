@@ -20,6 +20,7 @@ const SESSION_TTL_MS = 365 * 24 * 60 * 60 * 1000;
 const SESSION_TOUCH_INTERVAL_MS = 5 * 60 * 1000;
 const PIN_MAX_FAILURES = 5;
 const PIN_LOCK_MS = 5 * 60 * 1000;
+const MATCH_HISTORY_LIST_COLUMNS = 'id,match_key,player1_id,player2_id,player1_name,player2_name,match_type,winner,loser,result,player1_get_rating,player2_get_rating,player1_level,player2_level,started_time,ended_time,time_taken,surrender_by_player_id,created_at,summary_json,winner_player_id,loser_player_id,player1_start_rating,player2_start_rating';
 
 function now() {
   return Date.now();
@@ -1203,10 +1204,27 @@ function createSupabaseStore() {
 
   async function listRecentMatches(playerId, limit = 20) {
     return selectMany('match_history', {
+      select: MATCH_HISTORY_LIST_COLUMNS,
       or: `(player1_id.eq.${Number(playerId)},player2_id.eq.${Number(playerId)})`,
       order: 'started_time.desc',
       limit: Math.max(1, Math.min(50, Number(limit) || 20))
     });
+  }
+
+  async function getMatchById(matchId) {
+    return selectOne('match_history', { id: `eq.${Number(matchId)}` });
+  }
+
+  async function saveMatchReplay(matchId, replay) {
+    const existing = await getMatchById(matchId);
+    if (!existing) return false;
+    const summary = { ...(existing.summary_json || {}), replayAvailable: true };
+    const rows = await updateRows('match_history', {
+      id: `eq.${Number(matchId)}`,
+      replay_json: 'is.null',
+      select: 'id'
+    }, { replay_json: replay, summary_json: summary });
+    return rows.length > 0;
   }
 
   function matchRpcBody(entry, expGain) {
@@ -1303,6 +1321,8 @@ function createSupabaseStore() {
     recordMatchHistory,
     finalizeMatch,
     listRecentMatches,
+    getMatchById,
+    saveMatchReplay,
     updatePlayerProgress,
     calculateRatingDelta,
     normalizePlayerId,
@@ -1772,13 +1792,26 @@ function createSqliteStore() {
 
   function listRecentMatches(playerId, limit = 20) {
     const rows = db.prepare(`
-      SELECT *
+      SELECT ${MATCH_HISTORY_LIST_COLUMNS}
       FROM match_history
       WHERE player1_id = ? OR player2_id = ?
       ORDER BY started_time DESC
       LIMIT ?
     `).all(playerId, playerId, limit);
     return rows;
+  }
+
+  function getMatchById(matchId) {
+    return db.prepare('SELECT * FROM match_history WHERE id = ?').get(matchId) || null;
+  }
+
+  function saveMatchReplay(matchId, replay) {
+    const existing = getMatchById(matchId);
+    if (!existing) return false;
+    const summary = { ...JSON.parse(existing.summary_json || '{}'), replayAvailable: true };
+    const result = db.prepare('UPDATE match_history SET replay_json = ?, summary_json = ? WHERE id = ? AND replay_json IS NULL')
+      .run(JSON.stringify(replay), JSON.stringify(summary), matchId);
+    return result.changes > 0;
   }
 
   function recordMatchHistory(entry) {
@@ -1942,6 +1975,8 @@ function createSqliteStore() {
     recordMatchHistory,
     finalizeMatch,
     listRecentMatches,
+    getMatchById,
+    saveMatchReplay,
     updatePlayerProgress,
     calculateRatingDelta,
     normalizePlayerId,

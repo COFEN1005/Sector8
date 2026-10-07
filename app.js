@@ -259,6 +259,8 @@ let replayViewerSnapshots = [];
 let replayViewerIndex = 0;
 let replayViewerEntry = null;
 let replayViewerOpen = false;
+let replayViewerMap = 'area1';
+const replayHydratedCache = new Map();
 let pendingImpersonationUnitId = null;
 let savedFormation = null;
 let editingFormation = null;
@@ -1167,7 +1169,7 @@ function renderGameOverSummary(summary = null) {
         <div class="summary-row"><span>RATING Δ</span><strong>${summary.ratingDelta === null ? '-' : (summary.ratingDelta > 0 ? `+${summary.ratingDelta}` : String(summary.ratingDelta))}</strong></div>
         <div class="summary-row"><span>EXP Δ</span><strong>${summary.expDelta === null ? '-' : (summary.expDelta > 0 ? `+${summary.expDelta}` : String(summary.expDelta))}</strong></div>
     `;
-    if (replayBtn) replayBtn.disabled = !(summary.replay && summary.replay.snapshots && summary.replay.snapshots.length);
+    if (replayBtn) replayBtn.disabled = !hasReplayData(summary.replay) && !summary.replayAvailable;
     if (restartBtn) restartBtn.textContent = 'RELOAD SYSTEM';
 }
 
@@ -1195,7 +1197,7 @@ function setGameOverReplayMode(active) {
 
 function normalizeMatchHistoryEntry(entry) {
     const summary = safeJsonParse(entry?.summary_json || entry?.summaryJson, null);
-    const replay = safeJsonParse(entry?.replay_json || entry?.replayJson, null);
+    const replay = safeJsonParse(entry?.replay_json || entry?.replayJson || entry?.replay, null);
     return {
         ...entry,
         match_type: entry?.match_type || summary?.matchType || 'unknown',
@@ -1250,9 +1252,76 @@ function applyLocalMatchProgress(ratingDelta, expGain = MATCH_EXP_GAIN) {
     return nextProfile;
 }
 
-function startReplayPlayback(matchEntry) {
+function hasReplayData(replay) {
+    return Boolean(replay?.snapshots?.length || (replay?.encoding === 'gzip-base64-v1' && replay?.data));
+}
+
+async function encodeMatchReplay(replay) {
+    if (typeof CompressionStream !== 'function') throw new Error('replay_compression_unavailable');
+    const compressed = await new Response(
+        new Blob([JSON.stringify(replay)]).stream().pipeThrough(new CompressionStream('gzip'))
+    ).arrayBuffer();
+    const bytes = new Uint8Array(compressed);
+    let binary = '';
+    for (let offset = 0; offset < bytes.length; offset += 32768) {
+        binary += String.fromCharCode(...bytes.subarray(offset, offset + 32768));
+    }
+    const data = btoa(binary);
+    if (data.length > 2_500_000) throw new Error('replay_too_large');
+    return {
+        encoding: 'gzip-base64-v1',
+        matchKey: replay.matchKey,
+        snapshotCount: replay.snapshots.length,
+        data
+    };
+}
+
+async function decodeMatchReplay(replay) {
+    if (Array.isArray(replay?.snapshots)) return replay;
+    if (replay?.encoding !== 'gzip-base64-v1' || !replay?.data || typeof DecompressionStream !== 'function') return null;
+    const binary = atob(replay.data);
+    const bytes = Uint8Array.from(binary, char => char.charCodeAt(0));
+    const text = await new Response(
+        new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))
+    ).text();
+    const decoded = JSON.parse(text);
+    return Array.isArray(decoded?.snapshots) ? decoded : null;
+}
+
+function stopReplayAutoplay() {
+    window.clearInterval(replayPlaybackTimer);
+    replayPlaybackTimer = null;
+    const button = document.getElementById('btn-replay-play');
+    if (button) button.textContent = 'PLAY';
+}
+
+function toggleReplayAutoplay() {
+    if (replayPlaybackTimer) {
+        stopReplayAutoplay();
+        return;
+    }
+    if (replayViewerIndex >= replayViewerSnapshots.length - 1) renderReplaySnapshot(0);
+    const button = document.getElementById('btn-replay-play');
+    if (button) button.textContent = 'PAUSE';
+    replayPlaybackTimer = window.setInterval(() => {
+        if (replayViewerIndex >= replayViewerSnapshots.length - 1) {
+            stopReplayAutoplay();
+            return;
+        }
+        renderReplaySnapshot(replayViewerIndex + 1);
+    }, 1100);
+}
+
+async function startReplayPlayback(matchEntry) {
+    const runId = ++replayPlaybackRunId;
     const entry = normalizeMatchHistoryEntry(matchEntry);
-    const replay = entry.replay_json;
+    let replay = entry.replay_json;
+    if (!hasReplayData(replay) && entry.id && authSession?.token) {
+        const result = await apiRequest(`/api/matches/${Number(entry.id)}/replay`);
+        replay = safeJsonParse(result.replay, null);
+    }
+    replay = await decodeMatchReplay(replay);
+    if (runId !== replayPlaybackRunId) return;
     const snapshots = Array.isArray(replay?.snapshots) ? replay.snapshots : [];
     if (!snapshots.length) {
         showStatusAlert('リプレイデータがありません。', 'warning', 2500);
@@ -1260,11 +1329,14 @@ function startReplayPlayback(matchEntry) {
     }
     replayPlaybackSource = entry;
     replayViewerEntry = entry;
-    replayViewerSnapshots = snapshots.map(hydrateReplaySnapshot);
+    stopReplayAutoplay();
+    replayHydratedCache.clear();
+    replayViewerSnapshots = snapshots;
     replayViewerIndex = 0;
+    replayViewerMap = snapshots[0]?.activeMap || 'area1';
     replayPlaybackActive = true;
     replayViewerOpen = true;
-    const replaySummary = entry.summary_json || {};
+    const replaySummary = entry.summary_json || entry;
     activeMatchSummaryView = { ...replaySummary, replay };
     setGameOverReplayMode(true);
     document.getElementById('replay-slider').max = String(Math.max(0, replayViewerSnapshots.length - 1));
@@ -1275,7 +1347,13 @@ function renderReplaySnapshot(index = 0) {
     if (!replayViewerSnapshots.length) return;
     const safeIndex = Math.min(Math.max(0, Number(index) || 0), replayViewerSnapshots.length - 1);
     replayViewerIndex = safeIndex;
-    const snapshot = replayViewerSnapshots[safeIndex];
+    const rawSnapshot = replayViewerSnapshots[safeIndex];
+    let snapshot = replayHydratedCache.get(safeIndex);
+    if (!snapshot) {
+        snapshot = hydrateReplaySnapshot(rawSnapshot);
+        replayHydratedCache.set(safeIndex, snapshot);
+        if (replayHydratedCache.size > 4) replayHydratedCache.delete(replayHydratedCache.keys().next().value);
+    }
     const slider = document.getElementById('replay-slider');
     const turnLabel = document.getElementById('replay-turn-label');
     const snapshotLabel = document.getElementById('replay-snapshot-label');
@@ -1290,11 +1368,14 @@ function renderReplaySnapshot(index = 0) {
     if (snapshotCount) {
         snapshotCount.textContent = `${safeIndex + 1} / ${replayViewerSnapshots.length}`;
     }
+    document.querySelectorAll('.replay-map-btn').forEach(button => {
+        button.classList.toggle('active', button.dataset.map === replayViewerMap);
+    });
 
     withReplayRenderState(snapshot, () => {
         renderBoard({
             boardId: 'replay-board',
-            mapName: snapshot.activeMap || activeMap,
+            mapName: replayViewerMap,
             viewerPlayerOverride: snapshot.viewerPlayer || 1,
             updateLinkedPanels: false,
             interactive: false,
@@ -1304,16 +1385,21 @@ function renderReplaySnapshot(index = 0) {
 }
 
 function closeReplayViewer() {
+    ++replayPlaybackRunId;
+    stopReplayAutoplay();
     replayPlaybackActive = false;
     replayViewerOpen = false;
     replayViewerEntry = null;
     replayViewerSnapshots = [];
+    replayHydratedCache.clear();
     replayViewerIndex = 0;
     setGameOverReplayMode(false);
     renderGameOverSummary(activeMatchSummaryView);
 }
 
 function openMatchHistorySummary(matchEntry) {
+    ++replayPlaybackRunId;
+    stopReplayAutoplay();
     const entry = normalizeMatchHistoryEntry(matchEntry);
     const outcome = getMatchHistoryOutcome(entry);
     const summary = entry.summary_json || {
@@ -1345,9 +1431,11 @@ function openMatchHistorySummary(matchEntry) {
     activeMatchSummaryView.replay = entry.replay_json || null;
     replayPlaybackSource = entry;
     replayViewerEntry = entry;
-    replayViewerSnapshots = Array.isArray(entry.replay_json?.snapshots) ? entry.replay_json.snapshots.map(hydrateReplaySnapshot) : [];
+    replayViewerSnapshots = [];
+    replayHydratedCache.clear();
     replayViewerIndex = 0;
     replayPlaybackActive = false;
+    replayViewerOpen = false;
     document.getElementById('replay-viewer')?.classList.add('hidden');
     document.getElementById('game-summary-panel')?.classList.remove('hidden');
     document.getElementById('btn-replay-match')?.classList.remove('hidden');
@@ -1360,7 +1448,7 @@ function openMatchHistorySummary(matchEntry) {
     document.getElementById('game-over-overlay')?.classList.remove('hidden');
     const replayBtn = document.getElementById('btn-replay-match');
     if (replayBtn) {
-        replayBtn.disabled = !(entry.replay_json?.snapshots?.length);
+        replayBtn.disabled = !hasReplayData(entry.replay_json) && !entry.summary_json?.replayAvailable;
     }
 }
 
@@ -1768,7 +1856,7 @@ function renderMatchHistory(matches = [], state = {}) {
                                 <span>${durationText}</span>
                                 <span>${outcomeLine}${surrenderText}</span>
                             </div>
-                            <div class="match-history-footer">${entry.replay_json?.snapshots?.length ? 'REPLAY AVAILABLE' : 'SUMMARY ONLY'}</div>
+                            <div class="match-history-footer">${hasReplayData(entry.replay_json) || entry.summary_json?.replayAvailable ? 'REPLAY AVAILABLE' : 'SUMMARY ONLY'}</div>
                         </article>
                     `;
                 }).join('')}
@@ -1958,7 +2046,8 @@ async function submitMatchHistory(reason, winnerId) {
     const summary = buildMatchSummary(isDraw ? 'draw' : reason, isDraw ? null : winnerId);
     summary.winnerName = isDraw ? 'DRAW' : (viewerWon ? localProfile.name : opponentName);
     summary.loserName = isDraw ? 'DRAW' : (viewerWon ? opponentName : localProfile.name);
-    summary.replay = currentMatchReplay;
+    const replayToSave = currentMatchReplay;
+    summary.replay = replayToSave;
     activeMatchSummaryView = summary;
     const persistedSummary = { ...summary };
     delete persistedSummary.replay;
@@ -2004,11 +2093,24 @@ async function submitMatchHistory(reason, winnerId) {
             applyAuthProfile(updatedProfile, authSession.token);
         }
         loadMatchHistory({ force: true }).catch(() => {});
-        if (activeMatchSummaryView) {
+        if (activeMatchSummaryView && !replayViewerOpen) {
             activeMatchSummaryView.ratingDelta = summary.ratingDelta;
             activeMatchSummaryView.expDelta = summary.expDelta;
-            activeMatchSummaryView.replay = currentMatchReplay;
+            activeMatchSummaryView.replay = replayToSave;
             renderGameOverSummary(activeMatchSummaryView);
+        }
+        if (result.id && replayToSave?.snapshots?.length) {
+            try {
+                const replay = await encodeMatchReplay(replayToSave);
+                await apiRequest(`/api/matches/${Number(result.id)}/replay`, {
+                    method: 'PUT',
+                    body: { replay }
+                });
+                loadMatchHistory({ force: true }).catch(() => {});
+            } catch (replayError) {
+                console.warn('replay save failed; match result remains saved', replayError);
+                showStatusAlert('対戦結果は保存しましたが、リプレイの保存に失敗しました。', 'warning', 4500);
+            }
         }
     } catch (error) {
         console.warn('match history save failed', error);
@@ -3224,18 +3326,40 @@ function setupUIEventListeners() {
     const replayMatchBtn = document.getElementById('btn-replay-match');
     if (replayMatchBtn) replayMatchBtn.addEventListener('click', () => {
         const source = replayPlaybackSource || activeMatchSummaryView;
-        const replay = source?.replay || source?.replay_json;
-        if (!replay?.snapshots?.length) {
+        if (!source) {
             showStatusAlert('リプレイデータがありません。', 'warning', 2500);
             return;
         }
-        startReplayPlayback(source);
+        replayMatchBtn.disabled = true;
+        startReplayPlayback(source).catch(error => {
+            console.warn('replay playback failed', error);
+            showStatusAlert('リプレイを読み込めませんでした。', 'warning', 3500);
+        }).finally(() => {
+            replayMatchBtn.disabled = false;
+        });
     });
     const replayCloseBtn = document.getElementById('btn-replay-close');
     if (replayCloseBtn) replayCloseBtn.addEventListener('click', closeReplayViewer);
     const replaySlider = document.getElementById('replay-slider');
     if (replaySlider) replaySlider.addEventListener('input', (event) => {
+        stopReplayAutoplay();
         renderReplaySnapshot(Number(event.target.value || 0));
+    });
+    document.getElementById('btn-replay-prev')?.addEventListener('click', () => {
+        stopReplayAutoplay();
+        renderReplaySnapshot(replayViewerIndex - 1);
+    });
+    document.getElementById('btn-replay-next')?.addEventListener('click', () => {
+        stopReplayAutoplay();
+        renderReplaySnapshot(replayViewerIndex + 1);
+    });
+    document.getElementById('btn-replay-play')?.addEventListener('click', toggleReplayAutoplay);
+    document.querySelectorAll('.replay-map-btn').forEach(button => {
+        button.addEventListener('click', () => {
+            if (!replayViewerOpen) return;
+            replayViewerMap = button.dataset.map;
+            renderReplaySnapshot(replayViewerIndex);
+        });
     });
     document.getElementById('btn-cancel-dir')?.addEventListener('click', () => {
         document.getElementById('direction-overlay')?.classList.add('hidden');
@@ -4757,7 +4881,7 @@ function startGame(config = null, fromOnline = false) {
     switchActiveMap(getViewerPlayer() === 2 ? 'area3' : 'area1');
     renderBoard();
     updateUI();
-    recordMatchReplaySnapshot('TURN START');
+    recordMatchReplaySnapshot(`TURN ${gameTurn} / P${currentPlayer} START`);
     window.clearTimeout(matchIntroTimer);
     matchIntroTimer = null;
     const shouldShowMatchIntro = !replayPlaybackActive && (
@@ -7050,7 +7174,7 @@ function endTurn() {
     calculateVisibility();
     renderBoard();
     updateUI();
-    recordMatchReplaySnapshot(`TURN ${gameTurn}`);
+    recordMatchReplaySnapshot(`TURN ${gameTurn} / P${currentPlayer} START`);
 
     const playerName = currentPlayer === 1 ? "PLAYER 1" : "PLAYER 2";
     const logColor = currentPlayer === 1 ? 'p1' : 'p2';
@@ -7260,11 +7384,11 @@ function resetToSetup(fromOnline = false) {
     onlineMatchPreviewActive = false;
     replayPlaybackActive = false;
     matchIntroActive = false;
-    window.clearTimeout(replayPlaybackTimer);
-    replayPlaybackTimer = null;
+    stopReplayAutoplay();
     replayPlaybackSource = null;
     replayPlaybackRunId++;
     replayViewerSnapshots = [];
+    replayHydratedCache.clear();
     replayViewerIndex = 0;
     replayViewerEntry = null;
     replayViewerOpen = false;

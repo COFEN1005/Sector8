@@ -846,10 +846,20 @@
                         <div class="replay-viewer-tag">REPLAY MODE</div>
                         <div id="replay-turn-label" class="replay-viewer-turn">TURN 1 / PLAYER 1</div>
                     </div>
+                    <div class="replay-map-tabs" aria-label="リプレイのエリア">
+                        <button class="replay-map-btn active" type="button" data-map="area1">AREA 1</button>
+                        <button class="replay-map-btn" type="button" data-map="area2">AREA 2</button>
+                        <button class="replay-map-btn" type="button" data-map="area3">AREA 3</button>
+                    </div>
                     <div id="replay-board-wrapper" class="replay-board-wrapper">
                         <div id="replay-board" class="board replay-board"></div>
                     </div>
                     <div class="replay-controls">
+                        <div class="replay-transport">
+                            <button id="btn-replay-prev" type="button" aria-label="前のターン">PREV</button>
+                            <button id="btn-replay-play" type="button" aria-label="再生または停止">PLAY</button>
+                            <button id="btn-replay-next" type="button" aria-label="次のターン">NEXT</button>
+                        </div>
                         <input id="replay-slider" class="replay-slider" type="range" min="0" max="0" value="0" step="1" />
                         <div class="replay-meta-row">
                             <span id="replay-snapshot-label">TURN 1</span>

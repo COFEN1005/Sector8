@@ -38,6 +38,10 @@ Without Supabase values, local development uses `data/sector8.sqlite`. Set `ACCO
 
 The same URL works on PC and mobile. The app detects the device and switches to a mobile-friendly layout on phones.
 
+## Match replays
+
+New matches record the full board at the start of each player's turn and at the final result. After the match result is saved, the replay is compressed and uploaded separately, so a replay upload failure does not undo rating or match-history updates. Open a match in history and select `REPLAY` to scrub turns, play automatically, or inspect any of the three areas. Matches played before replay recording was enabled do not have board data to replay.
+
 ## GitHub
 
 Use `PUSH_TO_GITHUB.bat` for the normal update flow. It automatically stages changes, creates a commit with `Update Sector8` when needed, and pushes to `origin/main`.

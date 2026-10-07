@@ -7,6 +7,8 @@ const crypto = require('crypto');
 const fs = require('fs');
 const http = require('http');
 const path = require('path');
+const zlib = require('node:zlib');
+const { promisify } = require('node:util');
 const {
     createStore,
     calculateRatingDelta,
@@ -19,6 +21,7 @@ const {
 const root = __dirname;
 const port = Number(process.env.PORT || 8787);
 const MAX_SPECTATORS = 2;
+const gunzip = promisify(zlib.gunzip);
 const accountStore = createStore();
 
 const rooms = new Map();
@@ -118,12 +121,12 @@ function sendJson(res, statusCode, payload) {
     res.end(JSON.stringify(payload));
 }
 
-function readRequestBody(req) {
+function readRequestBody(req, maxLength = 1_000_000) {
     return new Promise((resolve, reject) => {
         let raw = '';
         req.on('data', chunk => {
             raw += chunk;
-            if (raw.length > 1_000_000) {
+            if (raw.length > maxLength) {
                 reject(new Error('payload too large'));
                 req.destroy();
             }
@@ -133,8 +136,8 @@ function readRequestBody(req) {
     });
 }
 
-function readJsonBody(req) {
-    return readRequestBody(req).then(raw => {
+function readJsonBody(req, maxLength) {
+    return readRequestBody(req, maxLength).then(raw => {
         if (!raw) return {};
         try {
             return JSON.parse(raw);
@@ -418,7 +421,8 @@ const server = http.createServer(async (req, res) => {
 
     try {
         if (url.pathname.startsWith('/api/')) {
-            const body = method === 'GET' || method === 'HEAD' ? {} : await readJsonBody(req);
+            const replayRoute = url.pathname.match(/^\/api\/matches\/(\d+)\/replay$/);
+            const body = method === 'GET' || method === 'HEAD' ? {} : await readJsonBody(req, replayRoute ? 3_000_000 : undefined);
             const sessionToken = body.token || body.sessionToken || getBearerToken(req);
             const session = sessionToken ? await accountStore.getSession(sessionToken) : null;
 
@@ -553,6 +557,44 @@ const server = http.createServer(async (req, res) => {
                 if (!formation) return sendJson(res, 400, { ok: false, error: 'formation_invalid' });
                 const saved = await accountStore.savePlayerFormation(session.profile.id, formation);
                 return sendJson(res, 200, { ok: true, formation: saved });
+            }
+
+            if (replayRoute && (method === 'GET' || method === 'PUT')) {
+                if (!session) return sendJson(res, 401, { ok: false, error: 'unauthorized' });
+                const matchId = Number(replayRoute[1]);
+                const match = await accountStore.getMatchById(matchId);
+                if (!match) return sendJson(res, 404, { ok: false, error: 'match_not_found' });
+                if (![Number(match.player1_id), Number(match.player2_id)].includes(Number(session.profile.id))) {
+                    return sendJson(res, 403, { ok: false, error: 'match_participant_required' });
+                }
+                if (method === 'GET') {
+                    let replay = match.replay_json || null;
+                    if (typeof replay === 'string') {
+                        try { replay = JSON.parse(replay); } catch { replay = null; }
+                    }
+                    return sendJson(res, 200, { ok: true, replay });
+                }
+                const replay = body.replay;
+                if (!replay || replay.encoding !== 'gzip-base64-v1' ||
+                    replay.matchKey !== match.match_key ||
+                    !Number.isInteger(replay.snapshotCount) || replay.snapshotCount < 1 || replay.snapshotCount > 2000 ||
+                    typeof replay.data !== 'string' || replay.data.length > 2_500_000 ||
+                    !/^[A-Za-z0-9+/]+={0,2}$/.test(replay.data)) {
+                    return sendJson(res, 400, { ok: false, error: 'replay_invalid' });
+                }
+                try {
+                    const decoded = JSON.parse((await gunzip(Buffer.from(replay.data, 'base64'), {
+                        maxOutputLength: 40_000_000
+                    })).toString('utf8'));
+                    if (decoded.matchKey !== match.match_key || !Array.isArray(decoded.snapshots) ||
+                        decoded.snapshots.length !== replay.snapshotCount) {
+                        return sendJson(res, 400, { ok: false, error: 'replay_invalid' });
+                    }
+                } catch {
+                    return sendJson(res, 400, { ok: false, error: 'replay_invalid' });
+                }
+                const saved = await accountStore.saveMatchReplay(matchId, replay);
+                return sendJson(res, 200, { ok: true, saved });
             }
 
             if (method === 'GET' && url.pathname === '/api/matches') {
