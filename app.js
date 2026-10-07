@@ -5555,14 +5555,18 @@ function maybeClearCamouflageAfterMove(unit) {
 }
 
 // --- FOG OF WAR / VISIBILITY ---
+function hasArea2ControlUnit(player) {
+    return units.some(unit => unit.player === player && unit.map === 'area2' && unit.type !== 'scout');
+}
+
 function calculateVisibility() {
     pruneExpiredSmokeZones();
     refreshSmokeCamouflageStates();
     Object.keys(p1Vision).forEach(map => p1Vision[map].clear());
     Object.keys(p2Vision).forEach(map => p2Vision[map].clear());
 
-    const p1InArea2 = units.some(u => u.player === 1 && u.map === 'area2');
-    const p2InArea2 = units.some(u => u.player === 2 && u.map === 'area2');
+    const p1InArea2 = hasArea2ControlUnit(1);
+    const p2InArea2 = hasArea2ControlUnit(2);
 
     if (p1InArea2) {
         const size = MAP_SIZES.area1;
@@ -6887,8 +6891,7 @@ function shouldHideAiActionFeedback(player = currentPlayer) {
 }
 
 function countInformationCollapseTurn(player) {
-    const hasArea2Unit = units.some(unit => unit.player === player && unit.map === 'area2');
-    if (hasArea2Unit) return false;
+    if (hasArea2ControlUnit(player)) return false;
 
     informationCollapseTurns[player] = Math.min(
         INFORMATION_COLLAPSE_TURN_LIMIT,
@@ -7326,8 +7329,7 @@ function executeAITurn() {
             }
 
             // Keep presence in Area2
-            const p2InArea2 = units.some(unit => unit.player === 2 && unit.map === 'area2');
-            if (!p2InArea2 && resolved.targetMap === 'area2') score += 1200;
+            if (!hasArea2ControlUnit(2) && u.type !== 'scout' && resolved.targetMap === 'area2') score += 1200;
 
             if (score > bestScore) {
                 bestScore = score;
