@@ -1648,6 +1648,14 @@ body.device-mobile {
     padding-right: 0.4rem;
 }
 
+.rules-content .rule-index {
+    margin-right: 0.45rem;
+    color: var(--neon-cyan);
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+}
+
 .menu-panel {
     position: absolute;
     top: calc(100% + 0.4rem);
