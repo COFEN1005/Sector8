@@ -117,6 +117,20 @@ create table if not exists public.player_formations (
   updated_at bigint not null
 );
 
+create table if not exists public.player_map_formations (
+  player_id bigint not null references public.players(id) on delete cascade,
+  map_mode text not null check (map_mode in ('fixed1', 'fixed2', 'fixed3', 'fixed4', 'fixed5', 'fixed6')),
+  formation_json jsonb not null,
+  updated_at bigint not null,
+  primary key (player_id, map_mode)
+);
+
+insert into public.player_map_formations (player_id, map_mode, formation_json, updated_at)
+select legacy.player_id, modes.map_mode, legacy.formation_json, legacy.updated_at
+from public.player_formations as legacy
+cross join (values ('fixed1'), ('fixed2'), ('fixed3'), ('fixed4'), ('fixed5'), ('fixed6')) as modes(map_mode)
+on conflict (player_id, map_mode) do nothing;
+
 -- These tables are server-only. The Render backend uses the service role;
 -- browser roles must never read PIN hashes, sessions, or private match data.
 alter table public.players enable row level security;
@@ -125,6 +139,7 @@ alter table public.friend_requests enable row level security;
 alter table public.friends enable row level security;
 alter table public.match_history enable row level security;
 alter table public.player_formations enable row level security;
+alter table public.player_map_formations enable row level security;
 
 revoke all on table public.players from public, anon, authenticated;
 revoke all on table public.auth_sessions from public, anon, authenticated;
@@ -132,6 +147,7 @@ revoke all on table public.friend_requests from public, anon, authenticated;
 revoke all on table public.friends from public, anon, authenticated;
 revoke all on table public.match_history from public, anon, authenticated;
 revoke all on table public.player_formations from public, anon, authenticated;
+revoke all on table public.player_map_formations from public, anon, authenticated;
 
 grant select, insert, update, delete on table public.players to service_role;
 grant select, insert, update, delete on table public.auth_sessions to service_role;
@@ -139,6 +155,7 @@ grant select, insert, update, delete on table public.friend_requests to service_
 grant select, insert, update, delete on table public.friends to service_role;
 grant select, insert, update, delete on table public.match_history to service_role;
 grant select, insert, update, delete on table public.player_formations to service_role;
+grant select, insert, update, delete on table public.player_map_formations to service_role;
 
 revoke all on all sequences in schema public from public, anon, authenticated;
 grant usage, select, update on all sequences in schema public to service_role;

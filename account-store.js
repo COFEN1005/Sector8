@@ -931,15 +931,15 @@ function createSupabaseStore() {
     }
   }
 
-  async function getPlayerFormation(playerId) {
-    const row = await selectOne('player_formations', { player_id: `eq.${playerId}` });
-    return row?.formation_json || null;
+  async function getPlayerFormations(playerId) {
+    const rows = await selectMany('player_map_formations', { player_id: `eq.${playerId}`, select: 'map_mode,formation_json' });
+    return Object.fromEntries(rows.map(row => [row.map_mode, row.formation_json]));
   }
 
-  async function savePlayerFormation(playerId, formation) {
-    const response = await client.request('POST', '/rest/v1/player_formations', {
-      query: { on_conflict: 'player_id' },
-      body: { player_id: playerId, formation_json: formation, updated_at: Date.now() },
+  async function savePlayerMapFormation(playerId, mapMode, formation) {
+    const response = await client.request('POST', '/rest/v1/player_map_formations', {
+      query: { on_conflict: 'player_id,map_mode' },
+      body: { player_id: playerId, map_mode: mapMode, formation_json: formation, updated_at: Date.now() },
       prefer: 'resolution=merge-duplicates,return=representation'
     });
     if (!Array.isArray(response.data) || response.data.length !== 1) {
@@ -1310,8 +1310,8 @@ function createSupabaseStore() {
     getPlayerByFriendCode,
     getPlayerByName,
     updatePlayerName,
-    getPlayerFormation,
-    savePlayerFormation,
+    getPlayerFormations,
+    savePlayerMapFormation,
     adjustPlayerProgress,
     deletePlayerById,
     listFriends,
@@ -1382,6 +1382,14 @@ function createSqliteStore() {
       updated_at INTEGER NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS player_map_formations (
+      player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      map_mode TEXT NOT NULL CHECK(map_mode IN ('fixed1', 'fixed2', 'fixed3', 'fixed4', 'fixed5', 'fixed6')),
+      formation_json TEXT NOT NULL,
+      updated_at INTEGER NOT NULL,
+      PRIMARY KEY (player_id, map_mode)
+    );
+
     CREATE TABLE IF NOT EXISTS friend_requests (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       sender_player_id INTEGER NOT NULL,
@@ -1431,6 +1439,11 @@ function createSqliteStore() {
       player2_start_rating INTEGER
     );
   `);
+
+  db.exec(`INSERT OR IGNORE INTO player_map_formations (player_id, map_mode, formation_json, updated_at)
+    SELECT player_id, map_mode, formation_json, updated_at FROM player_formations
+    CROSS JOIN (SELECT 'fixed1' AS map_mode UNION ALL SELECT 'fixed2' UNION ALL SELECT 'fixed3'
+      UNION ALL SELECT 'fixed4' UNION ALL SELECT 'fixed5' UNION ALL SELECT 'fixed6')`);
 
   try { db.exec('ALTER TABLE match_history ADD COLUMN summary_json TEXT;'); } catch {}
   try { db.exec('ALTER TABLE match_history ADD COLUMN replay_json TEXT;'); } catch {}
@@ -1937,16 +1950,16 @@ function createSqliteStore() {
     return { ok: true, backend: 'sqlite', schemaReady: true, schemaVersion: 2 };
   }
 
-  function getPlayerFormation(playerId) {
-    const row = db.prepare('SELECT formation_json FROM player_formations WHERE player_id = ?').get(playerId);
-    return row ? JSON.parse(row.formation_json) : null;
+  function getPlayerFormations(playerId) {
+    const rows = db.prepare('SELECT map_mode, formation_json FROM player_map_formations WHERE player_id = ?').all(playerId);
+    return Object.fromEntries(rows.map(row => [row.map_mode, JSON.parse(row.formation_json)]));
   }
 
-  function savePlayerFormation(playerId, formation) {
-    db.prepare(`INSERT INTO player_formations (player_id, formation_json, updated_at)
-      VALUES (?, ?, ?)
-      ON CONFLICT(player_id) DO UPDATE SET formation_json = excluded.formation_json, updated_at = excluded.updated_at`)
-      .run(playerId, JSON.stringify(formation), Date.now());
+  function savePlayerMapFormation(playerId, mapMode, formation) {
+    db.prepare(`INSERT INTO player_map_formations (player_id, map_mode, formation_json, updated_at)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(player_id, map_mode) DO UPDATE SET formation_json = excluded.formation_json, updated_at = excluded.updated_at`)
+      .run(playerId, mapMode, JSON.stringify(formation), Date.now());
     return formation;
   }
 
@@ -1964,8 +1977,8 @@ function createSqliteStore() {
     getPlayerByFriendCode,
     getPlayerByName,
     updatePlayerName,
-    getPlayerFormation,
-    savePlayerFormation,
+    getPlayerFormations,
+    savePlayerMapFormation,
     adjustPlayerProgress,
     deletePlayerById,
     listFriends,

@@ -78,6 +78,7 @@ const AUTH_SESSION_STORAGE_KEY = 'sector8_auth_session';
 const LAST_PLAYER_ID_STORAGE_KEY = 'sector8_last_player_id';
 const UI_SETTINGS_STORAGE_KEY = 'sector8_ui_settings';
 const FORMATION_STORAGE_KEY = 'sector8_formation_v2';
+const MAP_FORMATIONS_STORAGE_KEY = 'sector8_map_formations_v1';
 const FORMATION_OWNER_STORAGE_KEY = 'sector8_formation_owner_v1';
 const DEFAULT_FORMATION = Object.freeze({
     area1: Object.freeze([
@@ -262,7 +263,9 @@ let replayViewerOpen = false;
 let replayViewerMap = 'area1';
 const replayHydratedCache = new Map();
 let pendingImpersonationUnitId = null;
-let savedFormation = null;
+let savedFormationsByMap = {};
+let formationDraftsByMap = {};
+let editingFormationMapMode = 'fixed1';
 let editingFormation = null;
 let formationSyncVersion = 0;
 let formationSyncPending = false;
@@ -620,14 +623,32 @@ function normalizeFormation(value) {
     return normalized;
 }
 
+function getSavedFormationForMap(mode = mapSourceMode) {
+    return normalizeFormation(savedFormationsByMap[normalizeMapSourceMode(mode)]);
+}
+
+function persistSavedFormations() {
+    try { window.localStorage.setItem(MAP_FORMATIONS_STORAGE_KEY, JSON.stringify(savedFormationsByMap)); } catch {}
+}
+
 function loadSavedFormation() {
     try {
-        const raw = window.localStorage.getItem(FORMATION_STORAGE_KEY) || window.localStorage.getItem('sector8_formation_v1');
-        savedFormation = normalizeFormation(JSON.parse(raw || 'null'));
+        const raw = window.localStorage.getItem(MAP_FORMATIONS_STORAGE_KEY);
+        if (raw) {
+            const stored = JSON.parse(raw);
+            savedFormationsByMap = Object.fromEntries(FIXED_MAP_MODES.map(mode => [mode, normalizeFormation(stored?.[mode])]));
+        } else {
+            const legacy = window.localStorage.getItem(FORMATION_STORAGE_KEY) || window.localStorage.getItem('sector8_formation_v1');
+            const migrated = normalizeFormation(JSON.parse(legacy || 'null'));
+            savedFormationsByMap = Object.fromEntries(FIXED_MAP_MODES.map(mode => [mode, normalizeFormation(migrated)]));
+            persistSavedFormations();
+        }
     } catch {
-        savedFormation = cloneDefaultFormation();
+        savedFormationsByMap = Object.fromEntries(FIXED_MAP_MODES.map(mode => [mode, cloneDefaultFormation()]));
     }
-    editingFormation = normalizeFormation(savedFormation);
+    formationDraftsByMap = {};
+    editingFormationMapMode = mapSourceMode;
+    editingFormation = getSavedFormationForMap(editingFormationMapMode);
     renderFormationEditor();
 }
 
@@ -635,6 +656,9 @@ function setFormationSyncPending(pending, status) {
     formationSyncPending = pending;
     const button = document.getElementById('formation-save');
     if (button) button.disabled = pending;
+    const reset = document.getElementById('formation-reset');
+    if (reset) reset.disabled = pending;
+    document.querySelectorAll('.formation-map-btn').forEach(mapButton => { mapButton.disabled = pending; });
     const statusElement = document.getElementById('formation-status');
     if (statusElement && status) statusElement.textContent = status;
 }
@@ -646,29 +670,34 @@ async function loadAccountFormation() {
     let cachedOwner = null;
     try { cachedOwner = window.localStorage.getItem(FORMATION_OWNER_STORAGE_KEY); } catch {}
     if (cachedOwner && cachedOwner !== playerId) {
-        savedFormation = cloneDefaultFormation();
-        editingFormation = cloneDefaultFormation();
+        savedFormationsByMap = Object.fromEntries(FIXED_MAP_MODES.map(mode => [mode, cloneDefaultFormation()]));
+        formationDraftsByMap = {};
+        editingFormation = getSavedFormationForMap(editingFormationMapMode);
         renderFormationEditor();
     }
     setFormationSyncPending(true, 'クラウド編成を読み込み中...');
     try {
         const result = await apiRequest('/api/formation');
         if (version !== formationSyncVersion || String(authProfile?.playerId) !== playerId) return;
-        if (result.formation) {
-            savedFormation = normalizeFormation(result.formation);
+        const remoteFormations = result.formations || (result.formation ? { fixed1: result.formation } : {});
+        if (Object.keys(remoteFormations).length) {
+            for (const mode of FIXED_MAP_MODES) {
+                if (remoteFormations[mode]) savedFormationsByMap[mode] = normalizeFormation(remoteFormations[mode]);
+            }
             try {
-                window.localStorage.setItem(FORMATION_STORAGE_KEY, JSON.stringify(savedFormation));
+                persistSavedFormations();
                 window.localStorage.setItem(FORMATION_OWNER_STORAGE_KEY, playerId);
             } catch {}
             setFormationSyncPending(false, 'クラウド編成を読み込みました。');
         } else {
             setFormationSyncPending(false, 'クラウド編成はまだありません。SAVEで登録できます。');
         }
-        editingFormation = normalizeFormation(savedFormation);
+        formationDraftsByMap = {};
+        editingFormation = getSavedFormationForMap(editingFormationMapMode);
         selectedFormationUnitId = null;
         renderFormationEditor();
         if (onlineMode && activePhase === 'setup' && onlineSocket?.readyState === WebSocket.OPEN) {
-            sendOnlineMessage({ kind: 'formation_choice', formation: normalizeFormation(savedFormation) });
+            sendLocalOnlineFormation();
         }
     } catch (error) {
         if (version !== formationSyncVersion) return;
@@ -679,25 +708,28 @@ async function loadAccountFormation() {
 
 async function saveFormation() {
     if (formationSyncPending) return;
+    const mapMode = editingFormationMapMode;
     const formation = normalizeFormation(editingFormation);
     const version = formationSyncVersion;
     const playerId = authProfile?.playerId || null;
     setFormationSyncPending(true, playerId ? 'クラウドへ保存中...' : 'ブラウザに保存中...');
     try {
         if (playerId) {
-            const result = await apiRequest('/api/formation', { method: 'PUT', body: { formation } });
+            const result = await apiRequest('/api/formation', { method: 'PUT', body: { mapMode, formation } });
             if (version !== formationSyncVersion || authProfile?.playerId !== playerId) return;
-            savedFormation = normalizeFormation(result.formation);
+            savedFormationsByMap[mapMode] = normalizeFormation(result.formation);
         } else {
-            savedFormation = formation;
+            savedFormationsByMap[mapMode] = formation;
         }
-        editingFormation = normalizeFormation(savedFormation);
+        delete formationDraftsByMap[mapMode];
+        editingFormation = getSavedFormationForMap(mapMode);
         try {
-            window.localStorage.setItem(FORMATION_STORAGE_KEY, JSON.stringify(savedFormation));
+            persistSavedFormations();
             if (playerId) window.localStorage.setItem(FORMATION_OWNER_STORAGE_KEY, playerId);
         } catch {}
-        setFormationSyncPending(false, playerId ? 'クラウド編成を保存しました。次の対戦から反映されます。' : '編成をブラウザに保存しました。');
-        showStatusAlert('編成を保存しました。', 'success', 1800);
+        const stageName = FIXED_MAP_STAGE_NAMES[mapMode];
+        setFormationSyncPending(false, playerId ? `${stageName}の編成をクラウドに保存しました。` : `${stageName}の編成をブラウザに保存しました。`);
+        showStatusAlert(`${stageName}の編成を保存しました。`, 'success', 1800);
         renderFormationEditor();
     } catch (error) {
         console.warn('formation save failed', error);
@@ -711,13 +743,13 @@ function getFormationUnitLabel(type) {
 }
 
 function renderFormationEditor() {
-    if (!editingFormation) editingFormation = normalizeFormation(savedFormation);
+    if (!editingFormation) editingFormation = getSavedFormationForMap(editingFormationMapMode);
     updateFormationMapSelector();
     ['area1', 'area2'].forEach(area => {
         const container = document.getElementById(`formation-${area}`);
         if (!container) return;
         const unitsByCell = new Map(editingFormation[area].map(unit => [`${unit.row},${unit.col}`, unit]));
-        const mapPreset = fixedMapPreset?.maps?.[area];
+        const mapPreset = loadFixedMapPreset(editingFormationMapMode)?.maps?.[area];
         const cells = [];
         for (let row = 0; row < 11; row++) {
             for (let col = 0; col < 11; col++) {
@@ -741,20 +773,22 @@ function renderFormationEditor() {
 
 function updateFormationMapSelector() {
     document.querySelectorAll('.formation-map-btn[data-map-mode]').forEach(button => {
-        button.classList.toggle('active', button.dataset.mapMode === mapSourceMode);
+        button.classList.toggle('active', button.dataset.mapMode === editingFormationMapMode);
     });
     const name = document.getElementById('formation-map-name');
-    if (name) name.textContent = FIXED_MAP_STAGE_NAMES[mapSourceMode] || 'UNKNOWN';
+    if (name) name.textContent = FIXED_MAP_STAGE_NAMES[editingFormationMapMode] || 'UNKNOWN';
 }
 
 function selectFormationMap(mode) {
+    if (formationSyncPending) return;
     const normalizedMode = normalizeMapSourceMode(mode);
-    setMapSourceMode(normalizedMode);
-    if (mapSourceMode !== normalizedMode) return;
+    if (editingFormation) formationDraftsByMap[editingFormationMapMode] = normalizeFormation(editingFormation);
+    editingFormationMapMode = normalizedMode;
+    editingFormation = normalizeFormation(formationDraftsByMap[normalizedMode] || getSavedFormationForMap(normalizedMode));
     selectedFormationUnitId = null;
     renderFormationEditor();
     const status = document.getElementById('formation-status');
-    if (status) status.textContent = `${FIXED_MAP_STAGE_NAMES[mapSourceMode]}の配置を編集中です。`;
+    if (status) status.textContent = `${FIXED_MAP_STAGE_NAMES[normalizedMode]}の配置を編集中です。変更したマップごとにSAVEしてください。`;
 }
 
 function isFormationPresetCellAllowed(area, row, col) {
@@ -807,6 +841,7 @@ function moveFormationUnitOnBoard(targetArea, targetRow, targetCol) {
         editingFormation[sourcePosition.area].push(targetFound.unit);
     }
     selectedFormationUnitId = null;
+    formationDraftsByMap[editingFormationMapMode] = normalizeFormation(editingFormation);
     document.getElementById('formation-status').textContent = '配置を変更しました。SAVEでプリセットを確定します。';
     renderFormationEditor();
 }
@@ -859,7 +894,7 @@ function setWorkspaceView(view) {
         button.classList.toggle('active', button.id === `nav-${next}`);
     });
     if (next === 'formation') {
-        editingFormation = normalizeFormation(savedFormation);
+        editingFormation = normalizeFormation(formationDraftsByMap[editingFormationMapMode] || getSavedFormationForMap(editingFormationMapMode));
         selectedFormationUnitId = null;
         renderFormationEditor();
     }
@@ -2599,8 +2634,8 @@ document.addEventListener('DOMContentLoaded', () => {
     runUiInitStep('saved auth session', loadSavedAuthSession);
     runUiInitStep('saved online session', loadSavedOnlineSession);
     runUiInitStep('saved UI settings', loadSavedUiSettings);
-    runUiInitStep('saved formation', loadSavedFormation);
     runUiInitStep('map source mode', refreshMapSourceModeFromStorage);
+    runUiInitStep('saved formation', loadSavedFormation);
 
     // Keep each control group independent. One missing optional element must not
     // prevent MENU, settings, or matchmaking controls from being registered.
@@ -3266,6 +3301,7 @@ function setupUIEventListeners() {
     document.getElementById('formation-reset')?.addEventListener('click', () => {
         if (formationSyncPending) return;
         editingFormation = cloneDefaultFormation();
+        formationDraftsByMap[editingFormationMapMode] = normalizeFormation(editingFormation);
         selectedFormationUnitId = null;
         renderFormationEditor();
         document.getElementById('formation-status').textContent = '初期編成へ戻しました。SAVEで確定します。';
@@ -4138,7 +4174,7 @@ function connectOnlineSocket({ roomId = null, player = null, random = false, rec
         updateReadyButton();
         updateMatchmakingPlayerSummary();
         sendOnlineMessage({ kind: 'profile', username: localUsername });
-        sendOnlineMessage({ kind: 'formation_choice', formation: normalizeFormation(savedFormation) });
+        sendLocalOnlineFormation();
     });
 
     onlineSocket.addEventListener('message', (event) => {
@@ -4181,6 +4217,7 @@ function prepareOnlineMatchPreview(seed = null, preparationDeadline = null) {
     if (localPlayer === 1) {
         resolveMapSelectionForMatch(previewSeed, isRandomMatchRoom() || matchmakingRole === 'random');
     }
+    sendLocalOnlineFormation();
     onlineMatchPreviewActive = true;
     resetOnlineAutoStartState();
     onlineAbilityChoices = { 1: null, 2: null };
@@ -4256,8 +4293,8 @@ function startOnlineBattle() {
         matchKey: createOnlineMatchKey(),
         mapSourceMode,
         formations: {
-            1: normalizeFormation(onlineFormations[1] || savedFormation),
-            2: normalizeFormation(onlineFormations[2] || savedFormation)
+            1: normalizeFormation(onlineFormations[1] || getSavedFormationForMap()),
+            2: normalizeFormation(onlineFormations[2] || getSavedFormationForMap())
         }
     };
 
@@ -4317,8 +4354,7 @@ function handleOnlineMessage(message) {
         if (localPlayer) onlineUsernames[localPlayer] = localUsername;
         if (localPlayer && onlineSocket?.readyState === WebSocket.OPEN) {
             sendOnlineMessage({ kind: 'profile', username: localUsername });
-            onlineFormations[localPlayer] = normalizeFormation(savedFormation);
-            sendOnlineMessage({ kind: 'formation_choice', formation: onlineFormations[localPlayer] });
+            sendLocalOnlineFormation();
         }
         updateMatchmakingPlayerSummary();
         if (isRandomMatchRoom()) setMatchmakingStatus('マッチング中...', 'searching');
@@ -4433,6 +4469,7 @@ function handleOnlineMessage(message) {
     }
 
     if (message.kind === 'formation_choice') {
+        if (message.mapMode && normalizeMapSourceMode(message.mapMode) !== mapSourceMode && onlineMatchPreviewActive) return;
         onlineFormations[message.player] = normalizeFormation(message.formation);
         if (onlineMatchPreviewActive && activePhase === 'setup') refreshOnlineFormationPreview();
         addConnectionLog(`P${message.player} の編成を受信しました。`);
@@ -4496,6 +4533,12 @@ function sendOnlineMessage(message) {
     onlineSocket.send(JSON.stringify({ ...message, player: localPlayer }));
 }
 
+function sendLocalOnlineFormation() {
+    if (!localPlayer) return;
+    onlineFormations[localPlayer] = getSavedFormationForMap(mapSourceMode);
+    sendOnlineMessage({ kind: 'formation_choice', mapMode: mapSourceMode, formation: onlineFormations[localPlayer] });
+}
+
 function refreshOnlineFormationPreview() {
     Object.values(boards).forEach(rows => rows.forEach(row => row.forEach(cell => { cell.unit = null; })));
     protectedWallCells = new Set();
@@ -4530,8 +4573,7 @@ function markOnlineReady() {
     if (!onlineMode || !localPlayer || !onlineMatchPreviewActive) return;
     onlineAbilityChoices[localPlayer] = getOnlineAbilityChoice();
     onlineReadyState[localPlayer] = true;
-    onlineFormations[localPlayer] = normalizeFormation(savedFormation);
-    sendOnlineMessage({ kind: 'formation_choice', formation: onlineFormations[localPlayer] });
+    sendLocalOnlineFormation();
     sendOnlineMessage({ kind: 'ability_choice', ability: onlineAbilityChoices[localPlayer] });
     sendOnlineMessage({ kind: 'ready_state', ready: true });
     setMatchmakingStatus(isRandomMatchRoom() ? 'マッチング中...' : '準備完了しました。相手を待っています。', isRandomMatchRoom() ? 'searching' : '');
@@ -4918,8 +4960,8 @@ function startGame(config = null, fromOnline = false) {
                 matchKey: currentMatchKey,
                 mapSourceMode,
                 formations: {
-                    1: normalizeFormation(onlineFormations[1] || savedFormation),
-                    2: normalizeFormation(onlineFormations[2] || savedFormation)
+                    1: normalizeFormation(onlineFormations[1] || getSavedFormationForMap()),
+                    2: normalizeFormation(onlineFormations[2] || getSavedFormationForMap())
                 }
             }
         });
@@ -5187,7 +5229,7 @@ function initializeUnits() {
     addUnitToBoard(p1Core, 'area1', 10, 5);
     addUnitToBoard(p1Core, 'area1', 10, 6);
 
-    placePlayerFormation(1, onlineMode ? onlineFormations[1] : savedFormation);
+    placePlayerFormation(1, onlineMode ? (onlineFormations[1] || getSavedFormationForMap()) : getSavedFormationForMap());
 
     // --- PLAYER 2 (Magenta) ---
     const p2Core = new Unit('p2_core', 'core', 2, 'area3', 0, 5);
@@ -5195,7 +5237,7 @@ function initializeUnits() {
     addUnitToBoard(p2Core, 'area3', 0, 5);
     addUnitToBoard(p2Core, 'area3', 0, 6);
 
-    placePlayerFormation(2, onlineMode ? onlineFormations[2] : savedFormation);
+    placePlayerFormation(2, onlineMode ? (onlineFormations[2] || getSavedFormationForMap()) : getSavedFormationForMap());
 }
 
 function getFormationDeploymentCells(player, area) {

@@ -390,6 +390,7 @@ const FORMATION_UNITS = {
     scout_1: 'scout', koh: 'koh', front_hei_1: 'hei', front_tei_1: 'tei',
     front_hei_2: 'hei', front_tei_2: 'tei', scout_2: 'scout'
 };
+const FORMATION_MAP_MODES = new Set(['fixed1', 'fixed2', 'fixed3', 'fixed4', 'fixed5', 'fixed6']);
 
 function validateFormation(formation) {
     if (!formation || !Array.isArray(formation.area1) || !Array.isArray(formation.area2)) return null;
@@ -550,13 +551,15 @@ const server = http.createServer(async (req, res) => {
             if (url.pathname === '/api/formation' && (method === 'GET' || method === 'PUT')) {
                 if (!session) return sendJson(res, 401, { ok: false, error: 'unauthorized' });
                 if (method === 'GET') {
-                    const formation = await accountStore.getPlayerFormation(session.profile.id);
-                    return sendJson(res, 200, { ok: true, formation });
+                    const formations = await accountStore.getPlayerFormations(session.profile.id);
+                    return sendJson(res, 200, { ok: true, formations, formation: formations.fixed1 || null });
                 }
+                const mapMode = body.mapMode === undefined ? 'fixed1' : body.mapMode;
+                if (!FORMATION_MAP_MODES.has(mapMode)) return sendJson(res, 400, { ok: false, error: 'map_mode_invalid' });
                 const formation = validateFormation(body.formation);
                 if (!formation) return sendJson(res, 400, { ok: false, error: 'formation_invalid' });
-                const saved = await accountStore.savePlayerFormation(session.profile.id, formation);
-                return sendJson(res, 200, { ok: true, formation: saved });
+                const saved = await accountStore.savePlayerMapFormation(session.profile.id, mapMode, formation);
+                return sendJson(res, 200, { ok: true, mapMode, formation: saved });
             }
 
             if (replayRoute && (method === 'GET' || method === 'PUT')) {
