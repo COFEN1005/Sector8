@@ -2350,6 +2350,8 @@ function renderAbilityRangeGrids() {
         const size = Number(grid.dataset.size || 9);
         const center = Math.floor(size / 2);
         const radius = Number(grid.dataset.radius || 0);
+        const baseRadius = Number(grid.dataset.baseRadius || 0);
+        const isEvolution = grid.classList.contains('evolution');
         const shape = grid.dataset.shape;
         const cells = [];
         for (let row = 0; row < size; row++) {
@@ -2361,7 +2363,9 @@ function renderAbilityRangeGrids() {
                     : shape === 'ring' ? distance === radius
                     : shape === 'straight' ? (vertical === 0 || horizontal === 0) && Math.max(vertical, horizontal) <= radius
                     : Math.max(vertical, horizontal) <= radius;
-                const className = row === center && col === center ? 'origin' : inRange ? 'in-range' : '';
+                const className = row === center && col === center ? 'origin'
+                    : inRange && isEvolution && distance > baseRadius ? 'in-range new-range'
+                    : inRange ? 'in-range' : '';
                 cells.push(`<span class="ability-range-cell ${className}"></span>`);
             }
         }
