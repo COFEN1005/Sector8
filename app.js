@@ -404,7 +404,7 @@ function getUnitTypeLabel(type) {
 
 function getImpersonationLabel(value) {
     if (!value) return '不明';
-    if (value === '戦姫') return '戦姫(姫)';
+    if (value === '戦姫') return '戦姫';
     if (value === 'core' || value === 'otsu' || value === 'hei' || value === 'tei' || value === 'scout') {
         return getUnitTypeLabel(value);
     }
@@ -488,7 +488,7 @@ function getDisguisedUnitTypeProfile(disguiseType) {
 }
 
 function getAbilityDisplayName(ability) {
-    if (ability === '戦姫') return '戦姫(姫)';
+    if (ability === '戦姫') return '戦姫';
     return ability;
 }
 
@@ -2227,7 +2227,7 @@ class Unit {
                 '千里眼': '【甲特有: 千里眼 / アクティブ】菱形移動3・菱形視界3。盤面の好きな1マスを中心に3×3の視界を3ターン得る。CT3。',
                 '鼓舞': '【甲特有: 鼓舞 / パッシブ型】マンハッタン移動2・視界3。自身の周囲1マスの味方コマの移動+1。',
                 '歴戦王': '【甲特有: 歴戦王 / パッシブ型】敵撃破時に行動済みを解除。再行動は自陣側を除く直線移動2。',
-                '戦姫': '【甲特有: 戦姫(姫) / パッシブ】菱形移動2・菱形視界2。自軍の総撃破数5で移動と視界+1、10でさらに+1。',
+                '戦姫': '【甲特有: 戦姫 / パッシブ】菱形移動2・菱形視界2。自軍の総撃破数5で移動と視界+1、10でさらに+1。',
                 '爆破': '【甲特有: 爆破 / 発動・パッシブ型】発動時または死亡時、周囲2マスを完全破壊。',
                 '暗殺者': '【甲特有: 暗殺者 / パッシブ】直線移動4・直線視界4。敵撃破時、進行方向と逆へ最大2マス戻る。',
                 '盲目': '【甲特有: 盲目 / パッシブ型】マンハッタン移動4、視界1。',
@@ -6299,13 +6299,13 @@ function selectUnit(unit) {
 
     if (unit.type === 'koh') {
         abilityBtn.classList.remove('hidden');
-        if (abilityName === '千里眼') abilityBtn.textContent = clairvoyanceCooldown > 0 ? `千里眼 CD ${clairvoyanceCooldown}` : `範囲指定: ${abilityName}`;
+        if (abilityName === '千里眼') abilityBtn.textContent = clairvoyanceCooldown > 0 ? `ホークアイ CD ${clairvoyanceCooldown}` : '範囲指定: ホークアイ';
         else if (abilityName === '弓兵') abilityBtn.textContent = '射撃対象を選択';
         else if (abilityName === '煙幕') abilityBtn.textContent = smokeCooldown > 0 ? `煙幕 CD ${smokeCooldown}` : `即時発動: ${abilityName}`;
         else if (abilityName === '鼓舞') abilityBtn.textContent = `パッシブ: ${abilityName}`;
         else if (abilityName === '爆破' || abilityName === '迷彩' || abilityName === '憑依' || abilityName === '儀式') abilityBtn.textContent = `即時発動: ${abilityName}`;
         else if (abilityName === '脳筋') abilityBtn.textContent = `特性確認: ${abilityName}`;
-        else abilityBtn.textContent = `特性確認: ${abilityName}`;
+        else abilityBtn.textContent = `特性確認: ${{ 暗殺者: '影討ち', 戦姫: '戦場の華', 監視: 'コントロール' }[abilityName] || abilityName}`;
     } else if (unit.type === 'scout') {
         abilityBtn.classList.remove('hidden');
         abilityBtn.textContent = 'ワープ先を選択';

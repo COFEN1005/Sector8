@@ -1100,8 +1100,6 @@ header {
     letter-spacing: 0.06em;
 }
 
-.ability-detail-card h4 small { font-size: 0.68rem; color: var(--neon-gold); }
-
 .ability-detail-card p {
     margin: 0.45rem 0 0.7rem;
     color: rgba(226, 232, 240, 0.92);
