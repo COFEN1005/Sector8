@@ -1031,41 +1031,179 @@ header {
     margin-top: 0.75rem;
 }
 
+.ability-guide-body { min-width: 0; overflow: hidden; }
+
+.ability-guide-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.6rem;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
+    letter-spacing: 0.12em;
+}
+
+.ability-guide-toolbar strong { color: var(--neon-cyan); }
+.ability-guide-controls { display: flex; gap: 0.3rem; }
+
+.ability-guide-controls button {
+    width: 2rem;
+    height: 1.75rem;
+    border: 1px solid rgba(0, 240, 255, 0.4);
+    border-radius: 5px;
+    background: rgba(0, 240, 255, 0.07);
+    color: var(--neon-cyan);
+    font-size: 1.3rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.ability-guide-controls button:disabled { opacity: 0.35; cursor: default; }
+
 .ability-detail-list {
-    display: grid;
+    display: flex;
     gap: 0.65rem;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0, 240, 255, 0.6) rgba(255, 255, 255, 0.05);
+    overscroll-behavior-x: contain;
+    touch-action: pan-x pan-y;
+    padding-bottom: 0.5rem;
 }
 
 .ability-detail-card {
-    padding: 0.75rem 0.8rem;
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.02);
+    flex: 0 0 100%;
+    min-width: 0;
+    padding: 0.8rem;
+    border: 1px solid rgba(0, 240, 255, 0.18);
+    border-radius: 9px;
+    background: linear-gradient(155deg, rgba(0, 52, 74, 0.6), rgba(8, 13, 25, 0.94) 55%);
+    scroll-snap-align: start;
+}
+
+.ability-card-index {
+    color: var(--neon-cyan);
+    font-family: var(--font-mono);
+    font-size: 0.64rem;
+    letter-spacing: 0.18em;
 }
 
 .ability-detail-card h4 {
-    font-family: var(--font-mono);
-    font-size: 0.9rem;
-    letter-spacing: 1px;
-    color: var(--neon-gold);
+    margin: 0.2rem 0 0.65rem;
+    color: #f6fbff;
+    font-size: 1.35rem;
+    letter-spacing: 0.06em;
 }
+
+.ability-detail-card h4 small { font-size: 0.68rem; color: var(--neon-gold); }
 
 .ability-detail-card p {
-    margin-top: 0.45rem;
-    font-size: 0.8rem;
-    line-height: 1.5;
-    color: rgba(226, 232, 240, 0.9);
+    margin: 0.45rem 0 0.7rem;
+    color: rgba(226, 232, 240, 0.92);
+    font-size: 0.78rem;
+    line-height: 1.6;
 }
 
-.ability-detail-meta {
+.ability-range-pair {
     display: grid;
-    gap: 0.2rem;
-    margin-top: 0.45rem;
-    font-family: var(--font-mono);
-    font-size: 0.68rem;
-    color: var(--text-muted);
-    letter-spacing: 0.5px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.65rem;
 }
+
+.ability-range-pair figure,
+.ability-skill-figure { min-width: 0; }
+
+.ability-range-grid {
+    display: grid;
+    grid-template-columns: repeat(9, minmax(0, 1fr));
+    width: 100%;
+    padding: 0.18rem;
+    border: 1px solid rgba(255, 255, 255, 0.13);
+    border-radius: 4px;
+    background: rgba(235, 249, 252, 0.9);
+}
+
+.ability-range-grid[data-size="7"] { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+
+.ability-range-cell {
+    aspect-ratio: 1;
+    border: 1px solid rgba(7, 29, 42, 0.055);
+    background: rgba(255, 255, 255, 0.74);
+}
+
+.ability-range-grid.move .ability-range-cell.in-range { background: #394bd7; }
+.ability-range-grid.vision .ability-range-cell.in-range { background: #82ce3a; }
+.ability-range-grid.skill .ability-range-cell.in-range { background: #de484c; }
+.ability-range-grid .ability-range-cell.origin { background: #8edfe8; }
+
+.ability-range-pair figcaption,
+.ability-skill-figure figcaption {
+    margin-top: 0.35rem;
+    color: rgba(235, 249, 252, 0.9);
+    font-size: 0.69rem;
+    text-align: center;
+}
+
+.ability-skill-heading {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.4rem;
+    margin-top: 0.85rem;
+    color: var(--neon-cyan);
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+}
+
+.ability-skill-heading span { color: #f6fbff; font-family: var(--font-outfit); font-size: 0.89rem; letter-spacing: 0; font-weight: 700; }
+.ability-skill-figure { width: min(9rem, 58%); margin: 0.25rem auto 0; }
+
+.assassin-retreat-figure {
+    padding: 0.6rem 0.45rem;
+    border: 1px solid rgba(222, 72, 76, 0.35);
+    border-radius: 6px;
+    background: rgba(222, 72, 76, 0.06);
+}
+
+.retreat-row {
+    display: grid;
+    grid-template-columns: 3.6rem repeat(5, minmax(0, 1fr));
+    align-items: center;
+    gap: 2px;
+    margin-bottom: 0.3rem;
+}
+
+.retreat-row span { color: #ffb2b4; font-size: 0.66rem; }
+
+.retreat-row i {
+    display: grid;
+    place-items: center;
+    aspect-ratio: 1;
+    border: 1px solid rgba(255, 255, 255, 0.13);
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.045);
+    color: #f6fbff;
+    font-size: 0.74rem;
+    font-style: normal;
+    font-weight: 800;
+}
+
+.retreat-row i.trail { background: rgba(57, 75, 215, 0.45); }
+.retreat-row i.enemy { background: #9b3242; }
+.retreat-row i.strike { background: #de484c; }
+.retreat-row i.return { background: #e8a83c; color: #07131c; }
+.assassin-retreat-figure figcaption { color: #ffb2b4; font-size: 0.66rem; text-align: center; }
+
+.ability-tier-track { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.3rem; }
+.ability-tier-track span { padding: 0.5rem 0.2rem; border: 1px solid rgba(255, 183, 0, 0.3); border-radius: 5px; color: var(--neon-gold); font-size: 0.68rem; text-align: center; }
+.ability-tier-track strong { color: #f6fbff; }
+.ability-effect-note { padding: 0.65rem; border: 1px solid rgba(130, 206, 58, 0.35); border-radius: 5px; color: #b5ef7b; font-size: 0.72rem; text-align: center; }
+.ability-guide-hint { margin-top: 0.35rem; color: var(--text-muted); font-size: 0.65rem; text-align: center; }
 
 .dev-query-row {
     display: flex;
@@ -1483,6 +1621,10 @@ body.device-mobile {
     display: flex;
     flex-direction: column;
     gap: 0.6rem;
+}
+
+#menu-panel:has(#ability-guide-details[open]) {
+    max-height: min(84dvh, 50rem);
 }
 
 .menu-panel details {
@@ -3464,6 +3606,10 @@ body.opponent-turn #turn-indicator {
     .menu-panel {
         width: min(22rem, 92vw);
         max-height: 70vh;
+    }
+
+    #menu-panel:has(#ability-guide-details[open]) {
+        max-height: 70dvh;
     }
 
     .audio-group {

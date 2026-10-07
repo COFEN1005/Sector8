@@ -2345,6 +2345,68 @@ function runUiInitStep(label, callback) {
     }
 }
 
+function renderAbilityRangeGrids() {
+    document.querySelectorAll('.ability-range-grid').forEach(grid => {
+        const size = Number(grid.dataset.size || 9);
+        const center = Math.floor(size / 2);
+        const radius = Number(grid.dataset.radius || 0);
+        const shape = grid.dataset.shape;
+        const cells = [];
+        for (let row = 0; row < size; row++) {
+            for (let col = 0; col < size; col++) {
+                const vertical = Math.abs(row - center);
+                const horizontal = Math.abs(col - center);
+                const distance = vertical + horizontal;
+                const inRange = shape === 'diamond' ? distance <= radius
+                    : shape === 'ring' ? distance === radius
+                    : shape === 'straight' ? (vertical === 0 || horizontal === 0) && Math.max(vertical, horizontal) <= radius
+                    : Math.max(vertical, horizontal) <= radius;
+                const className = row === center && col === center ? 'origin' : inRange ? 'in-range' : '';
+                cells.push(`<span class="ability-range-cell ${className}"></span>`);
+            }
+        }
+        grid.setAttribute('aria-hidden', 'true');
+        grid.innerHTML = cells.join('');
+    });
+}
+
+function setupAbilityGuide() {
+    const track = document.getElementById('ability-detail-list');
+    if (!track) return;
+    renderAbilityRangeGrids();
+    const cards = [...track.querySelectorAll('.ability-detail-card')];
+    const position = document.getElementById('ability-guide-position');
+    const previous = document.getElementById('ability-guide-prev');
+    const next = document.getElementById('ability-guide-next');
+    const currentIndex = () => cards.reduce((best, card, index) => (
+        Math.abs(card.offsetLeft - cards[0].offsetLeft - track.scrollLeft) <
+        Math.abs(cards[best].offsetLeft - cards[0].offsetLeft - track.scrollLeft) ? index : best
+    ), 0);
+    const update = () => {
+        const index = currentIndex();
+        if (position) position.textContent = `${String(index + 1).padStart(2, '0')} / ${String(cards.length).padStart(2, '0')}`;
+        if (previous) previous.disabled = index === 0;
+        if (next) next.disabled = index === cards.length - 1;
+    };
+    const goTo = index => track.scrollTo({ left: cards[index].offsetLeft - cards[0].offsetLeft, behavior: 'smooth' });
+    previous?.addEventListener('click', () => goTo(Math.max(0, currentIndex() - 1)));
+    next?.addEventListener('click', () => goTo(Math.min(cards.length - 1, currentIndex() + 1)));
+    track.addEventListener('scroll', update, { passive: true });
+    track.addEventListener('keydown', event => {
+        if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+        event.preventDefault();
+        goTo(Math.max(0, Math.min(cards.length - 1, currentIndex() + (event.key === 'ArrowRight' ? 1 : -1))));
+    });
+    const details = document.getElementById('ability-guide-details');
+    details?.addEventListener('toggle', () => {
+        update();
+        if (!details.open) return;
+        const panel = document.getElementById('menu-panel');
+        if (panel) panel.scrollTop += details.getBoundingClientRect().top - panel.getBoundingClientRect().top - 8;
+    });
+    update();
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     runUiInitStep('device profile', applyDeviceProfile);
     runUiInitStep('saved username', loadSavedUsername);
@@ -2357,6 +2419,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Keep each control group independent. One missing optional element must not
     // prevent MENU, settings, or matchmaking controls from being registered.
     runUiInitStep('UI controls', setupUIEventListeners);
+    runUiInitStep('ability guide', setupAbilityGuide);
     runUiInitStep('map tabs', setupMapTabs);
     runUiInitStep('game mode tabs', setupGameModeTabs);
     runUiInitStep('online mode', setupOnlineMode);

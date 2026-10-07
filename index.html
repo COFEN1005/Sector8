@@ -370,36 +370,78 @@
                         </div>
                     </details>
 
-                    <details class="config-group account-group">
+                    <details id="ability-guide-details" class="config-group account-group">
                         <summary>甲の能力詳細</summary>
-                        <div class="account-group-body">
-                            <div class="ability-detail-list">
-                                <div class="ability-detail-card">
-                                    <h4>千里眼</h4>
-                                    <p>アクティブ。盤面の好きな1マスを選び、その地点を中心とした3×3の視界を3ターン得る。CTは3ターン。</p>
-                                    <div class="ability-detail-meta"><span>行動範囲: 菱形移動3</span><span>視界範囲: 菱形視界3</span></div>
-                                </div>
-                                <div class="ability-detail-card">
-                                    <h4>戦姫(姫)</h4>
-                                    <p>パッシブ。自軍の総撃破数が5で移動と視界+1、10でさらに+1。軍旗による復活後も総撃破数を引き継ぐ。</p>
-                                    <div class="ability-detail-meta"><span>行動範囲: 菱形移動2</span><span>視界範囲: 菱形視界2</span></div>
-                                </div>
-                                <div class="ability-detail-card">
-                                    <h4>暗殺者</h4>
-                                    <p>パッシブ。敵撃破時、進行方向と逆へ2マス戻る。壁やユニットで戻れない場合は戻れる位置まで後退する。</p>
-                                    <div class="ability-detail-meta"><span>行動範囲: 直線移動4</span><span>視界範囲: 直線視界4</span></div>
-                                </div>
-                                <div class="ability-detail-card">
-                                    <h4>監視</h4>
-                                    <p>パッシブ。このコマの視界内にいる敵コマの移動値を-1する。</p>
-                                    <div class="ability-detail-meta"><span>行動範囲: 直線移動1</span><span>視界範囲: 正方形視界2</span></div>
-                                </div>
-                                <div class="ability-detail-card">
-                                    <h4>弓兵</h4>
-                                    <p>通常攻撃では敵を撃破できない。アクティブ射撃で、視界内かつ菱形距離3にいる敵1体を撃破する。CTなし。行動済み状態では使用不可。</p>
-                                    <div class="ability-detail-meta"><span>行動範囲: 菱形移動2</span><span>視界範囲: 菱形視界3</span></div>
+                        <div class="account-group-body ability-guide-body">
+                            <div class="ability-guide-toolbar">
+                                <span>ABILITY INDEX <strong id="ability-guide-position">01 / 05</strong></span>
+                                <div class="ability-guide-controls">
+                                    <button id="ability-guide-prev" type="button" aria-label="前の能力">‹</button>
+                                    <button id="ability-guide-next" type="button" aria-label="次の能力">›</button>
                                 </div>
                             </div>
+                            <div id="ability-detail-list" class="ability-detail-list" role="region" aria-label="甲の能力カード。横にスクロールできます" tabindex="0">
+                                <article class="ability-detail-card">
+                                    <div class="ability-card-index">01 / ACTIVE</div>
+                                    <h4>千里眼</h4>
+                                    <div class="ability-range-pair">
+                                        <figure><div class="ability-range-grid move" data-shape="diamond" data-radius="3"></div><figcaption>移動｜菱形 3</figcaption></figure>
+                                        <figure><div class="ability-range-grid vision" data-shape="diamond" data-radius="3"></div><figcaption>視界｜菱形 3</figcaption></figure>
+                                    </div>
+                                    <div class="ability-skill-heading">SKILL <span>好きな1マスを指定</span></div>
+                                    <p>選んだマスを中心に3×3の視界を3ターン得る。クールダウンは3ターン。</p>
+                                    <figure class="ability-skill-figure"><div class="ability-range-grid skill" data-shape="square" data-radius="1" data-size="7"></div><figcaption>指定地点を中心に3×3を可視化</figcaption></figure>
+                                </article>
+                                <article class="ability-detail-card">
+                                    <div class="ability-card-index">02 / PASSIVE</div>
+                                    <h4>暗殺者</h4>
+                                    <div class="ability-range-pair">
+                                        <figure><div class="ability-range-grid move" data-shape="straight" data-radius="4"></div><figcaption>移動｜直線 4</figcaption></figure>
+                                        <figure><div class="ability-range-grid vision" data-shape="straight" data-radius="4"></div><figcaption>視界｜直線 4</figcaption></figure>
+                                    </div>
+                                    <div class="ability-skill-heading">PASSIVE <span>撃破後に後退</span></div>
+                                    <p>敵を倒すと、進行方向と逆へ最大2マス戻る。壁やコマで通れない場合は、戻れるところで止まる。</p>
+                                    <figure class="assassin-retreat-figure" role="img" aria-label="右へ進んで敵を撃破した後、撃破地点から左へ2マス戻る。戻れない場合は途中で止まる">
+                                        <div class="retreat-row"><span>攻撃 →</span><i>始</i><i class="trail"></i><i class="trail"></i><i class="enemy">敵</i><i></i></div>
+                                        <div class="retreat-row"><span>後退 ←</span><i></i><i class="return">②</i><i class="return">①</i><i class="strike">撃</i><i></i></div>
+                                        <figcaption>撃破地点から ① → ② と戻る</figcaption>
+                                    </figure>
+                                </article>
+                                <article class="ability-detail-card">
+                                    <div class="ability-card-index">03 / PASSIVE</div>
+                                    <h4>戦姫 <small>姫</small></h4>
+                                    <div class="ability-range-pair">
+                                        <figure><div class="ability-range-grid move" data-shape="diamond" data-radius="2"></div><figcaption>移動｜菱形 2</figcaption></figure>
+                                        <figure><div class="ability-range-grid vision" data-shape="diamond" data-radius="2"></div><figcaption>視界｜菱形 2</figcaption></figure>
+                                    </div>
+                                    <div class="ability-skill-heading">PASSIVE <span>自軍の総撃破数で強化</span></div>
+                                    <p>自軍の総撃破数が5で移動と視界が+1、10でさらに+1。軍旗で復活しても撃破数は引き継ぐ。</p>
+                                    <div class="ability-tier-track"><span>0撃破<br><strong>範囲 2</strong></span><span>5撃破<br><strong>範囲 3</strong></span><span>10撃破<br><strong>範囲 4</strong></span></div>
+                                </article>
+                                <article class="ability-detail-card">
+                                    <div class="ability-card-index">04 / PASSIVE</div>
+                                    <h4>監視</h4>
+                                    <div class="ability-range-pair">
+                                        <figure><div class="ability-range-grid move" data-shape="straight" data-radius="1"></div><figcaption>移動｜直線 1</figcaption></figure>
+                                        <figure><div class="ability-range-grid vision" data-shape="square" data-radius="2"></div><figcaption>視界｜正方形 2</figcaption></figure>
+                                    </div>
+                                    <div class="ability-skill-heading">PASSIVE <span>視界内を監視</span></div>
+                                    <p>このコマの視界内にいる敵コマの移動値を-1する。壁やコマに遮られた先は視界に含まれない。</p>
+                                    <div class="ability-effect-note">視界の緑マスにいる敵へ 移動 -1</div>
+                                </article>
+                                <article class="ability-detail-card">
+                                    <div class="ability-card-index">05 / ACTIVE</div>
+                                    <h4>弓兵</h4>
+                                    <div class="ability-range-pair">
+                                        <figure><div class="ability-range-grid move" data-shape="diamond" data-radius="2"></div><figcaption>移動｜菱形 2</figcaption></figure>
+                                        <figure><div class="ability-range-grid vision" data-shape="diamond" data-radius="3"></div><figcaption>視界｜菱形 3</figcaption></figure>
+                                    </div>
+                                    <div class="ability-skill-heading">SKILL <span>クイックショット</span></div>
+                                    <p>通常攻撃では敵を撃破できない。視界内で菱形距離3の敵を射撃する。CTなし。1アクションを消費し、射撃後は行動済みを解除する。移動後や行動済みでは使用不可。</p>
+                                    <figure class="ability-skill-figure"><div class="ability-range-grid skill" data-shape="ring" data-radius="3"></div><figcaption>射撃対象｜菱形距離 3 のマス</figcaption></figure>
+                                </article>
+                            </div>
+                            <div class="ability-guide-hint">図は障害物のない盤面での基本範囲。横にスワイプして切り替え</div>
                         </div>
                     </details>
                 </div>
