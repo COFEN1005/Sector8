@@ -201,6 +201,7 @@ let boards = { area1: [], area2: [], area3: [] };
 let units = [];
 let currentPlayer = 1;
 let gameTurn = 1;
+let playerTurnsStarted = { 1: 0, 2: 0 };
 let p1Ability = '千里眼';
 let p2Ability = '監視';
 let vsAI = true;
@@ -2782,7 +2783,8 @@ function serializeReplayUnit(unit) {
         archerMovedThisTurn: Boolean(unit.archerMovedThisTurn),
         carryingFlagPlayer: unit.carryingFlagPlayer || null,
         carryingFlagAbility: unit.carryingFlagAbility || null,
-        flagSurvivalTurns: unit.flagSurvivalTurns || 0
+        flagSurvivalTurns: unit.flagSurvivalTurns || 0,
+        medicScoutReinforceTurns: Number(unit.medicScoutReinforceTurns || 0)
     };
 }
 
@@ -2799,6 +2801,7 @@ function serializeReplaySnapshot(label = null) {
         label: label || `TURN ${gameTurn}`,
         turn: gameTurn,
         currentPlayer,
+        playerTurnsStarted: { ...playerTurnsStarted },
         actionsThisTurn,
         activeMap,
         viewerPlayer: getViewerPlayer(),
@@ -2924,6 +2927,7 @@ function withReplayRenderState(snapshotState, callback) {
         activeMap,
         currentPlayer,
         gameTurn,
+        playerTurnsStarted,
         actionsThisTurn,
         actedUnitIds,
         p1Vision,
@@ -2943,6 +2947,7 @@ function withReplayRenderState(snapshotState, callback) {
     activeMap = snapshotState.activeMap;
     currentPlayer = snapshotState.currentPlayer;
     gameTurn = snapshotState.turn || snapshotState.gameTurn || gameTurn;
+    playerTurnsStarted = { ...playerTurnsStarted, ...snapshotState.playerTurnsStarted };
     actionsThisTurn = Number(snapshotState.actionsThisTurn || 0);
     actedUnitIds = snapshotState.actedUnitIds instanceof Set ? new Set(snapshotState.actedUnitIds) : new Set(snapshotState.actedUnitIds || []);
     p1Vision = snapshotState.p1Vision;
@@ -2973,6 +2978,7 @@ function withReplayRenderState(snapshotState, callback) {
         activeMap = saved.activeMap;
         currentPlayer = saved.currentPlayer;
         gameTurn = saved.gameTurn;
+        playerTurnsStarted = saved.playerTurnsStarted;
         actionsThisTurn = saved.actionsThisTurn;
         actedUnitIds = saved.actedUnitIds;
         p1Vision = saved.p1Vision;
@@ -3979,6 +3985,7 @@ function prepareOnlineMatchPreview(seed = null, preparationDeadline = null) {
     isGameOver = false;
     currentPlayer = 1;
     gameTurn = 1;
+    playerTurnsStarted = { 1: 0, 2: 0 };
     selectedUnit = null;
     previewUnit = null;
     scoutReinforcementSerial = 0;
@@ -4615,6 +4622,7 @@ function startGame(config = null, fromOnline = false) {
     updateMenuBattleVisibility();
     currentPlayer = 1;
     gameTurn = 1;
+    playerTurnsStarted = { 1: 0, 2: 0 };
     selectedUnit = null;
     activeMap = 'area1';
     scoutReinforcementSerial = 0;
@@ -4656,6 +4664,7 @@ function startGame(config = null, fromOnline = false) {
 
     const firstPlayer = createRng(gameSeed ^ 0x9E3779B9)() < 0.5 ? 1 : 2;
     currentPlayer = firstPlayer;
+    beginPlayerTurn(firstPlayer);
     if (currentMatchRecord) currentMatchRecord.firstPlayer = firstPlayer;
     if (currentMatchReplay) currentMatchReplay.firstPlayer = firstPlayer;
 
@@ -6954,9 +6963,9 @@ function endTurn() {
     });
     if (currentPlayer === 1) {
         gameTurn++;
-        reinforceScouts();
         resetDrawRequests();
     }
+    beginPlayerTurn(currentPlayer);
 
     calculateVisibility();
     renderBoard();
@@ -6999,40 +7008,43 @@ function showTurnBanner() {
     showTurnBanner.timer = window.setTimeout(() => banner.classList.remove('show'), 1500);
 }
 
-function reinforceScouts() {
-    [1, 2].forEach(player => {
-        const interval = getScoutReinforceInterval(player);
-        const limit = getScoutLimit(player);
-        const koh = getKohUnit(player);
-        const isMedic = Boolean(koh && getPlayerAbility(player) === '衛生兵');
-        if (isMedic) {
-            koh.medicScoutReinforceTurns = Math.min(interval, Number(koh.medicScoutReinforceTurns || 0) + 1);
-            if (koh.medicScoutReinforceTurns < interval) return;
-        } else if (gameTurn % interval !== 0) {
-            return;
-        }
-        const scoutCount = units.filter(unit => unit.player === player && unit.type === 'scout').length;
-        if (scoutCount >= limit) {
-            addConsoleLog(`SUPPLY: Player ${player} の偵察兵は上限${limit}体です。`, 'system');
-            if (isMedic && koh) koh.medicScoutReinforceTurns = 0;
-            return;
-        }
-        const spawn = findScoutSpawnPosition(player);
-        if (!spawn) {
-            addConsoleLog(`SUPPLY: Player ${player} の偵察兵補充地点がありません。`, 'system');
-            if (isMedic && koh) koh.medicScoutReinforceTurns = 0;
-            return;
-        }
-        scoutReinforcementSerial++;
-        addUnitToBoard(
-            new Unit(`p${player}_scout_reinforce_${scoutReinforcementSerial}`, 'scout', player, 'area2', spawn.row, spawn.col, true),
-            'area2',
-            spawn.row,
-            spawn.col
-        );
-        addConsoleLog(`SUPPLY: Player ${player} に偵察兵を1体補充しました。`, player === 1 ? 'p1' : 'p2');
+function beginPlayerTurn(player) {
+    playerTurnsStarted[player] = Number(playerTurnsStarted[player] || 0) + 1;
+    reinforceScouts(player);
+}
+
+function reinforceScouts(player) {
+    const interval = getScoutReinforceInterval(player);
+    const limit = getScoutLimit(player);
+    const koh = getKohUnit(player);
+    const isMedic = Boolean(koh && getPlayerAbility(player) === '衛生兵');
+    if (isMedic) {
+        koh.medicScoutReinforceTurns = Math.min(interval, Number(koh.medicScoutReinforceTurns || 0) + 1);
+        if (koh.medicScoutReinforceTurns < interval) return;
+    } else if (playerTurnsStarted[player] % interval !== 0) {
+        return;
+    }
+    const scoutCount = units.filter(unit => unit.player === player && unit.type === 'scout').length;
+    if (scoutCount >= limit) {
+        addConsoleLog(`SUPPLY: Player ${player} の偵察兵は上限${limit}体です。`, 'system');
         if (isMedic && koh) koh.medicScoutReinforceTurns = 0;
-    });
+        return;
+    }
+    const spawn = findScoutSpawnPosition(player);
+    if (!spawn) {
+        addConsoleLog(`SUPPLY: Player ${player} の偵察兵補充地点がありません。`, 'system');
+        if (isMedic && koh) koh.medicScoutReinforceTurns = 0;
+        return;
+    }
+    scoutReinforcementSerial++;
+    addUnitToBoard(
+        new Unit(`p${player}_scout_reinforce_${scoutReinforcementSerial}`, 'scout', player, 'area2', spawn.row, spawn.col, true),
+        'area2',
+        spawn.row,
+        spawn.col
+    );
+    addConsoleLog(`SUPPLY: Player ${player} に偵察兵を1体補充しました。`, player === 1 ? 'p1' : 'p2');
+    if (isMedic && koh) koh.medicScoutReinforceTurns = 0;
 }
 
 function getScoutReinforceInterval(player) {
@@ -7191,6 +7203,7 @@ function resetToSetup(fromOnline = false) {
     clairvoyanceCooldownByPlayer = { 1: 0, 2: 0 };
     playerKillCounts = { 1: 0, 2: 0 };
     informationCollapseTurns = { 1: 0, 2: 0 };
+    playerTurnsStarted = { 1: 0, 2: 0 };
     resetDrawRequests();
 
     boards = { area1: [], area2: [], area3: [] };
