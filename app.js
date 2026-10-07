@@ -3707,6 +3707,7 @@ function cancelMatchmaking() {
     spectatorMode = false;
     activePhase = 'setup';
     isGameOver = false;
+    updateMenuBattleVisibility();
     currentPlayer = 1;
     matchmakingMode = false;
     matchRoomId = null;
@@ -4611,6 +4612,7 @@ function startGame(config = null, fromOnline = false) {
     stopOnlinePreparationTimer();
     resetOnlineAutoStartState();
     isGameOver = false;
+    updateMenuBattleVisibility();
     currentPlayer = 1;
     gameTurn = 1;
     selectedUnit = null;
@@ -7046,6 +7048,7 @@ function getScoutLimit(player) {
 function triggerWin(winnerId, fromOnline = false, reason = 'core') {
     if (isGameOver) return;
     isGameOver = true;
+    updateMenuBattleVisibility();
     resetDrawRequests();
     const subtitleEl = document.getElementById('game-over-subtitle');
     const viewerPlayer = onlineMode && localPlayer ? localPlayer : 1;
@@ -7098,6 +7101,7 @@ function triggerWin(winnerId, fromOnline = false, reason = 'core') {
 function triggerDraw(fromOnline = false, reason = 'mutual') {
     if (isGameOver) return;
     isGameOver = true;
+    updateMenuBattleVisibility();
     resetDrawRequests();
 
     const subtitleEl = document.getElementById('game-over-subtitle');
@@ -7153,6 +7157,7 @@ function resetToSetup(fromOnline = false) {
     const completedOnlineMatch = onlineMode && isGameOver;
     activePhase = 'setup';
     isGameOver = false;
+    updateMenuBattleVisibility();
     document.getElementById('game-over-overlay').classList.add('hidden');
     document.getElementById('game-info-panel').classList.add('hidden');
     document.getElementById('online-prebattle-panel')?.classList.add('hidden');
@@ -7208,6 +7213,16 @@ function resetToSetup(fromOnline = false) {
 }
 
 // --- UI UPDATE ---
+function updateMenuBattleVisibility() {
+    const inBattle = activePhase === 'battle' && !isGameOver;
+    for (const id of ['menu-account-details', 'menu-match-history-details']) {
+        const section = document.getElementById(id);
+        if (!section) continue;
+        if (inBattle) section.open = false;
+        section.classList.toggle('hidden', inBattle);
+    }
+}
+
 function updateUI() {
     document.getElementById('turn-count').textContent = gameTurn;
 
