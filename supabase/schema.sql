@@ -111,6 +111,12 @@ create index if not exists match_history_winner_player_idx on match_history (win
 create index if not exists match_history_loser_player_idx on match_history (loser_player_id);
 create index if not exists match_history_surrender_player_idx on match_history (surrender_by_player_id);
 
+create table if not exists public.player_formations (
+  player_id bigint primary key references public.players(id) on delete cascade,
+  formation_json jsonb not null,
+  updated_at bigint not null
+);
+
 -- These tables are server-only. The Render backend uses the service role;
 -- browser roles must never read PIN hashes, sessions, or private match data.
 alter table public.players enable row level security;
@@ -118,18 +124,21 @@ alter table public.auth_sessions enable row level security;
 alter table public.friend_requests enable row level security;
 alter table public.friends enable row level security;
 alter table public.match_history enable row level security;
+alter table public.player_formations enable row level security;
 
 revoke all on table public.players from public, anon, authenticated;
 revoke all on table public.auth_sessions from public, anon, authenticated;
 revoke all on table public.friend_requests from public, anon, authenticated;
 revoke all on table public.friends from public, anon, authenticated;
 revoke all on table public.match_history from public, anon, authenticated;
+revoke all on table public.player_formations from public, anon, authenticated;
 
 grant select, insert, update, delete on table public.players to service_role;
 grant select, insert, update, delete on table public.auth_sessions to service_role;
 grant select, insert, update, delete on table public.friend_requests to service_role;
 grant select, insert, update, delete on table public.friends to service_role;
 grant select, insert, update, delete on table public.match_history to service_role;
+grant select, insert, update, delete on table public.player_formations to service_role;
 
 revoke all on all sequences in schema public from public, anon, authenticated;
 grant usage, select, update on all sequences in schema public to service_role;

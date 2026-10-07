@@ -78,6 +78,7 @@ const AUTH_SESSION_STORAGE_KEY = 'sector8_auth_session';
 const LAST_PLAYER_ID_STORAGE_KEY = 'sector8_last_player_id';
 const UI_SETTINGS_STORAGE_KEY = 'sector8_ui_settings';
 const FORMATION_STORAGE_KEY = 'sector8_formation_v2';
+const FORMATION_OWNER_STORAGE_KEY = 'sector8_formation_owner_v1';
 const DEFAULT_FORMATION = Object.freeze({
     area1: Object.freeze([
         { id: 'home_0', type: 'otsu', row: 9, col: 1 }, { id: 'home_1', type: 'hei', row: 9, col: 2 },
@@ -261,6 +262,8 @@ let replayViewerOpen = false;
 let pendingImpersonationUnitId = null;
 let savedFormation = null;
 let editingFormation = null;
+let formationSyncVersion = 0;
+let formationSyncPending = false;
 let selectedFormationUnitId = null;
 
 let selectedUnit = null;
@@ -626,13 +629,79 @@ function loadSavedFormation() {
     renderFormationEditor();
 }
 
-function saveFormation() {
-    savedFormation = normalizeFormation(editingFormation);
-    editingFormation = normalizeFormation(savedFormation);
-    try { window.localStorage.setItem(FORMATION_STORAGE_KEY, JSON.stringify(savedFormation)); } catch {}
-    document.getElementById('formation-status').textContent = '編成を保存しました。次の対戦から反映されます。';
-    showStatusAlert('編成を保存しました。', 'success', 1800);
-    renderFormationEditor();
+function setFormationSyncPending(pending, status) {
+    formationSyncPending = pending;
+    const button = document.getElementById('formation-save');
+    if (button) button.disabled = pending;
+    const statusElement = document.getElementById('formation-status');
+    if (statusElement && status) statusElement.textContent = status;
+}
+
+async function loadAccountFormation() {
+    if (!authSession?.token || !authProfile?.id) return;
+    const version = ++formationSyncVersion;
+    const playerId = String(authProfile.playerId);
+    let cachedOwner = null;
+    try { cachedOwner = window.localStorage.getItem(FORMATION_OWNER_STORAGE_KEY); } catch {}
+    if (cachedOwner && cachedOwner !== playerId) {
+        savedFormation = cloneDefaultFormation();
+        editingFormation = cloneDefaultFormation();
+        renderFormationEditor();
+    }
+    setFormationSyncPending(true, 'クラウド編成を読み込み中...');
+    try {
+        const result = await apiRequest('/api/formation');
+        if (version !== formationSyncVersion || String(authProfile?.playerId) !== playerId) return;
+        if (result.formation) {
+            savedFormation = normalizeFormation(result.formation);
+            try {
+                window.localStorage.setItem(FORMATION_STORAGE_KEY, JSON.stringify(savedFormation));
+                window.localStorage.setItem(FORMATION_OWNER_STORAGE_KEY, playerId);
+            } catch {}
+            setFormationSyncPending(false, 'クラウド編成を読み込みました。');
+        } else {
+            setFormationSyncPending(false, 'クラウド編成はまだありません。SAVEで登録できます。');
+        }
+        editingFormation = normalizeFormation(savedFormation);
+        selectedFormationUnitId = null;
+        renderFormationEditor();
+        if (onlineMode && activePhase === 'setup' && onlineSocket?.readyState === WebSocket.OPEN) {
+            sendOnlineMessage({ kind: 'formation_choice', formation: normalizeFormation(savedFormation) });
+        }
+    } catch (error) {
+        if (version !== formationSyncVersion) return;
+        console.warn('formation load failed', error);
+        setFormationSyncPending(false, 'クラウド編成を読み込めませんでした。SAVEで再保存できます。');
+    }
+}
+
+async function saveFormation() {
+    if (formationSyncPending) return;
+    const formation = normalizeFormation(editingFormation);
+    const version = formationSyncVersion;
+    const playerId = authProfile?.playerId || null;
+    setFormationSyncPending(true, playerId ? 'クラウドへ保存中...' : 'ブラウザに保存中...');
+    try {
+        if (playerId) {
+            const result = await apiRequest('/api/formation', { method: 'PUT', body: { formation } });
+            if (version !== formationSyncVersion || authProfile?.playerId !== playerId) return;
+            savedFormation = normalizeFormation(result.formation);
+        } else {
+            savedFormation = formation;
+        }
+        editingFormation = normalizeFormation(savedFormation);
+        try {
+            window.localStorage.setItem(FORMATION_STORAGE_KEY, JSON.stringify(savedFormation));
+            if (playerId) window.localStorage.setItem(FORMATION_OWNER_STORAGE_KEY, playerId);
+        } catch {}
+        setFormationSyncPending(false, playerId ? 'クラウド編成を保存しました。次の対戦から反映されます。' : '編成をブラウザに保存しました。');
+        showStatusAlert('編成を保存しました。', 'success', 1800);
+        renderFormationEditor();
+    } catch (error) {
+        console.warn('formation save failed', error);
+        setFormationSyncPending(false, '編成を保存できませんでした。接続を確認して再試行してください。');
+        showStatusAlert('編成の保存に失敗しました。', 'error', 3000);
+    }
 }
 
 function getFormationUnitLabel(type) {
@@ -741,6 +810,7 @@ function moveFormationUnitOnBoard(targetArea, targetRow, targetCol) {
 }
 
 function handleFormationBoardClick(event) {
+    if (formationSyncPending) return;
     const piece = event.target.closest('[data-unit-id]');
     if (piece) {
         if (selectedFormationUnitId && selectedFormationUnitId !== piece.dataset.unitId) {
@@ -1760,12 +1830,16 @@ async function restoreAuthSession() {
     try {
         const result = await apiRequest('/api/auth/restore', { method: 'POST', body: { token: authSession.token }, auth: false });
         applyAuthProfile(result.profile, authSession.token);
+        await loadAccountFormation();
         loadMatchHistory({ force: true }).catch(() => {});
         showStatusAlert(`LOGIN RESTORED: ${result.profile.name}`, 'system', 2500);
         return true;
     } catch {
+        ++formationSyncVersion;
+        setFormationSyncPending(false);
         authSession = null;
         authProfile = null;
+        loadSavedFormation();
         saveAuthSession();
         updateAccountUI();
         return false;
@@ -1777,6 +1851,7 @@ async function registerAccount() {
     const pin = String(document.getElementById('account-pin-input')?.value || '').trim();
     const result = await apiRequest('/api/auth/register', { method: 'POST', body: { name, pin }, auth: false });
     applyAuthProfile(result.profile, result.token);
+    await loadAccountFormation();
     loadMatchHistory({ force: true }).catch(() => {});
     try { window.localStorage.setItem(LAST_PLAYER_ID_STORAGE_KEY, result.profile.playerId); } catch {}
     showStatusAlert(`REGISTERED: ${result.profile.playerId}`, 'success', 3500);
@@ -1793,6 +1868,7 @@ async function loginAccount() {
         auth: false
     });
     applyAuthProfile(result.profile, result.token);
+    await loadAccountFormation();
     loadMatchHistory({ force: true }).catch(() => {});
     try { window.localStorage.setItem(LAST_PLAYER_ID_STORAGE_KEY, result.profile.playerId); } catch {}
     showStatusAlert(`LOGIN OK: ${result.profile.name}`, 'success', 2500);
@@ -1801,6 +1877,7 @@ async function loginAccount() {
 }
 
 async function logoutAccount() {
+    ++formationSyncVersion;
     if (authSession?.token) {
         try {
             await apiRequest('/api/auth/logout', { method: 'POST', body: { token: authSession.token }, auth: false });
@@ -1808,6 +1885,8 @@ async function logoutAccount() {
     }
     authSession = null;
     authProfile = null;
+    setFormationSyncPending(false);
+    loadSavedFormation();
     saveAuthSession();
     clearAccountInputs();
     matchHistoryCache = [];
@@ -3083,6 +3162,7 @@ function setupUIEventListeners() {
     });
     document.getElementById('formation-save')?.addEventListener('click', saveFormation);
     document.getElementById('formation-reset')?.addEventListener('click', () => {
+        if (formationSyncPending) return;
         editingFormation = cloneDefaultFormation();
         selectedFormationUnitId = null;
         renderFormationEditor();

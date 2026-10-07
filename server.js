@@ -381,6 +381,37 @@ function trackRoomState(room, message, senderInfo) {
     }
 }
 
+const FORMATION_UNITS = {
+    home_0: 'otsu', home_1: 'hei', home_2: 'tei', home_3: 'tei', home_4: 'hei',
+    home_5: 'tei', home_6: 'tei', home_7: 'hei', home_8: 'otsu',
+    scout_1: 'scout', koh: 'koh', front_hei_1: 'hei', front_tei_1: 'tei',
+    front_hei_2: 'hei', front_tei_2: 'tei', scout_2: 'scout'
+};
+
+function validateFormation(formation) {
+    if (!formation || !Array.isArray(formation.area1) || !Array.isArray(formation.area2)) return null;
+    const seen = new Set();
+    const cells = new Set();
+    const normalized = { area1: [], area2: [] };
+    for (const area of ['area1', 'area2']) {
+        for (const unit of formation[area]) {
+            if (!unit || FORMATION_UNITS[unit.id] !== unit.type || seen.has(unit.id)) return null;
+            const row = unit.row;
+            const col = unit.col;
+            if (!Number.isInteger(row) || !Number.isInteger(col) || row < (area === 'area1' ? 0 : 8) || row > 10 || col < 0 || col > 10) return null;
+            if (area === 'area1' && unit.type === 'scout') return null;
+            const origin = unit.id.startsWith('home_') ? 'area1' : 'area2';
+            if (area !== origin && unit.type !== 'otsu') return null;
+            const cell = `${area}:${row}:${col}`;
+            if (cells.has(cell)) return null;
+            seen.add(unit.id);
+            cells.add(cell);
+            normalized[area].push({ id: unit.id, type: unit.type, row, col });
+        }
+    }
+    return seen.size === Object.keys(FORMATION_UNITS).length ? normalized : null;
+}
+
 const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, `http://${req.headers.host}`);
     const method = req.method || 'GET';
@@ -510,6 +541,18 @@ const server = http.createServer(async (req, res) => {
                 const result = await accountStore.respondFriendRequest(session.profile.id, requestId, body.action);
                 if (!result.ok) return sendJson(res, 400, { ok: false, error: result.error });
                 return sendJson(res, 200, { ok: true, status: result.status });
+            }
+
+            if (url.pathname === '/api/formation' && (method === 'GET' || method === 'PUT')) {
+                if (!session) return sendJson(res, 401, { ok: false, error: 'unauthorized' });
+                if (method === 'GET') {
+                    const formation = await accountStore.getPlayerFormation(session.profile.id);
+                    return sendJson(res, 200, { ok: true, formation });
+                }
+                const formation = validateFormation(body.formation);
+                if (!formation) return sendJson(res, 400, { ok: false, error: 'formation_invalid' });
+                const saved = await accountStore.savePlayerFormation(session.profile.id, formation);
+                return sendJson(res, 200, { ok: true, formation: saved });
             }
 
             if (method === 'GET' && url.pathname === '/api/matches') {

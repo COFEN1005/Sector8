@@ -930,6 +930,23 @@ function createSupabaseStore() {
     }
   }
 
+  async function getPlayerFormation(playerId) {
+    const row = await selectOne('player_formations', { player_id: `eq.${playerId}` });
+    return row?.formation_json || null;
+  }
+
+  async function savePlayerFormation(playerId, formation) {
+    const response = await client.request('POST', '/rest/v1/player_formations', {
+      query: { on_conflict: 'player_id' },
+      body: { player_id: playerId, formation_json: formation, updated_at: Date.now() },
+      prefer: 'resolution=merge-duplicates,return=representation'
+    });
+    if (!Array.isArray(response.data) || response.data.length !== 1) {
+      throw new Error('formation_save_not_confirmed');
+    }
+    return response.data[0].formation_json;
+  }
+
   async function getPlayerRowById(id) {
     const numericId = Number(id);
     if (!Number.isInteger(numericId) || numericId <= 0) return null;
@@ -1275,6 +1292,8 @@ function createSupabaseStore() {
     getPlayerByFriendCode,
     getPlayerByName,
     updatePlayerName,
+    getPlayerFormation,
+    savePlayerFormation,
     adjustPlayerProgress,
     deletePlayerById,
     listFriends,
@@ -1335,6 +1354,12 @@ function createSqliteStore() {
       expires_at INTEGER NOT NULL,
       device_label TEXT,
       FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS player_formations (
+      player_id INTEGER PRIMARY KEY REFERENCES players(id) ON DELETE CASCADE,
+      formation_json TEXT NOT NULL,
+      updated_at INTEGER NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS friend_requests (
@@ -1879,6 +1904,19 @@ function createSqliteStore() {
     return { ok: true, backend: 'sqlite', schemaReady: true, schemaVersion: 2 };
   }
 
+  function getPlayerFormation(playerId) {
+    const row = db.prepare('SELECT formation_json FROM player_formations WHERE player_id = ?').get(playerId);
+    return row ? JSON.parse(row.formation_json) : null;
+  }
+
+  function savePlayerFormation(playerId, formation) {
+    db.prepare(`INSERT INTO player_formations (player_id, formation_json, updated_at)
+      VALUES (?, ?, ?)
+      ON CONFLICT(player_id) DO UPDATE SET formation_json = excluded.formation_json, updated_at = excluded.updated_at`)
+      .run(playerId, JSON.stringify(formation), Date.now());
+    return formation;
+  }
+
   return {
     db,
     createSession,
@@ -1893,6 +1931,8 @@ function createSqliteStore() {
     getPlayerByFriendCode,
     getPlayerByName,
     updatePlayerName,
+    getPlayerFormation,
+    savePlayerFormation,
     adjustPlayerProgress,
     deletePlayerById,
     listFriends,

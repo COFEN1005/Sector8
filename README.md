@@ -8,7 +8,7 @@ Sector8 is a browser strategy board game with AI, local play, and room-based onl
 npm start
 ```
 
-Account data, rating, exp, friends, and match history are saved to Supabase when `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are configured.
+Account data, rating, exp, friends, match history, and saved formations are saved to Supabase when `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are configured.
 Local development falls back to SQLite at `data/sector8.sqlite`. Production refuses to start without Supabase so online data is never silently written to an ephemeral Render disk.
 
 Open `http://localhost:8787/`.
@@ -21,6 +21,8 @@ For online persistence, set these values in `supabase.local.json`, Render enviro
 - `SUPABASE_SERVICE_ROLE_KEY` (server secret; never put it in browser code or GitHub)
 
 Run the complete contents of `supabase/schema.sql` in the Supabase SQL Editor after creating or updating a project. It is safe to run repeatedly and installs the atomic registration, login, friend, and match-finalization functions used by the server.
+
+The formation editor stores one preset per logged-in player in `player_formations`. Sign in on another device to load it. Existing browser-only formations remain visible until explicitly saved with `SAVE FORMATION`; guests continue using browser storage. The browser never receives the Supabase service-role key.
 
 After deployment, open `/api/account/health`. A ready project returns `ok: true`, `backend: "supabase"`, and `schemaVersion: 3`. `supabase_schema_update_required` means the SQL above has not been applied yet.
 
