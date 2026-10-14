@@ -5,6 +5,7 @@
   "main": "server.js",
   "scripts": {
     "build": "node --check server.js && node --check app.js",
+    "test": "node tests/formation-deployment.test.js",
     "start": "node server.js",
     "dev": "node server.js"
   },

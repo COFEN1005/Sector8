@@ -5243,7 +5243,7 @@ function initializeUnits() {
 function getFormationDeploymentCells(player, area) {
     const mapName = area === 'area1' ? (player === 1 ? 'area1' : 'area3') : 'area2';
     const rows = area === 'area1'
-        ? (player === 1 ? [9, 8, 7] : [1, 2, 3])
+        ? Array.from({ length: MAP_SIZES[mapName].rows }, (_, index) => player === 1 ? 10 - index : index)
         : (player === 1 ? [10, 9, 8] : [0, 1, 2]);
     const centerOrder = [5, 4, 6, 3, 7, 2, 8, 1, 9, 0, 10];
     const cells = [];
