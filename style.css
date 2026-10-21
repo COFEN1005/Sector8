@@ -4117,7 +4117,7 @@ body:has(#battle-screen:not(.hidden) #setup-panel:not(.hidden)) .workspace-nav {
     align-items: stretch;
     border: 1px solid rgba(123, 179, 204, 0.2);
     border-radius: 14px;
-    background: linear-gradient(90deg, rgba(3, 8, 15, 0.75) 0%, rgba(3, 8, 15, 0.35) 47%, rgba(4, 9, 18, 0.08) 100%), url('assets/lobby-key-art.png') center / cover no-repeat;
+    background: linear-gradient(90deg, rgba(3, 8, 15, 0.75) 0%, rgba(3, 8, 15, 0.35) 47%, rgba(4, 9, 18, 0.08) 100%), url('assets/lobby-key-art-cyber.png') center / cover no-repeat;
     box-shadow: 0 28px 70px rgba(0, 0, 0, 0.46), inset 0 0 0 1px rgba(255, 255, 255, 0.03);
     overflow: hidden;
 }
