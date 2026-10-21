@@ -3787,6 +3787,9 @@ function setSetupMode(mode) {
     showLocalPanel();
     setGameMode(mode);
     setOpponent(mode === 'debug');
+    document.querySelectorAll('.mode-tab').forEach(tab => {
+        tab.classList.toggle('active', tab.id === `tab-mode-${mode}`);
+    });
 }
 
 window.setSetupMode = setSetupMode;
