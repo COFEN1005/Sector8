@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Share+Tech+Mono&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=0.7.28-cyber-lobby">
+    <link rel="stylesheet" href="style.css?v=level-pass-1">
 </head>
 <body>
     <div id="app-container">
@@ -453,8 +453,24 @@
         <nav class="workspace-nav" aria-label="メインメニュー">
             <button id="nav-battle" class="workspace-nav-btn active" type="button">BATTLE</button>
             <button id="nav-formation" class="workspace-nav-btn" type="button">FORMATION</button>
+            <button id="nav-level-pass" class="workspace-nav-btn" type="button">LEVEL PASS</button>
             <button id="nav-options" class="workspace-nav-btn" type="button">OPTIONS</button>
         </nav>
+
+        <section id="level-pass-screen" class="workspace-screen level-pass-screen hidden">
+            <div class="workspace-heading">
+                <div><span class="workspace-kicker">PROGRESSION / SECTOR-8</span><h2>レベルパス</h2></div>
+                <button id="level-pass-refresh" class="neon-btn secondary" type="button">REFRESH</button>
+            </div>
+            <p class="workspace-copy">対戦で得たEXPに応じて解放。Lv50までの報酬枠を公開中です。甲・BGMなどの未実装報酬は準備中と表示されます。</p>
+            <div class="level-pass-overview">
+                <div><span class="level-pass-overview-label">CURRENT LEVEL</span><strong id="level-pass-current-level">--</strong></div>
+                <div><span class="level-pass-overview-label">NEXT LEVEL</span><strong id="level-pass-exp">--</strong></div>
+                <div><span class="level-pass-overview-label">CLAIMED</span><strong id="level-pass-claimed">0</strong></div>
+            </div>
+            <div id="level-pass-status" class="level-pass-status" role="status">読み込み中...</div>
+            <div id="level-pass-grid" class="level-pass-grid" aria-label="レベルパス報酬一覧"></div>
+        </section>
 
         <section id="formation-screen" class="workspace-screen hidden">
             <div class="workspace-heading">
@@ -517,6 +533,7 @@
                     <button class="lobby-entry" type="button" data-lobby-destination="private"><span class="lobby-entry-index">04 / PRIVATE</span><strong>プライベートマッチ</strong><small>ルームを作成、または参加する</small><span class="lobby-entry-arrow" aria-hidden="true">↗</span></button>
                     <button class="lobby-entry" type="button" data-lobby-destination="local"><span class="lobby-entry-index">05 / LOCAL</span><strong>ローカルマッチ</strong><small>AIや同じ端末の相手と対戦する</small><span class="lobby-entry-arrow" aria-hidden="true">↗</span></button>
                     <button class="lobby-entry lobby-entry-quiet" type="button" data-lobby-destination="options"><span class="lobby-entry-index">06 / SYSTEM</span><strong>オプション</strong><small>音量と表示設定を変更する</small><span class="lobby-entry-arrow" aria-hidden="true">↗</span></button>
+                    <button class="lobby-entry lobby-entry-quiet" type="button" data-lobby-destination="level-pass"><span class="lobby-entry-index">07 / PROGRESSION</span><strong>レベルパス</strong><small>Lv50までの報酬と解放状況を見る</small><span class="lobby-entry-arrow" aria-hidden="true">↗</span></button>
                 </div>
             </section>
             <div class="lobby-hero-caption" aria-hidden="true"><span>INFORMATION COLLAPSE</span><strong>境界を越え、<br>戦場を掌握せよ。</strong></div>
@@ -964,6 +981,6 @@
     <script src="sector8-map4.js?v=1"></script>
     <script src="sector8-map5.js?v=1"></script>
     <script src="sector8-map6.js?v=1"></script>
-    <script src="app.js?v=0.7.28-lobby-mode"></script>
+    <script src="app.js?v=level-pass-1"></script>
 </body>
 </html>

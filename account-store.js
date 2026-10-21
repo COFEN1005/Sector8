@@ -948,6 +948,37 @@ function createSupabaseStore() {
     return response.data[0].formation_json;
   }
 
+  async function getLevelPassUnlocks(playerId) {
+    return selectMany('player_level_pass_unlocks', {
+      player_id: `eq.${Number(playerId)}`,
+      select: 'reward_key,reward_type,level_required,claimed_at',
+      order: 'level_required.asc'
+    });
+  }
+
+  async function claimLevelPassReward(playerId, reward) {
+    const player = await getPlayerRowById(playerId);
+    if (!player) return { ok: false, error: 'not_found' };
+    if (Number(player.level) < reward.level) return { ok: false, error: 'level_locked' };
+    await client.request('POST', '/rest/v1/player_level_pass_unlocks', {
+      query: { on_conflict: 'player_id,reward_key' },
+      body: {
+        player_id: Number(playerId),
+        reward_key: reward.key,
+        reward_type: reward.type,
+        level_required: reward.level,
+        claimed_at: now()
+      },
+      prefer: 'resolution=ignore-duplicates,return=representation'
+    });
+    const row = await selectOne('player_level_pass_unlocks', {
+      player_id: `eq.${Number(playerId)}`,
+      reward_key: `eq.${reward.key}`
+    });
+    if (!row) throw new Error('level_pass_claim_not_confirmed');
+    return { ok: true, unlock: row };
+  }
+
   async function getPlayerRowById(id) {
     const numericId = Number(id);
     if (!Number.isInteger(numericId) || numericId <= 0) return null;
@@ -1312,6 +1343,8 @@ function createSupabaseStore() {
     updatePlayerName,
     getPlayerFormations,
     savePlayerMapFormation,
+    getLevelPassUnlocks,
+    claimLevelPassReward,
     adjustPlayerProgress,
     deletePlayerById,
     listFriends,
@@ -1388,6 +1421,15 @@ function createSqliteStore() {
       formation_json TEXT NOT NULL,
       updated_at INTEGER NOT NULL,
       PRIMARY KEY (player_id, map_mode)
+    );
+
+    CREATE TABLE IF NOT EXISTS player_level_pass_unlocks (
+      player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      reward_key TEXT NOT NULL,
+      reward_type TEXT NOT NULL,
+      level_required INTEGER NOT NULL CHECK(level_required > 0),
+      claimed_at INTEGER NOT NULL,
+      PRIMARY KEY (player_id, reward_key)
     );
 
     CREATE TABLE IF NOT EXISTS friend_requests (
@@ -1963,6 +2005,23 @@ function createSqliteStore() {
     return formation;
   }
 
+  function getLevelPassUnlocks(playerId) {
+    return db.prepare(`SELECT reward_key, reward_type, level_required, claimed_at
+      FROM player_level_pass_unlocks WHERE player_id = ? ORDER BY level_required`).all(playerId);
+  }
+
+  function claimLevelPassReward(playerId, reward) {
+    const player = db.prepare('SELECT level FROM players WHERE id = ?').get(playerId);
+    if (!player) return { ok: false, error: 'not_found' };
+    if (Number(player.level) < reward.level) return { ok: false, error: 'level_locked' };
+    db.prepare(`INSERT OR IGNORE INTO player_level_pass_unlocks
+      (player_id, reward_key, reward_type, level_required, claimed_at) VALUES (?, ?, ?, ?, ?)`)
+      .run(playerId, reward.key, reward.type, reward.level, now());
+    const row = db.prepare(`SELECT reward_key, reward_type, level_required, claimed_at
+      FROM player_level_pass_unlocks WHERE player_id = ? AND reward_key = ?`).get(playerId, reward.key);
+    return { ok: true, unlock: row };
+  }
+
   return {
     db,
     createSession,
@@ -1979,6 +2038,8 @@ function createSqliteStore() {
     updatePlayerName,
     getPlayerFormations,
     savePlayerMapFormation,
+    getLevelPassUnlocks,
+    claimLevelPassReward,
     adjustPlayerProgress,
     deletePlayerById,
     listFriends,
@@ -2019,6 +2080,7 @@ function createStore() {
 module.exports = {
   createStore,
   createSupabaseStore,
+  createSqliteStore,
   calculateRatingDelta,
   formatFriendCode,
   normalizePlayerId,

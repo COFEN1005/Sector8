@@ -125,6 +125,15 @@ create table if not exists public.player_map_formations (
   primary key (player_id, map_mode)
 );
 
+create table if not exists public.player_level_pass_unlocks (
+  player_id bigint not null references public.players(id) on delete cascade,
+  reward_key text not null,
+  reward_type text not null,
+  level_required integer not null check (level_required > 0),
+  claimed_at bigint not null,
+  primary key (player_id, reward_key)
+);
+
 insert into public.player_map_formations (player_id, map_mode, formation_json, updated_at)
 select legacy.player_id, modes.map_mode, legacy.formation_json, legacy.updated_at
 from public.player_formations as legacy
@@ -140,6 +149,7 @@ alter table public.friends enable row level security;
 alter table public.match_history enable row level security;
 alter table public.player_formations enable row level security;
 alter table public.player_map_formations enable row level security;
+alter table public.player_level_pass_unlocks enable row level security;
 
 revoke all on table public.players from public, anon, authenticated;
 revoke all on table public.auth_sessions from public, anon, authenticated;
@@ -148,6 +158,7 @@ revoke all on table public.friends from public, anon, authenticated;
 revoke all on table public.match_history from public, anon, authenticated;
 revoke all on table public.player_formations from public, anon, authenticated;
 revoke all on table public.player_map_formations from public, anon, authenticated;
+revoke all on table public.player_level_pass_unlocks from public, anon, authenticated;
 
 grant select, insert, update, delete on table public.players to service_role;
 grant select, insert, update, delete on table public.auth_sessions to service_role;
@@ -156,6 +167,7 @@ grant select, insert, update, delete on table public.friends to service_role;
 grant select, insert, update, delete on table public.match_history to service_role;
 grant select, insert, update, delete on table public.player_formations to service_role;
 grant select, insert, update, delete on table public.player_map_formations to service_role;
+grant select, insert, update, delete on table public.player_level_pass_unlocks to service_role;
 
 revoke all on all sequences in schema public from public, anon, authenticated;
 grant usage, select, update on all sequences in schema public to service_role;

@@ -24,6 +24,12 @@ Run the complete contents of `supabase/schema.sql` in the Supabase SQL Editor af
 
 The formation editor stores one preset per logged-in player in `player_formations`. Sign in on another device to load it. Existing browser-only formations remain visible until explicitly saved with `SAVE FORMATION`; guests continue using browser storage. The browser never receives the Supabase service-role key.
 
+## Level pass
+
+The lobby's `LEVEL PASS` tab shows levels 1-50. Player level and EXP remain in `players`; claimed rewards are stored per player in `player_level_pass_unlocks`. Apply the new table definition in `supabase/schema.sql` before deploying. The server validates both the reward key and required level, and duplicate claims are safe.
+
+Define real rewards in `ACTIVE_REWARDS` in `level-pass.js`. The Lv5 milestones are placeholders for future Koh, BGM, and other rewards; they are not claimable until defined. The Lv1 title is a persistence example only, not an equipable title yet. To extend beyond Lv50, increase `INITIAL_LEVEL_PASS_MAX` and add the new reward definitions; player levels are not capped at 50.
+
 After deployment, open `/api/account/health`. A ready project returns `ok: true`, `backend: "supabase"`, and `schemaVersion: 3`. `supabase_schema_update_required` means the SQL above has not been applied yet.
 
 Without Supabase values, local development uses `data/sector8.sqlite`. Set `ACCOUNT_BACKEND=sqlite` only when an explicit local database is desired in a production-like environment.

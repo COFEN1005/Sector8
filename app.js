@@ -886,9 +886,10 @@ function setupFormationBoardInteractions(container) {
 }
 
 function setWorkspaceView(view) {
-    const next = ['battle', 'formation', 'options'].includes(view) ? view : 'battle';
+    const next = ['battle', 'formation', 'level-pass', 'options'].includes(view) ? view : 'battle';
     document.getElementById('battle-screen')?.classList.toggle('hidden', next !== 'battle');
     document.getElementById('formation-screen')?.classList.toggle('hidden', next !== 'formation');
+    document.getElementById('level-pass-screen')?.classList.toggle('hidden', next !== 'level-pass');
     document.getElementById('options-screen')?.classList.toggle('hidden', next !== 'options');
     document.querySelectorAll('.workspace-nav-btn').forEach(button => {
         button.classList.toggle('active', button.id === `nav-${next}`);
@@ -899,11 +900,12 @@ function setWorkspaceView(view) {
         renderFormationEditor();
     }
     if (next === 'options') updateAudioButtons();
+    if (next === 'level-pass') loadLevelPass();
 }
 
 function openLobbyDestination(destination) {
     const battleScreen = document.getElementById('battle-screen');
-    if (destination === 'formation' || destination === 'options') {
+    if (destination === 'formation' || destination === 'options' || destination === 'level-pass') {
         battleScreen?.classList.remove('lobby-config-open');
         setWorkspaceView(destination);
         return;
@@ -925,6 +927,68 @@ function openLobbyDestination(destination) {
     document.querySelectorAll('.lobby-entry').forEach(button => {
         button.classList.toggle('active', button.dataset.lobbyDestination === destination);
     });
+}
+
+async function loadLevelPass() {
+    const status = document.getElementById('level-pass-status');
+    const grid = document.getElementById('level-pass-grid');
+    if (!status || !grid) return;
+    status.textContent = '報酬データを読み込んでいます...';
+    try {
+        const data = await apiRequest('/api/level-pass');
+        const currentLevel = Number(data.profile?.level || 0);
+        const claimed = new Set((data.unlocks || []).map(item => item.reward_key));
+        document.getElementById('level-pass-current-level').textContent = currentLevel ? `LV ${currentLevel}` : 'GUEST';
+        document.getElementById('level-pass-exp').textContent = data.profile ? `${data.profile.exp || 0} / 100 EXP` : '--';
+        document.getElementById('level-pass-claimed').textContent = String(claimed.size);
+        status.textContent = data.profile
+            ? `Lv${currentLevel}まで到達。報酬を受け取るとアカウントに保存されます。`
+            : 'ログインすると進行状況と受取記録が表示されます。';
+        grid.replaceChildren();
+        for (const entry of data.levels || []) {
+            const reward = entry.reward;
+            const received = Boolean(reward.key && claimed.has(reward.key));
+            const reached = currentLevel >= entry.level;
+            const card = document.createElement('article');
+            card.className = `level-pass-card ${reached ? 'reached' : 'locked'} ${reward.status === 'planned' ? 'planned' : ''}`;
+            const level = document.createElement('span');
+            level.className = 'level-pass-card-level';
+            level.textContent = `LEVEL ${String(entry.level).padStart(2, '0')}`;
+            const name = document.createElement('strong');
+            name.textContent = reward.name;
+            const type = document.createElement('span');
+            type.className = 'level-pass-card-type';
+            type.textContent = { koh: '甲', bgm: 'BGM', bonus: 'BONUS', title: 'TITLE', standard: 'REWARD' }[reward.type] || reward.type;
+            const state = document.createElement('span');
+            state.className = 'level-pass-card-state';
+            state.textContent = reward.status === 'planned' ? '準備中' : received ? '受取済み' : reached ? '受取可能' : 'レベル未到達';
+            card.append(level, name, type, state);
+            if (reward.status === 'active' && reached && !received) {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'level-pass-claim';
+                button.dataset.rewardKey = reward.key;
+                button.textContent = 'CLAIM';
+                card.append(button);
+            }
+            grid.append(card);
+        }
+    } catch (error) {
+        status.textContent = `読み込みに失敗しました: ${error.message}`;
+        grid.replaceChildren();
+    }
+}
+
+async function claimLevelPassReward(button) {
+    button.disabled = true;
+    const status = document.getElementById('level-pass-status');
+    try {
+        await apiRequest('/api/level-pass/claim', { method: 'POST', body: { rewardKey: button.dataset.rewardKey } });
+        await loadLevelPass();
+    } catch (error) {
+        if (status) status.textContent = `受取に失敗しました: ${error.message}`;
+        button.disabled = false;
+    }
 }
 
 function saveUiSettings() {
@@ -3319,7 +3383,13 @@ function setupUIEventListeners() {
         setWorkspaceView('battle');
     });
     document.getElementById('nav-formation')?.addEventListener('click', () => setWorkspaceView('formation'));
+    document.getElementById('nav-level-pass')?.addEventListener('click', () => setWorkspaceView('level-pass'));
     document.getElementById('nav-options')?.addEventListener('click', () => setWorkspaceView('options'));
+    document.getElementById('level-pass-refresh')?.addEventListener('click', loadLevelPass);
+    document.getElementById('level-pass-grid')?.addEventListener('click', event => {
+        const button = event.target.closest('[data-reward-key]');
+        if (button && !button.disabled) claimLevelPassReward(button);
+    });
     document.getElementById('lobby-launcher')?.addEventListener('click', event => {
         const button = event.target.closest('[data-lobby-destination]');
         if (button) openLobbyDestination(button.dataset.lobbyDestination);

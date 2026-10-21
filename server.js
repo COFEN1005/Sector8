@@ -17,6 +17,7 @@ const {
     normalizePlayerId,
     sanitizeDisplayName
 } = require('./account-store');
+const { INITIAL_LEVEL_PASS_MAX, getLevelPassLevels, findClaimableReward } = require('./level-pass');
 
 const root = __dirname;
 const port = Number(process.env.PORT || 8787);
@@ -435,6 +436,26 @@ const server = http.createServer(async (req, res) => {
             if (method === 'GET' && url.pathname === '/api/auth/me') {
                 if (!session) return sendJson(res, 401, { ok: false, error: 'unauthorized' });
                 return sendJson(res, 200, { ok: true, profile: session.profile });
+            }
+
+            if (method === 'GET' && url.pathname === '/api/level-pass') {
+                const unlocks = session ? await accountStore.getLevelPassUnlocks(session.profile.id) : [];
+                return sendJson(res, 200, {
+                    ok: true,
+                    maxLevel: INITIAL_LEVEL_PASS_MAX,
+                    profile: session?.profile || null,
+                    levels: getLevelPassLevels(),
+                    unlocks
+                });
+            }
+
+            if (method === 'POST' && url.pathname === '/api/level-pass/claim') {
+                if (!session) return sendJson(res, 401, { ok: false, error: 'unauthorized' });
+                const reward = findClaimableReward(body.rewardKey);
+                if (!reward) return sendJson(res, 400, { ok: false, error: 'reward_unavailable' });
+                const result = await accountStore.claimLevelPassReward(session.profile.id, reward);
+                if (!result.ok) return sendJson(res, result.error === 'level_locked' ? 403 : 400, result);
+                return sendJson(res, 200, result);
             }
 
             if (method === 'POST' && url.pathname === '/api/auth/register') {
