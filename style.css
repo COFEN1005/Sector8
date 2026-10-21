@@ -3929,3 +3929,167 @@ body.device-mobile .unit.koh-ability::after {
 
     .mode-tab { font-size: 0.7rem; padding: 0.4rem 0.2rem; }
 }
+
+/* Setup is a dedicated lobby; the board returns for preparation and battle. */
+.lobby-panel-title {
+    display: none;
+}
+
+body:has(#battle-screen:not(.hidden) #setup-panel:not(.hidden)) #turn-indicator {
+    display: none;
+}
+
+#battle-screen:has(#setup-panel:not(.hidden)) {
+    width: min(900px, 100%);
+    margin-inline: auto;
+    justify-content: center;
+    align-items: flex-start;
+}
+
+#battle-screen:has(#setup-panel:not(.hidden)) > #sidebar-left,
+#battle-screen:has(#setup-panel:not(.hidden)) > #board-container {
+    display: none;
+}
+
+#battle-screen:has(#setup-panel:not(.hidden)) > #sidebar-right {
+    flex: 1 1 auto;
+    width: 100%;
+    max-width: none;
+    padding: clamp(1.1rem, 3vw, 2rem);
+    overflow: visible;
+    background: linear-gradient(145deg, rgba(17, 24, 34, 0.96), rgba(7, 11, 19, 0.94));
+    border-color: rgba(0, 240, 255, 0.18);
+}
+
+#battle-screen:has(#setup-panel:not(.hidden)) .lobby-panel-title {
+    display: inline;
+}
+
+#battle-screen:has(#setup-panel:not(.hidden)) .battle-panel-title {
+    display: none;
+}
+
+#battle-screen #setup-panel:not(.hidden) {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1.1rem 1.4rem;
+    flex: none;
+    overflow: visible;
+}
+
+#setup-panel > .lobby-intro,
+#setup-panel > .lobby-config-title,
+#setup-panel > #dev-tools-panel,
+#setup-panel > .map-source-group,
+#setup-panel > #setup-local-panel,
+#setup-panel > #matchmaking-panel {
+    grid-column: 1 / -1;
+}
+
+.lobby-intro {
+    padding: clamp(1rem, 3vw, 1.6rem);
+    border: 1px solid rgba(0, 240, 255, 0.16);
+    border-radius: 10px;
+    background: radial-gradient(circle at 85% 10%, rgba(0, 240, 255, 0.12), transparent 45%),
+        linear-gradient(115deg, rgba(0, 240, 255, 0.065), transparent 65%);
+}
+
+.lobby-intro-kicker {
+    color: var(--neon-cyan);
+    font: 0.68rem var(--font-mono);
+    letter-spacing: 0.2em;
+}
+
+#setup-panel .lobby-intro h3 {
+    margin: 0.5rem 0 0.3rem;
+    color: var(--text-primary);
+    font-family: var(--font-outfit);
+    font-size: clamp(1.3rem, 3vw, 1.85rem);
+    letter-spacing: 0.04em;
+}
+
+.lobby-intro p {
+    color: rgba(226, 232, 240, 0.68);
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+#setup-panel > .lobby-config-title {
+    margin: 0;
+    padding-bottom: 0.65rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+#setup-panel > .config-group,
+#setup-panel > .mode-tabs {
+    min-width: 0;
+    margin-bottom: 0;
+}
+
+#setup-panel > .mode-tabs {
+    align-self: start;
+    margin-top: 1.25rem;
+}
+
+#setup-panel .map-source-group .toggle-group {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+#setup-panel .map-source-group .map-random-btn {
+    grid-column: 1 / -1;
+}
+
+#setup-panel #setup-local-panel {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1.2rem;
+    align-items: start;
+}
+
+#setup-panel #setup-local-panel.hidden {
+    display: none;
+}
+
+#setup-panel #setup-local-panel > .config-group,
+#setup-panel #setup-local-panel > .ability-select-container {
+    min-width: 0;
+    margin-bottom: 0;
+    overflow: visible;
+}
+
+#setup-panel #setup-local-panel > #btn-start-game {
+    grid-column: 1 / -1;
+    min-height: 3rem;
+    margin-top: 0.2rem;
+}
+
+#setup-panel #matchmaking-panel {
+    flex: none;
+    overflow: visible;
+}
+
+@media (max-width: 640px) {
+    #battle-screen #setup-panel:not(.hidden),
+    #setup-panel #setup-local-panel {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    #setup-panel > .lobby-intro,
+    #setup-panel > .lobby-config-title,
+    #setup-panel > #dev-tools-panel,
+    #setup-panel > .map-source-group,
+    #setup-panel > #setup-local-panel,
+    #setup-panel > #matchmaking-panel,
+    #setup-panel #setup-local-panel > #btn-start-game {
+        grid-column: 1;
+    }
+
+    #setup-panel > .mode-tabs {
+        margin-top: 0;
+    }
+
+    #setup-panel .map-source-group .toggle-group {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
