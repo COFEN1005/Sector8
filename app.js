@@ -901,6 +901,32 @@ function setWorkspaceView(view) {
     if (next === 'options') updateAudioButtons();
 }
 
+function openLobbyDestination(destination) {
+    const battleScreen = document.getElementById('battle-screen');
+    if (destination === 'formation' || destination === 'options') {
+        battleScreen?.classList.remove('lobby-config-open');
+        setWorkspaceView(destination);
+        return;
+    }
+
+    setWorkspaceView('battle');
+    if (destination === 'local') {
+        setSetupMode('local');
+        setOpponent(true);
+    } else {
+        showMatchmakingPanel();
+        if (destination === 'private') {
+            setOnlineMatchTab('private');
+        } else {
+            setOnlineMatchTab('random', { tier: destination === 'normal' ? 'normal' : 'rank' });
+        }
+    }
+    battleScreen?.classList.add('lobby-config-open');
+    document.querySelectorAll('.lobby-entry').forEach(button => {
+        button.classList.toggle('active', button.dataset.lobbyDestination === destination);
+    });
+}
+
 function saveUiSettings() {
     try {
         window.localStorage.setItem(UI_SETTINGS_STORAGE_KEY, JSON.stringify({
@@ -3288,9 +3314,19 @@ function registerMapTabSequence(mapName) {
 function setupUIEventListeners() {
     document.addEventListener('pointerdown', initializeAudio, { once: true });
     document.getElementById('btn-start-game')?.addEventListener('click', () => startGame());
-    document.getElementById('nav-battle')?.addEventListener('click', () => setWorkspaceView('battle'));
+    document.getElementById('nav-battle')?.addEventListener('click', () => {
+        document.getElementById('battle-screen')?.classList.remove('lobby-config-open');
+        setWorkspaceView('battle');
+    });
     document.getElementById('nav-formation')?.addEventListener('click', () => setWorkspaceView('formation'));
     document.getElementById('nav-options')?.addEventListener('click', () => setWorkspaceView('options'));
+    document.getElementById('lobby-launcher')?.addEventListener('click', event => {
+        const button = event.target.closest('[data-lobby-destination]');
+        if (button) openLobbyDestination(button.dataset.lobbyDestination);
+    });
+    document.getElementById('btn-close-lobby-config')?.addEventListener('click', () => {
+        document.getElementById('battle-screen')?.classList.remove('lobby-config-open');
+    });
     setupFormationBoardInteractions(document.getElementById('formation-area1'));
     setupFormationBoardInteractions(document.getElementById('formation-area2'));
     document.getElementById('formation-map-buttons')?.addEventListener('click', event => {
@@ -3991,6 +4027,7 @@ function setupOnlineMode() {
     updateMatchmakingPlayerSummary();
     if (onlineSession?.token) {
         showMatchmakingPanel();
+        document.getElementById('battle-screen')?.classList.add('lobby-config-open');
         setMatchmakingStatus('前回の対局に再接続しています...');
         connectOnlineSocket({
             roomId: onlineSession.roomId,
@@ -7423,6 +7460,7 @@ function resetToSetup(fromOnline = false) {
     document.getElementById('game-info-panel').classList.add('hidden');
     document.getElementById('online-prebattle-panel')?.classList.add('hidden');
     document.getElementById('setup-panel').classList.remove('hidden');
+    document.getElementById('battle-screen')?.classList.remove('lobby-config-open');
     onlineMatchPreviewActive = false;
     replayPlaybackActive = false;
     matchIntroActive = false;
@@ -7467,6 +7505,7 @@ function resetToSetup(fromOnline = false) {
         deactivateOnlineMode(true);
         clearOnlineJoinUrl();
         showMatchmakingPanel();
+        document.getElementById('battle-screen')?.classList.add('lobby-config-open');
         setMatchmakingStatus('対局を終了しました。新しい対局を開始してください。', 'system');
         return;
     }

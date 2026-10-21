@@ -504,6 +504,22 @@
 
         <!-- MAIN LAYOUT -->
         <main id="battle-screen">
+            <section id="lobby-launcher" aria-label="対戦ロビー">
+                <div class="lobby-launcher-heading">
+                    <span class="lobby-launcher-kicker">SECTOR-8 / COMMAND CENTER</span>
+                    <h1>次の一手を、<br>ここから。</h1>
+                    <p>対戦モードを選択してください。</p>
+                </div>
+                <div class="lobby-launcher-list">
+                    <button class="lobby-entry lobby-entry-featured" type="button" data-lobby-destination="formation"><span class="lobby-entry-index">01 / PREPARE</span><strong>編成</strong><small>マップごとの初期配置を整える</small><span class="lobby-entry-arrow" aria-hidden="true">↗</span></button>
+                    <button class="lobby-entry" type="button" data-lobby-destination="rank"><span class="lobby-entry-index">02 / ONLINE</span><strong>ランクマッチ</strong><small>レートを賭けて対戦相手を探す</small><span class="lobby-entry-arrow" aria-hidden="true">↗</span></button>
+                    <button class="lobby-entry" type="button" data-lobby-destination="normal"><span class="lobby-entry-index">03 / ONLINE</span><strong>ノーマルマッチ</strong><small>レート変動なしで対戦する</small><span class="lobby-entry-arrow" aria-hidden="true">↗</span></button>
+                    <button class="lobby-entry" type="button" data-lobby-destination="private"><span class="lobby-entry-index">04 / PRIVATE</span><strong>プライベートマッチ</strong><small>ルームを作成、または参加する</small><span class="lobby-entry-arrow" aria-hidden="true">↗</span></button>
+                    <button class="lobby-entry" type="button" data-lobby-destination="local"><span class="lobby-entry-index">05 / LOCAL</span><strong>ローカルマッチ</strong><small>AIや同じ端末の相手と対戦する</small><span class="lobby-entry-arrow" aria-hidden="true">↗</span></button>
+                    <button class="lobby-entry lobby-entry-quiet" type="button" data-lobby-destination="options"><span class="lobby-entry-index">06 / SYSTEM</span><strong>オプション</strong><small>音量と表示設定を変更する</small><span class="lobby-entry-arrow" aria-hidden="true">↗</span></button>
+                </div>
+            </section>
+            <div class="lobby-hero-caption" aria-hidden="true"><span>INFORMATION COLLAPSE</span><strong>境界を越え、<br>戦場を掌握せよ。</strong></div>
             <!-- LEFT COLUMN: RULES & INFO -->
             <section id="sidebar-left" class="glass-panel">
                 <div class="panel-header">
@@ -602,6 +618,7 @@
             <section id="sidebar-right" class="glass-panel">
                 <div class="panel-header">
                     <h2><span class="lobby-panel-title">BATTLE LOBBY</span><span class="battle-panel-title">TACTICAL HUB</span></h2>
+                    <button id="btn-close-lobby-config" class="small-tool-btn" type="button" aria-label="ロビーメニューに戻る">BACK</button>
                 </div>
 
                 <div id="setup-panel" class="hub-section">
