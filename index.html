@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Share+Tech+Mono&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=level-pass-1">
+    <link rel="stylesheet" href="style.css?v=tutorial-1">
 </head>
 <body>
     <div id="app-container">
@@ -452,10 +452,39 @@
 
         <nav class="workspace-nav" aria-label="メインメニュー">
             <button id="nav-battle" class="workspace-nav-btn active" type="button">BATTLE</button>
+            <button id="nav-tutorial" class="workspace-nav-btn" type="button">TUTORIAL</button>
             <button id="nav-formation" class="workspace-nav-btn" type="button">FORMATION</button>
             <button id="nav-level-pass" class="workspace-nav-btn" type="button">LEVEL PASS</button>
             <button id="nav-options" class="workspace-nav-btn" type="button">OPTIONS</button>
         </nav>
+
+        <section id="tutorial-screen" class="workspace-screen tutorial-screen hidden" aria-label="基本操作チュートリアル">
+            <div class="workspace-heading">
+                <div><span class="workspace-kicker">TRAINING PROTOCOL / 01</span><h2>基本操作チュートリアル</h2></div>
+                <button id="tutorial-reset" class="neon-btn secondary" type="button">最初から</button>
+            </div>
+            <p class="workspace-copy">練習用の小さな盤面です。対戦履歴・レート・EXPには影響しません。</p>
+            <div class="tutorial-layout">
+                <div class="tutorial-simulation">
+                    <div class="tutorial-board-head"><span>AREA 2 / TRAINING SIMULATION</span><strong id="tutorial-actions">0 / 2 ACTIONS</strong></div>
+                    <div id="tutorial-board" class="tutorial-board" role="group" aria-label="チュートリアル盤面"></div>
+                    <div class="tutorial-legend"><span><i class="tutorial-legend-ally"></i>自軍</span><span><i class="tutorial-legend-enemy"></i>敵軍</span><span><i class="tutorial-legend-wall"></i>壁</span></div>
+                </div>
+                <div class="tutorial-briefing">
+                    <div class="tutorial-briefing-top"><span id="tutorial-step-count">01 / 05</span><span>FIELD MANUAL</span></div>
+                    <div class="tutorial-progress" aria-hidden="true"><span id="tutorial-progress-fill"></span></div>
+                    <h3 id="tutorial-step-title"></h3>
+                    <p id="tutorial-step-copy"></p>
+                    <div id="tutorial-step-action" class="tutorial-step-action" aria-live="polite"></div>
+                    <p id="tutorial-feedback" class="tutorial-feedback" role="status" aria-live="polite"></p>
+                    <div class="tutorial-footer-actions">
+                        <button id="tutorial-back" class="neon-btn secondary" type="button">前へ</button>
+                        <button id="tutorial-skip" class="neon-btn secondary" type="button">説明をスキップ</button>
+                        <button id="tutorial-ai" class="neon-btn hidden" type="button">AI対戦へ</button>
+                    </div>
+                </div>
+            </div>
+        </section>
 
         <section id="level-pass-screen" class="workspace-screen level-pass-screen hidden">
             <div class="workspace-heading">
@@ -527,6 +556,7 @@
                     <p>対戦モードを選択してください。</p>
                 </div>
                 <div class="lobby-launcher-list">
+                    <button class="lobby-entry lobby-entry-featured" type="button" data-lobby-destination="tutorial"><span class="lobby-entry-index">00 / TRAINING</span><strong>チュートリアル</strong><small>操作と勝利条件を練習する</small><span class="lobby-entry-arrow" aria-hidden="true">↗</span></button>
                     <button class="lobby-entry lobby-entry-featured" type="button" data-lobby-destination="formation"><span class="lobby-entry-index">01 / PREPARE</span><strong>編成</strong><small>マップごとの初期配置を整える</small><span class="lobby-entry-arrow" aria-hidden="true">↗</span></button>
                     <button class="lobby-entry" type="button" data-lobby-destination="rank"><span class="lobby-entry-index">02 / ONLINE</span><strong>ランクマッチ</strong><small>レートを賭けて対戦相手を探す</small><span class="lobby-entry-arrow" aria-hidden="true">↗</span></button>
                     <button class="lobby-entry" type="button" data-lobby-destination="normal"><span class="lobby-entry-index">03 / ONLINE</span><strong>ノーマルマッチ</strong><small>レート変動なしで対戦する</small><span class="lobby-entry-arrow" aria-hidden="true">↗</span></button>
@@ -981,6 +1011,7 @@
     <script src="sector8-map4.js?v=1"></script>
     <script src="sector8-map5.js?v=1"></script>
     <script src="sector8-map6.js?v=1"></script>
-    <script src="app.js?v=level-pass-1"></script>
+    <script src="tutorial.js?v=1"></script>
+    <script src="app.js?v=tutorial-1"></script>
 </body>
 </html>

@@ -30,6 +30,10 @@ The lobby's `LEVEL PASS` tab shows levels 1-50. Player level and EXP remain in `
 
 Define real rewards in `ACTIVE_REWARDS` in `level-pass.js`. The Lv5 milestones are placeholders for future Koh, BGM, and other rewards; they are not claimable until defined. The Lv1 title is a persistence example only, not an equipable title yet. To extend beyond Lv50, increase `INITIAL_LEVEL_PASS_MAX` and add the new reward definitions; player levels are not capped at 50.
 
+## Tutorial
+
+Open `TUTORIAL` from the lobby or top navigation. The training board teaches unit selection, straight movement, capture, information collapse, and the win condition. It is a local simulation: it does not start a match or change account progress, rating, or match history. The final screen links to the AI match setup. Lesson transitions are kept in `tutorial.js` so additional chapters can be added without changing the battle engine.
+
 After deployment, open `/api/account/health`. A ready project returns `ok: true`, `backend: "supabase"`, and `schemaVersion: 3`. `supabase_schema_update_required` means the SQL above has not been applied yet.
 
 Without Supabase values, local development uses `data/sector8.sqlite`. Set `ACCOUNT_BACKEND=sqlite` only when an explicit local database is desired in a production-like environment.

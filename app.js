@@ -886,8 +886,9 @@ function setupFormationBoardInteractions(container) {
 }
 
 function setWorkspaceView(view) {
-    const next = ['battle', 'formation', 'level-pass', 'options'].includes(view) ? view : 'battle';
+    const next = ['battle', 'tutorial', 'formation', 'level-pass', 'options'].includes(view) ? view : 'battle';
     document.getElementById('battle-screen')?.classList.toggle('hidden', next !== 'battle');
+    document.getElementById('tutorial-screen')?.classList.toggle('hidden', next !== 'tutorial');
     document.getElementById('formation-screen')?.classList.toggle('hidden', next !== 'formation');
     document.getElementById('level-pass-screen')?.classList.toggle('hidden', next !== 'level-pass');
     document.getElementById('options-screen')?.classList.toggle('hidden', next !== 'options');
@@ -901,11 +902,12 @@ function setWorkspaceView(view) {
     }
     if (next === 'options') updateAudioButtons();
     if (next === 'level-pass') loadLevelPass();
+    if (next === 'tutorial') window.Sector8Tutorial?.open();
 }
 
 function openLobbyDestination(destination) {
     const battleScreen = document.getElementById('battle-screen');
-    if (destination === 'formation' || destination === 'options' || destination === 'level-pass') {
+    if (destination === 'tutorial' || destination === 'formation' || destination === 'options' || destination === 'level-pass') {
         battleScreen?.classList.remove('lobby-config-open');
         setWorkspaceView(destination);
         return;
@@ -3383,6 +3385,7 @@ function setupUIEventListeners() {
         setWorkspaceView('battle');
     });
     document.getElementById('nav-formation')?.addEventListener('click', () => setWorkspaceView('formation'));
+    document.getElementById('nav-tutorial')?.addEventListener('click', () => setWorkspaceView('tutorial'));
     document.getElementById('nav-level-pass')?.addEventListener('click', () => setWorkspaceView('level-pass'));
     document.getElementById('nav-options')?.addEventListener('click', () => setWorkspaceView('options'));
     document.getElementById('level-pass-refresh')?.addEventListener('click', loadLevelPass);
@@ -3390,6 +3393,7 @@ function setupUIEventListeners() {
         const button = event.target.closest('[data-reward-key]');
         if (button && !button.disabled) claimLevelPassReward(button);
     });
+    document.getElementById('tutorial-ai')?.addEventListener('click', () => openLobbyDestination('local'));
     document.getElementById('lobby-launcher')?.addEventListener('click', event => {
         const button = event.target.closest('[data-lobby-destination]');
         if (button) openLobbyDestination(button.dataset.lobbyDestination);
