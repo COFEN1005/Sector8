@@ -7,6 +7,12 @@ const ACTIVE_REWARDS = Object.freeze({
     type: 'title',
     name: '先行信号',
     description: 'レベルパス開始記念の称号。装備機能は今後追加予定。'
+  }),
+  5: Object.freeze({
+    key: 'koh_ticket_lv5',
+    type: 'koh_ticket',
+    name: '甲引換券 x1',
+    description: 'ショップで今後追加される甲との交換に使用できます。'
   })
 });
 

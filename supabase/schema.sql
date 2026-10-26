@@ -134,6 +134,18 @@ create table if not exists public.player_level_pass_unlocks (
   primary key (player_id, reward_key)
 );
 
+create table if not exists public.player_shop_purchases (
+  player_id bigint not null references public.players(id) on delete cascade,
+  product_key text not null,
+  item_type text not null,
+  item_key text not null,
+  currency_type text not null,
+  price integer not null check (price > 0),
+  purchased_at bigint not null,
+  primary key (player_id, product_key),
+  unique (player_id, item_type, item_key)
+);
+
 insert into public.player_map_formations (player_id, map_mode, formation_json, updated_at)
 select legacy.player_id, modes.map_mode, legacy.formation_json, legacy.updated_at
 from public.player_formations as legacy
@@ -150,6 +162,7 @@ alter table public.match_history enable row level security;
 alter table public.player_formations enable row level security;
 alter table public.player_map_formations enable row level security;
 alter table public.player_level_pass_unlocks enable row level security;
+alter table public.player_shop_purchases enable row level security;
 
 revoke all on table public.players from public, anon, authenticated;
 revoke all on table public.auth_sessions from public, anon, authenticated;
@@ -159,6 +172,7 @@ revoke all on table public.match_history from public, anon, authenticated;
 revoke all on table public.player_formations from public, anon, authenticated;
 revoke all on table public.player_map_formations from public, anon, authenticated;
 revoke all on table public.player_level_pass_unlocks from public, anon, authenticated;
+revoke all on table public.player_shop_purchases from public, anon, authenticated;
 
 grant select, insert, update, delete on table public.players to service_role;
 grant select, insert, update, delete on table public.auth_sessions to service_role;
@@ -168,6 +182,7 @@ grant select, insert, update, delete on table public.match_history to service_ro
 grant select, insert, update, delete on table public.player_formations to service_role;
 grant select, insert, update, delete on table public.player_map_formations to service_role;
 grant select, insert, update, delete on table public.player_level_pass_unlocks to service_role;
+grant select, insert, update, delete on table public.player_shop_purchases to service_role;
 
 revoke all on all sequences in schema public from public, anon, authenticated;
 grant usage, select, update on all sequences in schema public to service_role;
@@ -182,7 +197,7 @@ set search_path = public
 as $$
   select jsonb_build_object(
     'schemaReady', true,
-    'schemaVersion', 3,
+    'schemaVersion', 4,
     'players', (select count(*) from public.players),
     'matches', (select count(*) from public.match_history)
   );
@@ -523,6 +538,59 @@ begin
 end;
 $$;
 
+-- A player-row lock serializes exchanges across simultaneous devices.
+create or replace function public.sector8_redeem_shop_product(
+  p_player_id bigint,
+  p_product_key text,
+  p_item_type text,
+  p_item_key text,
+  p_currency_type text,
+  p_price integer,
+  p_now bigint
+)
+returns jsonb
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  v_earned integer;
+  v_spent integer;
+  v_purchase public.player_shop_purchases%rowtype;
+begin
+  if nullif(p_product_key, '') is null or nullif(p_item_type, '') is null or nullif(p_item_key, '') is null
+     or p_currency_type is distinct from 'koh_ticket' or p_price is null or p_price <= 0 then
+    return jsonb_build_object('ok', false, 'error', 'product_invalid');
+  end if;
+
+  perform 1 from public.players where id = p_player_id for update;
+  if not found then return jsonb_build_object('ok', false, 'error', 'not_found'); end if;
+
+  if exists (
+    select 1 from public.player_shop_purchases
+    where player_id = p_player_id and (product_key = p_product_key or (item_type = p_item_type and item_key = p_item_key))
+  ) then
+    return jsonb_build_object('ok', false, 'error', 'already_owned');
+  end if;
+
+  select count(*) into v_earned from public.player_level_pass_unlocks
+    where player_id = p_player_id and reward_type = p_currency_type;
+  select coalesce(sum(price), 0) into v_spent from public.player_shop_purchases
+    where player_id = p_player_id and currency_type = p_currency_type;
+  if v_earned - v_spent < p_price then
+    return jsonb_build_object('ok', false, 'error', 'insufficient_tickets');
+  end if;
+
+  insert into public.player_shop_purchases
+    (player_id, product_key, item_type, item_key, currency_type, price, purchased_at)
+  values
+    (p_player_id, p_product_key, p_item_type, p_item_key, p_currency_type, p_price, p_now)
+  returning * into v_purchase;
+
+  return jsonb_build_object('ok', true, 'purchase', to_jsonb(v_purchase), 'remaining', v_earned - v_spent - p_price);
+end;
+$$;
+
 -- Only the server-side service role may call account maintenance functions.
 do $$
 declare
@@ -540,7 +608,8 @@ begin
         'sector8_record_login_failure',
         'sector8_complete_login',
         'sector8_create_friend_request',
-        'sector8_respond_friend_request'
+        'sector8_respond_friend_request',
+        'sector8_redeem_shop_product'
       )
   loop
     execute format('revoke all on function %s from public', fn);

@@ -979,6 +979,26 @@ function createSupabaseStore() {
     return { ok: true, unlock: row };
   }
 
+  async function getShopPurchases(playerId) {
+    return selectMany('player_shop_purchases', {
+      player_id: `eq.${Number(playerId)}`,
+      select: 'product_key,item_type,item_key,currency_type,price,purchased_at',
+      order: 'purchased_at.asc'
+    });
+  }
+
+  async function redeemShopProduct(playerId, product) {
+    return callRpc('sector8_redeem_shop_product', {
+      p_player_id: Number(playerId),
+      p_product_key: product.key,
+      p_item_type: product.type,
+      p_item_key: product.itemKey,
+      p_currency_type: product.currency,
+      p_price: product.price,
+      p_now: now()
+    });
+  }
+
   async function getPlayerRowById(id) {
     const numericId = Number(id);
     if (!Number.isInteger(numericId) || numericId <= 0) return null;
@@ -1345,6 +1365,8 @@ function createSupabaseStore() {
     savePlayerMapFormation,
     getLevelPassUnlocks,
     claimLevelPassReward,
+    getShopPurchases,
+    redeemShopProduct,
     adjustPlayerProgress,
     deletePlayerById,
     listFriends,
@@ -1430,6 +1452,18 @@ function createSqliteStore() {
       level_required INTEGER NOT NULL CHECK(level_required > 0),
       claimed_at INTEGER NOT NULL,
       PRIMARY KEY (player_id, reward_key)
+    );
+
+    CREATE TABLE IF NOT EXISTS player_shop_purchases (
+      player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      product_key TEXT NOT NULL,
+      item_type TEXT NOT NULL,
+      item_key TEXT NOT NULL,
+      currency_type TEXT NOT NULL,
+      price INTEGER NOT NULL CHECK(price > 0),
+      purchased_at INTEGER NOT NULL,
+      PRIMARY KEY (player_id, product_key),
+      UNIQUE (player_id, item_type, item_key)
     );
 
     CREATE TABLE IF NOT EXISTS friend_requests (
@@ -1989,7 +2023,7 @@ function createSqliteStore() {
   function healthCheck() {
     db.prepare('SELECT 1 FROM players LIMIT 1').get();
     db.prepare('SELECT 1 FROM match_history LIMIT 1').get();
-    return { ok: true, backend: 'sqlite', schemaReady: true, schemaVersion: 2 };
+    return { ok: true, backend: 'sqlite', schemaReady: true, schemaVersion: 4 };
   }
 
   function getPlayerFormations(playerId) {
@@ -2022,6 +2056,49 @@ function createSqliteStore() {
     return { ok: true, unlock: row };
   }
 
+  function getShopPurchases(playerId) {
+    return db.prepare(`SELECT product_key, item_type, item_key, currency_type, price, purchased_at
+      FROM player_shop_purchases WHERE player_id = ? ORDER BY purchased_at`).all(playerId);
+  }
+
+  function redeemShopProduct(playerId, product) {
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      const result = (() => {
+        const player = db.prepare('SELECT id FROM players WHERE id = ?').get(playerId);
+        if (!player) return { ok: false, error: 'not_found' };
+        if (product.currency !== 'koh_ticket' || !Number.isInteger(product.price) || product.price <= 0) {
+          return { ok: false, error: 'product_invalid' };
+        }
+        const duplicate = db.prepare(`SELECT 1 FROM player_shop_purchases
+          WHERE player_id = ? AND (product_key = ? OR (item_type = ? AND item_key = ?))`).get(
+          playerId, product.key, product.type, product.itemKey
+        );
+        if (duplicate) return { ok: false, error: 'already_owned' };
+
+        const earned = db.prepare(`SELECT COUNT(*) AS amount FROM player_level_pass_unlocks
+          WHERE player_id = ? AND reward_type = ?`).get(playerId, product.currency).amount;
+        const spent = db.prepare(`SELECT COALESCE(SUM(price), 0) AS amount FROM player_shop_purchases
+          WHERE player_id = ? AND currency_type = ?`).get(playerId, product.currency).amount;
+        if (earned - spent < product.price) return { ok: false, error: 'insufficient_tickets' };
+
+        db.prepare(`INSERT INTO player_shop_purchases
+          (player_id, product_key, item_type, item_key, currency_type, price, purchased_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?)`).run(
+          playerId, product.key, product.type, product.itemKey, product.currency, product.price, now()
+        );
+        const purchase = db.prepare(`SELECT product_key, item_type, item_key, currency_type, price, purchased_at
+          FROM player_shop_purchases WHERE player_id = ? AND product_key = ?`).get(playerId, product.key);
+        return { ok: true, purchase, remaining: earned - spent - product.price };
+      })();
+      db.exec('COMMIT');
+      return result;
+    } catch (error) {
+      db.exec('ROLLBACK');
+      throw error;
+    }
+  }
+
   return {
     db,
     createSession,
@@ -2040,6 +2117,8 @@ function createSqliteStore() {
     savePlayerMapFormation,
     getLevelPassUnlocks,
     claimLevelPassReward,
+    getShopPurchases,
+    redeemShopProduct,
     adjustPlayerProgress,
     deletePlayerById,
     listFriends,

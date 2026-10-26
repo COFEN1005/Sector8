@@ -348,6 +348,7 @@ let authProfile = null;
 let matchHistoryCache = [];
 let matchHistoryLoadedForPlayerId = null;
 let matchHistoryRequestToken = 0;
+let shopRequestToken = 0;
 let devTargetPlayer = null;
 let onlineProfileDetails = { 1: null, 2: null };
 let matchIntroActive = false;
@@ -906,11 +907,12 @@ function setupFormationBoardInteractions(container) {
 }
 
 function setWorkspaceView(view) {
-    const next = ['battle', 'formation', 'level-pass', 'options'].includes(view) ? view : 'battle';
+    const next = ['battle', 'formation', 'level-pass', 'shop', 'options'].includes(view) ? view : 'battle';
     if (tutorialMode && next !== 'battle') resetToSetup(false);
     document.getElementById('battle-screen')?.classList.toggle('hidden', next !== 'battle');
     document.getElementById('formation-screen')?.classList.toggle('hidden', next !== 'formation');
     document.getElementById('level-pass-screen')?.classList.toggle('hidden', next !== 'level-pass');
+    document.getElementById('shop-screen')?.classList.toggle('hidden', next !== 'shop');
     document.getElementById('options-screen')?.classList.toggle('hidden', next !== 'options');
     document.querySelectorAll('.workspace-nav-btn').forEach(button => {
         button.classList.toggle('active', button.id === `nav-${next}`);
@@ -922,6 +924,7 @@ function setWorkspaceView(view) {
     }
     if (next === 'options') updateAudioButtons();
     if (next === 'level-pass') loadLevelPass();
+    if (next === 'shop') loadShop();
 }
 
 function openLobbyDestination(destination) {
@@ -930,7 +933,7 @@ function openLobbyDestination(destination) {
         startTutorialGame();
         return;
     }
-    if (destination === 'formation' || destination === 'options' || destination === 'level-pass') {
+    if (destination === 'formation' || destination === 'options' || destination === 'level-pass' || destination === 'shop') {
         battleScreen?.classList.remove('lobby-config-open');
         setWorkspaceView(destination);
         return;
@@ -1085,7 +1088,7 @@ async function loadLevelPass() {
             name.textContent = reward.name;
             const type = document.createElement('span');
             type.className = 'level-pass-card-type';
-            type.textContent = { koh: '甲', bgm: 'BGM', bonus: 'BONUS', title: 'TITLE', standard: 'REWARD' }[reward.type] || reward.type;
+            type.textContent = { koh: '甲', koh_ticket: '甲引換券', bgm: 'BGM', bonus: 'BONUS', title: 'TITLE', standard: 'REWARD' }[reward.type] || reward.type;
             const state = document.createElement('span');
             state.className = 'level-pass-card-state';
             state.textContent = reward.status === 'planned' ? '準備中' : received ? '受取済み' : reached ? '受取可能' : 'レベル未到達';
@@ -1114,6 +1117,85 @@ async function claimLevelPassReward(button) {
         await loadLevelPass();
     } catch (error) {
         if (status) status.textContent = `受取に失敗しました: ${error.message}`;
+        button.disabled = false;
+    }
+}
+
+async function loadShop() {
+    const status = document.getElementById('shop-status');
+    const grid = document.getElementById('shop-grid');
+    if (!status || !grid) return;
+    const requestToken = ++shopRequestToken;
+    status.textContent = 'ショップを読み込んでいます...';
+    document.getElementById('shop-ticket-balance').textContent = '--';
+    document.getElementById('shop-owned-list').textContent = '読み込み中...';
+    grid.replaceChildren();
+    try {
+        const data = await apiRequest('/api/shop');
+        if (requestToken !== shopRequestToken) return;
+        const balance = Number(data.ticketBalance || 0);
+        const owned = new Set((data.purchases || []).map(purchase => purchase.product_key));
+        const ownedList = document.getElementById('shop-owned-list');
+        document.getElementById('shop-ticket-balance').textContent = authProfile ? String(balance) : '--';
+        status.textContent = !authProfile
+            ? 'ログインすると甲引換券の所持数と交換履歴を確認できます。'
+            : data.products.some(product => product.status === 'active')
+                ? '甲引換券を使うと、新しい甲をアカウントに解放できます。'
+                : '新しい甲は準備中です。Lv5の甲引換券は先に受け取れます。';
+        grid.replaceChildren();
+        ownedList.replaceChildren();
+        if (!(data.purchases || []).length) ownedList.textContent = 'まだ交換した商品はありません。';
+        for (const purchase of data.purchases || []) {
+            const item = document.createElement('span');
+            item.className = 'shop-owned-item';
+            item.textContent = `${{ koh: '甲', bgm: 'BGM' }[purchase.item_type] || purchase.item_type} / ${purchase.item_key}`;
+            ownedList.append(item);
+        }
+        for (const product of data.products || []) {
+            const card = document.createElement('article');
+            card.className = `shop-card ${product.status === 'planned' ? 'planned' : ''}`;
+            const type = document.createElement('span');
+            type.className = 'shop-card-type';
+            type.textContent = { koh: '甲', bgm: 'BGM' }[product.type] || product.type;
+            const name = document.createElement('strong');
+            name.textContent = product.name;
+            const description = document.createElement('p');
+            description.textContent = product.description;
+            const footer = document.createElement('div');
+            footer.className = 'shop-card-footer';
+            const price = document.createElement('span');
+            price.textContent = `甲引換券 x${product.price}`;
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.textContent = product.status === 'planned' ? '準備中' : owned.has(product.key) ? '交換済み' : '交換する';
+            button.disabled = product.status !== 'active' || owned.has(product.key) || !authProfile || balance < product.price;
+            if (product.status === 'active') button.dataset.productKey = product.key;
+            footer.append(price, button);
+            card.append(type, name, description, footer);
+            grid.append(card);
+        }
+    } catch (error) {
+        if (requestToken !== shopRequestToken) return;
+        status.textContent = `ショップの読み込みに失敗しました: ${error.message}`;
+        grid.replaceChildren();
+        document.getElementById('shop-owned-list').textContent = '取得できませんでした。';
+    }
+}
+
+async function redeemShopProduct(button) {
+    if (!authProfile || !button.dataset.productKey || !confirm('甲引換券を使って交換しますか？')) return;
+    button.disabled = true;
+    const status = document.getElementById('shop-status');
+    try {
+        await apiRequest('/api/shop/redeem', { method: 'POST', body: { productKey: button.dataset.productKey } });
+        await loadShop();
+    } catch (error) {
+        const messages = {
+            insufficient_tickets: '甲引換券が足りません。',
+            already_owned: 'この商品は交換済みです。',
+            product_unavailable: 'この商品は現在交換できません。'
+        };
+        if (status) status.textContent = messages[error.message] || `交換に失敗しました: ${error.message}`;
         button.disabled = false;
     }
 }
@@ -2163,6 +2245,7 @@ function applyAuthProfile(profile, token) {
     }
     updateUsernameUI();
     updateAccountUI();
+    void loadShop();
 }
 
 async function restoreAuthSession() {
@@ -2182,6 +2265,7 @@ async function restoreAuthSession() {
         loadSavedFormation();
         saveAuthSession();
         updateAccountUI();
+        void loadShop();
         return false;
     }
 }
@@ -2234,6 +2318,7 @@ async function logoutAccount() {
     renderMatchHistory();
     showStatusAlert('LOGGED OUT', 'system', 2500);
     setAccountStatus('LOGGED OUT', 'system');
+    void loadShop();
 }
 
 async function updateAccountName(nextName) {
@@ -3512,8 +3597,14 @@ function setupUIEventListeners() {
     document.getElementById('nav-formation')?.addEventListener('click', () => setWorkspaceView('formation'));
     document.getElementById('nav-tutorial')?.addEventListener('click', startTutorialGame);
     document.getElementById('nav-level-pass')?.addEventListener('click', () => setWorkspaceView('level-pass'));
+    document.getElementById('nav-shop')?.addEventListener('click', () => setWorkspaceView('shop'));
     document.getElementById('nav-options')?.addEventListener('click', () => setWorkspaceView('options'));
     document.getElementById('level-pass-refresh')?.addEventListener('click', loadLevelPass);
+    document.getElementById('shop-refresh')?.addEventListener('click', loadShop);
+    document.getElementById('shop-grid')?.addEventListener('click', event => {
+        const button = event.target.closest('[data-product-key]');
+        if (button && !button.disabled) redeemShopProduct(button);
+    });
     document.getElementById('level-pass-grid')?.addEventListener('click', event => {
         const button = event.target.closest('[data-reward-key]');
         if (button && !button.disabled) claimLevelPassReward(button);

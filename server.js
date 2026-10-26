@@ -18,6 +18,7 @@ const {
     sanitizeDisplayName
 } = require('./account-store');
 const { INITIAL_LEVEL_PASS_MAX, getLevelPassLevels, findClaimableReward } = require('./level-pass');
+const { getShopProducts, findPurchasableProduct, calculateTicketBalance } = require('./shop-catalog');
 
 const root = __dirname;
 const port = Number(process.env.PORT || 8787);
@@ -458,6 +459,29 @@ const server = http.createServer(async (req, res) => {
                 return sendJson(res, 200, result);
             }
 
+            if (method === 'GET' && url.pathname === '/api/shop') {
+                const unlocks = session ? await accountStore.getLevelPassUnlocks(session.profile.id) : [];
+                const purchases = session ? await accountStore.getShopPurchases(session.profile.id) : [];
+                return sendJson(res, 200, {
+                    ok: true,
+                    products: getShopProducts(),
+                    ticketBalance: calculateTicketBalance(unlocks, purchases),
+                    purchases
+                });
+            }
+
+            if (method === 'POST' && url.pathname === '/api/shop/redeem') {
+                if (!session) return sendJson(res, 401, { ok: false, error: 'unauthorized' });
+                const product = findPurchasableProduct(body.productKey);
+                if (!product) return sendJson(res, 400, { ok: false, error: 'product_unavailable' });
+                const result = await accountStore.redeemShopProduct(session.profile.id, product);
+                if (!result.ok) {
+                    const status = result.error === 'already_owned' || result.error === 'insufficient_tickets' ? 409 : 400;
+                    return sendJson(res, status, result);
+                }
+                return sendJson(res, 200, result);
+            }
+
             if (method === 'POST' && url.pathname === '/api/auth/register') {
                 const result = await accountStore.registerPlayer({ name: body.name, pin: body.pin });
                 if (!result.ok) return sendJson(res, 400, { ok: false, error: result.error });
@@ -775,8 +799,14 @@ const server = http.createServer(async (req, res) => {
 
     const requestPath = url.pathname === '/' ? '/index.html' : url.pathname;
     const filePath = path.normalize(path.join(root, requestPath));
+    const relativePath = path.relative(root, filePath);
+    const pathSegments = relativePath.split(path.sep).map(segment => segment.toLowerCase());
+    const privatePaths = new Set(['supabase.local.json', 'account-store.js', 'server.js']);
+    const privateDirectories = new Set(['data', 'gitstore', '.git', 'node_modules', 'supabase', 'tests']);
 
-    if (!filePath.startsWith(root)) {
+    if (relativePath.startsWith('..') || path.isAbsolute(relativePath) ||
+        pathSegments.some(segment => segment.startsWith('.') || privateDirectories.has(segment)) ||
+        privatePaths.has(pathSegments[pathSegments.length - 1])) {
         res.writeHead(403); res.end('Forbidden'); return;
     }
 

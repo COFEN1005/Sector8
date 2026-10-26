@@ -26,15 +26,19 @@ The formation editor stores one preset per logged-in player in `player_formation
 
 ## Level pass
 
-The lobby's `LEVEL PASS` tab shows levels 1-50. Player level and EXP remain in `players`; claimed rewards are stored per player in `player_level_pass_unlocks`. Apply the new table definition in `supabase/schema.sql` before deploying. The server validates both the reward key and required level, and duplicate claims are safe.
+The lobby's `LEVEL PASS` tab shows levels 1-50. Player level and EXP remain in `players`; claimed rewards are stored per player in `player_level_pass_unlocks`. Apply `supabase/schema.sql` before deploying. The server validates both the reward key and required level, and duplicate claims are safe. Lv5 now grants one Koh exchange ticket.
 
-Define real rewards in `ACTIVE_REWARDS` in `level-pass.js`. The Lv5 milestones are placeholders for future Koh, BGM, and other rewards; they are not claimable until defined. The Lv1 title is a persistence example only, not an equipable title yet. To extend beyond Lv50, increase `INITIAL_LEVEL_PASS_MAX` and add the new reward definitions; player levels are not capped at 50.
+Define real rewards in `ACTIVE_REWARDS` in `level-pass.js`. Other Koh, BGM, and bonus milestones remain placeholders until defined. The Lv1 title is a persistence example only, not an equipable title yet. To extend beyond Lv50, increase `INITIAL_LEVEL_PASS_MAX` and add the new reward definitions; player levels are not capped at 50.
+
+## Shop
+
+`SHOP` shows the ticket balance, purchase history, and future products. The five existing Koh remain free. No new Koh has been defined yet, so the only visible product is marked `準備中` and cannot be purchased. To release a new Koh, implement its gameplay and purchase-based ability selection, then add an active entry with a unique `key`, `type: 'koh'`, `itemKey`, `currency: 'koh_ticket'`, and positive `price` to `shop-catalog.js`. Other item types can use the same purchase record. The server checks the active catalog and account session; Supabase redeems atomically through `sector8_redeem_shop_product`, while SQLite uses a transaction. The balance is claimed Koh tickets minus purchases, so duplicate Lv5 claims never mint extra tickets. Apply the updated `supabase/schema.sql` before deploying the shop.
 
 ## Tutorial
 
 Open `TUTORIAL` from the lobby or top navigation. Its five scenes use the normal fixed-map battle engine: combat, recovery of a **friendly** military flag with Tei, information collapse with only a scout in area 2, the five playable Koh types, and a real enemy-core capture. Enemy flags cannot be picked up. Training does not update account progress, rating, or match history.
 
-After deployment, open `/api/account/health`. A ready project returns `ok: true`, `backend: "supabase"`, and `schemaVersion: 3`. `supabase_schema_update_required` means the SQL above has not been applied yet.
+After deployment, open `/api/account/health`. A ready project returns `ok: true`, `backend: "supabase"`, and `schemaVersion: 4`. `supabase_schema_update_required` means the SQL above has not been applied yet.
 
 Without Supabase values, local development uses `data/sector8.sqlite`. Set `ACCOUNT_BACKEND=sqlite` only when an explicit local database is desired in a production-like environment.
 

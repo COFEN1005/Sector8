@@ -155,6 +155,44 @@ header {
     cursor: pointer;
 }
 .level-pass-claim:disabled { opacity: 0.45; cursor: wait; }
+.shop-screen { width: min(76rem, 100%); }
+.shop-wallet {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: end;
+    gap: 0.25rem 1rem;
+    margin-bottom: 1.15rem;
+    padding: 1rem 1.2rem;
+    border: 1px solid rgba(255, 183, 0, 0.45);
+    border-radius: 10px;
+    background: linear-gradient(120deg, rgba(255, 183, 0, 0.1), rgba(9, 15, 27, 0.95));
+}
+.shop-wallet span, .shop-wallet small, .shop-card-type, .shop-card-footer { font-family: var(--font-mono); }
+.shop-wallet span { color: var(--neon-gold); letter-spacing: 0.12em; }
+.shop-wallet strong { grid-row: span 2; font-size: 2.5rem; line-height: 1; color: var(--neon-gold); }
+.shop-wallet small { color: var(--text-muted); }
+.shop-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(225px, 1fr)); gap: 0.85rem; }
+.shop-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+    min-height: 205px;
+    padding: 1.15rem;
+    border: 1px solid rgba(0, 240, 255, 0.3);
+    border-radius: 10px;
+    background: linear-gradient(150deg, rgba(18, 31, 43, 0.94), rgba(7, 10, 18, 0.98));
+}
+.shop-card.planned { border-color: rgba(255, 183, 0, 0.24); }
+.shop-card-type { color: var(--neon-cyan); font-size: 0.72rem; letter-spacing: 0.16em; }
+.shop-card strong { font-size: 1.15rem; }
+.shop-card p { margin: 0; color: var(--text-muted); font-size: 0.88rem; line-height: 1.55; }
+.shop-card-footer { display: flex; align-items: center; justify-content: space-between; gap: 0.7rem; margin-top: auto; color: var(--neon-gold); font-size: 0.73rem; }
+.shop-card-footer button { min-height: 2.1rem; padding: 0.25rem 0.7rem; border: 1px solid var(--neon-cyan); border-radius: 5px; background: rgba(0, 240, 255, 0.08); color: var(--neon-cyan); font: inherit; cursor: pointer; }
+.shop-card-footer button:disabled { opacity: 0.55; cursor: not-allowed; }
+.shop-owned { margin-top: 1.4rem; padding-top: 1rem; border-top: 1px solid rgba(255, 255, 255, 0.1); }
+.shop-owned h3 { margin: 0 0 0.65rem; color: var(--neon-cyan); font-size: 0.86rem; letter-spacing: 0.1em; }
+#shop-owned-list { display: flex; flex-wrap: wrap; gap: 0.5rem; color: var(--text-muted); font-size: 0.82rem; }
+.shop-owned-item { padding: 0.4rem 0.65rem; border: 1px solid rgba(0, 240, 255, 0.3); border-radius: 4px; color: var(--neon-cyan); font-family: var(--font-mono); }
 @media (max-width: 600px) {
     .workspace-nav { grid-template-columns: repeat(2, 1fr); }
     .level-pass-overview { grid-template-columns: 1fr; }

@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Share+Tech+Mono&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=real-tutorial-3">
+    <link rel="stylesheet" href="style.css?v=shop-1">
 </head>
 <body>
     <div id="app-container">
@@ -455,6 +455,7 @@
             <button id="nav-tutorial" class="workspace-nav-btn" type="button">TUTORIAL</button>
             <button id="nav-formation" class="workspace-nav-btn" type="button">FORMATION</button>
             <button id="nav-level-pass" class="workspace-nav-btn" type="button">LEVEL PASS</button>
+            <button id="nav-shop" class="workspace-nav-btn" type="button">SHOP</button>
             <button id="nav-options" class="workspace-nav-btn" type="button">OPTIONS</button>
         </nav>
 
@@ -471,6 +472,18 @@
             </div>
             <div id="level-pass-status" class="level-pass-status" role="status">読み込み中...</div>
             <div id="level-pass-grid" class="level-pass-grid" aria-label="レベルパス報酬一覧"></div>
+        </section>
+
+        <section id="shop-screen" class="workspace-screen shop-screen hidden">
+            <div class="workspace-heading">
+                <div><span class="workspace-kicker">EXCHANGE / SECTOR-8</span><h2>ショップ</h2></div>
+                <button id="shop-refresh" class="neon-btn secondary" type="button">REFRESH</button>
+            </div>
+            <p class="workspace-copy">甲引換券で、今後追加される甲を解放できます。既存の甲5種類は引き続き無料で使用できます。</p>
+            <div class="shop-wallet"><span>所持 / 甲引換券</span><strong id="shop-ticket-balance">--</strong><small>Lv5のレベルパス報酬から入手</small></div>
+            <div id="shop-status" class="level-pass-status" role="status">読み込み中...</div>
+            <div id="shop-grid" class="shop-grid" aria-label="ショップの商品"></div>
+            <div class="shop-owned"><h3>交換済み</h3><div id="shop-owned-list">まだ交換した商品はありません。</div></div>
         </section>
 
         <section id="formation-screen" class="workspace-screen hidden">
@@ -536,6 +549,7 @@
                     <button class="lobby-entry" type="button" data-lobby-destination="local"><span class="lobby-entry-index">05 / LOCAL</span><strong>ローカルマッチ</strong><small>AIや同じ端末の相手と対戦する</small><span class="lobby-entry-arrow" aria-hidden="true">↗</span></button>
                     <button class="lobby-entry lobby-entry-quiet" type="button" data-lobby-destination="options"><span class="lobby-entry-index">06 / SYSTEM</span><strong>オプション</strong><small>音量と表示設定を変更する</small><span class="lobby-entry-arrow" aria-hidden="true">↗</span></button>
                     <button class="lobby-entry lobby-entry-quiet" type="button" data-lobby-destination="level-pass"><span class="lobby-entry-index">07 / PROGRESSION</span><strong>レベルパス</strong><small>Lv50までの報酬と解放状況を見る</small><span class="lobby-entry-arrow" aria-hidden="true">↗</span></button>
+                    <button class="lobby-entry lobby-entry-quiet" type="button" data-lobby-destination="shop"><span class="lobby-entry-index">08 / EXCHANGE</span><strong>ショップ</strong><small>甲引換券の所持数と交換商品を見る</small><span class="lobby-entry-arrow" aria-hidden="true">↗</span></button>
                 </div>
             </section>
             <div class="lobby-hero-caption" aria-hidden="true"><span>INFORMATION COLLAPSE</span><strong>境界を越え、<br>戦場を掌握せよ。</strong></div>
@@ -989,6 +1003,6 @@
     <script src="sector8-map4.js?v=1"></script>
     <script src="sector8-map5.js?v=1"></script>
     <script src="sector8-map6.js?v=1"></script>
-    <script src="app.js?v=real-tutorial-3"></script>
+    <script src="app.js?v=shop-1"></script>
 </body>
 </html>
