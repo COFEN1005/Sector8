@@ -84,6 +84,8 @@ header {
 .tutorial-hud {
     width: 100%;
     max-width: 640px;
+    max-height: min(44vh, 360px);
+    overflow-y: auto;
     margin-bottom: 0.7rem;
     padding: 0.85rem 1rem;
     border: 1px solid rgba(0, 240, 255, 0.5);
@@ -96,8 +98,10 @@ header {
 .tutorial-hud-top strong { color: var(--neon-gold); }
 .tutorial-hud h2 { margin: 0.45rem 0 0.3rem; font-size: 1.2rem; }
 .tutorial-hud p { color: rgba(226, 232, 240, 0.83); font-size: 0.82rem; line-height: 1.5; }
-.tutorial-hud-actions { display: flex; gap: 0.5rem; margin-top: 0.65rem; }
+.tutorial-hud-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.65rem; }
 .tutorial-hud-actions button { padding: 0.35rem 0.6rem; border: 1px solid rgba(0, 240, 255, 0.35); border-radius: 4px; background: rgba(0, 240, 255, 0.07); color: var(--neon-cyan); font: 0.72rem var(--font-mono); cursor: pointer; }
+.tutorial-hud-actions button:disabled { opacity: 0.45; cursor: not-allowed; }
+#tutorial-next { border-color: var(--neon-gold); color: var(--neon-gold); }
 #battle-screen.tutorial-active #board .cell.tutorial-target { outline: 3px solid var(--neon-gold); outline-offset: -3px; box-shadow: inset 0 0 22px rgba(255, 183, 0, 0.3), 0 0 12px rgba(255, 183, 0, 0.4); z-index: 2; }
 #battle-screen.tutorial-active #btn-skip-turn,
 #battle-screen.tutorial-active .game-end-actions { display: none; }

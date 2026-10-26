@@ -284,8 +284,10 @@ const TUTORIAL_LESSONS = [
     { title: '乙を選択', copy: '通常は自陣から中央を経て敵陣へ進みます。この訓練は敵陣（エリア3）の終盤から開始します。青い乙を押してください。', row: 4, col: 6 },
     { title: '乙を前進', copy: '光っている2マス前へ移動してください。乙は直線に最大3マス移動でき、壁やコマを通り抜けられません。', row: 2, col: 6 },
     { title: '丁を選択', copy: '1アクション使いました。青い丁を選んで、残り1アクションで敵を撃破します。', row: 3, col: 4 },
-    { title: '敵の丁を撃破', copy: '赤い丁を押してください。丁は直線2マス移動でき、敵のいるマスへ進むと撃破します。', row: 1, col: 4 },
-    { title: '乙を再選択', copy: '2アクションでターン終了。中央に偵察兵以外の自軍コマがいないため、情報崩壊が累積します。相手は行動可能なコマがなく自動パス。自分のターンに戻ったら乙を選んでください。', row: 2, col: 6 },
+    { title: '敵の甲を撃破', copy: '赤い甲を押してください。丁は直線2マス移動でき、敵のいるマスへ進むと撃破します。甲を倒すと軍旗がその場に落ちます。', row: 1, col: 4 },
+    { title: '軍旗と情報崩壊', copy: 'いま倒した敵の甲のマスに軍旗が落ちました。軍旗は同じ軍の乙・丙・丁だけが回収でき、持ったまま自分のターン終了を7回迎えると甲に昇格します。一方、中央のエリア2に偵察兵以外の自軍コマがいないまま自分のターンを終えると情報崩壊が1累積。合計15になると敗北します。', row: 1, col: 4, briefing: true },
+    { title: '甲は5種類', copy: '編成時に選ぶ甲には、千里眼（視界を作る）、暗殺者（撃破後に後退）、戦姫（自軍の撃破数で強化）、監視（敵の移動を妨害）、弓兵（離れた敵を攻撃）の5種類があります。移動・視界・能力がそれぞれ違います。詳しい範囲はメニューの「甲の能力詳細」で確認できます。', briefing: true },
+    { title: '乙を再選択', copy: '2アクションでターンが終了し、相手は行動可能なコマがないため自動パスします。自分のターンに戻ったら青い乙を選んでください。', row: 2, col: 6 },
     { title: '敵の核を破壊', copy: '敵の核の光るマスを攻撃してください。核は3マスにまたがる1ユニットで、いずれかを撃破すると実際の勝利判定が発動します。', row: 0, col: 6 }
 ];
 
@@ -955,7 +957,7 @@ function startTutorialGame() {
     setSetupMode('local');
     setOpponent(false);
     document.getElementById('game-over-overlay')?.classList.add('hidden');
-    startGame({ tutorial: true, mapSourceMode: 'fixed1', p1Ability: '千里眼', p2Ability: '監視', seed: 8 });
+    startGame({ tutorial: true, mapSourceMode: 'fixed1', p1Ability: '千里眼', p2Ability: '戦姫', seed: 8 });
 }
 
 function renderTutorialHud(message = '') {
@@ -964,23 +966,34 @@ function renderTutorialHud(message = '') {
     hud.classList.toggle('hidden', !tutorialMode);
     if (!tutorialMode) return;
     const lesson = TUTORIAL_LESSONS[tutorialStep];
-    document.getElementById('tutorial-step-number').textContent = `${String(tutorialStep + 1).padStart(2, '0')} / 06`;
+    document.getElementById('tutorial-step-number').textContent = `${String(tutorialStep + 1).padStart(2, '0')} / ${String(TUTORIAL_LESSONS.length).padStart(2, '0')}`;
     document.getElementById('tutorial-step-heading').textContent = lesson.title;
     document.getElementById('tutorial-step-description').textContent = message || lesson.copy;
+    const nextButton = document.getElementById('tutorial-next');
+    nextButton?.classList.toggle('hidden', !lesson.briefing);
+    if (nextButton) nextButton.disabled = currentPlayer !== 1;
     applyTutorialTargetHighlight();
+}
+
+function advanceTutorialBriefing() {
+    if (!tutorialMode || currentPlayer !== 1 || !TUTORIAL_LESSONS[tutorialStep]?.briefing) return;
+    tutorialStep++;
+    renderTutorialHud();
 }
 
 function applyTutorialTargetHighlight() {
     if (!tutorialMode || activeMap !== 'area3' || isGameOver) return;
+    document.querySelectorAll('#board .cell.tutorial-target').forEach(cell => cell.classList.remove('tutorial-target'));
     const lesson = TUTORIAL_LESSONS[tutorialStep];
+    if (!Number.isInteger(lesson.row) || !Number.isInteger(lesson.col)) return;
     const target = document.querySelector(`#board .cell[data-row="${lesson.row}"][data-col="${lesson.col}"]`);
     target?.classList.add('tutorial-target');
 }
 
 function advanceTutorialAfterSelection(unit) {
     if (!tutorialMode) return;
-    const expected = tutorialStep === 0 || tutorialStep === 4 ? 'tutorial_otsu' : 'tutorial_tei';
-    if (![0, 2, 4].includes(tutorialStep) || unit.id !== expected) return;
+    const expected = tutorialStep === 0 || tutorialStep === 6 ? 'tutorial_otsu' : 'tutorial_tei';
+    if (![0, 2, 6].includes(tutorialStep) || unit.id !== expected) return;
     tutorialStep++;
     renderTutorialHud();
 }
@@ -3459,6 +3472,7 @@ function setupUIEventListeners() {
         if (button && !button.disabled) claimLevelPassReward(button);
     });
     document.getElementById('tutorial-restart')?.addEventListener('click', startTutorialGame);
+    document.getElementById('tutorial-next')?.addEventListener('click', advanceTutorialBriefing);
     document.getElementById('tutorial-exit')?.addEventListener('click', () => resetToSetup(false));
     document.getElementById('lobby-launcher')?.addEventListener('click', event => {
         const button = event.target.closest('[data-lobby-destination]');
@@ -5450,7 +5464,7 @@ function initializeTutorialUnits() {
     }
     addUnitToBoard(new Unit('tutorial_otsu', 'otsu', 1, 'area3', 4, 6), 'area3', 4, 6);
     addUnitToBoard(new Unit('tutorial_tei', 'tei', 1, 'area3', 3, 4), 'area3', 3, 4);
-    addUnitToBoard(new Unit('tutorial_enemy_tei', 'tei', 2, 'area3', 1, 4), 'area3', 1, 4);
+    addUnitToBoard(new Unit('tutorial_enemy_koh', 'koh', 2, 'area3', 1, 4), 'area3', 1, 4);
 }
 
 function getFormationDeploymentCells(player, area) {
@@ -6671,6 +6685,12 @@ function handleCellClick(row, col) {
     if (isGameOver) return;
     if (tutorialMode) {
         const lesson = TUTORIAL_LESSONS[tutorialStep];
+        if (lesson.briefing) {
+            renderTutorialHud(currentPlayer === 2
+                ? '相手のターンです。自動パスを待ってください。'
+                : lesson.copy);
+            return;
+        }
         if (activeMap !== 'area3' || currentPlayer !== 1 || row !== lesson.row || col !== lesson.col) {
             renderTutorialHud(currentPlayer === 2
                 ? '相手のターンです。行動可能なコマがないため自動でパスされます。'
