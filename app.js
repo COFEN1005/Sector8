@@ -281,15 +281,21 @@ let tutorialStep = 0;
 let tutorialRunId = 0;
 
 const TUTORIAL_LESSONS = [
-    { title: '乙を選択', copy: '通常は自陣から中央を経て敵陣へ進みます。この訓練は敵陣（エリア3）の終盤から開始します。青い乙を押してください。', row: 4, col: 6 },
-    { title: '乙を前進', copy: '光っている2マス前へ移動してください。乙は直線に最大3マス移動でき、壁やコマを通り抜けられません。', row: 2, col: 6 },
-    { title: '丁を選択', copy: '1アクション使いました。青い丁を選んで、残り1アクションで敵を撃破します。', row: 3, col: 4 },
-    { title: '敵の甲を撃破', copy: '赤い甲を押してください。丁は直線2マス移動でき、敵のいるマスへ進むと撃破します。甲を倒すと軍旗がその場に落ちます。', row: 1, col: 4 },
-    { title: '軍旗と情報崩壊', copy: 'いま倒した敵の甲のマスに軍旗が落ちました。軍旗は同じ軍の乙・丙・丁だけが回収でき、持ったまま自分のターン終了を7回迎えると甲に昇格します。一方、中央のエリア2に偵察兵以外の自軍コマがいないまま自分のターンを終えると情報崩壊が1累積。合計15になると敗北します。', row: 1, col: 4, briefing: true },
-    { title: '甲は5種類', copy: '編成時に選ぶ甲には、千里眼（視界を作る）、暗殺者（撃破後に後退）、戦姫（自軍の撃破数で強化）、監視（敵の移動を妨害）、弓兵（離れた敵を攻撃）の5種類があります。移動・視界・能力がそれぞれ違います。詳しい範囲はメニューの「甲の能力詳細」で確認できます。', briefing: true },
-    { title: '乙を再選択', copy: '2アクションでターンが終了し、相手は行動可能なコマがないため自動パスします。自分のターンに戻ったら青い乙を選んでください。', row: 2, col: 6 },
-    { title: '敵の核を破壊', copy: '敵の核の光るマスを攻撃してください。核は3マスにまたがる1ユニットで、いずれかを撃破すると実際の勝利判定が発動します。', row: 0, col: 6 }
+    { scene: '戦闘', map: 'area3', title: '乙を選択', copy: 'まずは移動と撃破の場面です。青い乙を押してください。', row: 4, col: 6 },
+    { scene: '戦闘', map: 'area3', title: '乙を前進', copy: '光る2マス前へ移動してください。乙は直線に最大3マス移動できます。', row: 2, col: 6 },
+    { scene: '戦闘', map: 'area3', title: '丁を選択', copy: '別の青い丁を選んで、残りのアクションを使います。', row: 3, col: 4 },
+    { scene: '戦闘', map: 'area3', title: '敵の丁を撃破', copy: '赤い丁を押してください。丁は直線2マス移動でき、敵のいるマスへ進むと撃破します。', row: 1, col: 4 },
+    { scene: '戦闘', map: 'area3', title: '戦闘のまとめ', copy: 'いま倒したのは敵の丁です。軍旗は出ません。次は別の場面で、自軍の甲が倒れた後の軍旗回収を練習します。', briefing: true },
+    { scene: '軍旗', map: 'area1', title: '自軍の丁を選択', copy: 'ここは青の自陣です。青の甲が倒れて落とした「青の軍旗」を、青の丁で回収します。まず青い丁を選んでください。', row: 8, col: 6 },
+    { scene: '軍旗', map: 'area1', title: '青の軍旗を回収', copy: '光る青の軍旗のマスへ移動してください。軍旗を拾えるのは同じ軍の乙・丙・丁だけです。敵の軍旗は拾えません。', row: 8, col: 4 },
+    { scene: '軍旗', map: 'area1', title: '軍旗の回収成功', copy: '青い丁が青の軍旗を回収しました。軍旗を持ったまま自分のターン終了を7回迎えると、そのコマは元の能力を受け継ぐ甲に昇格します。', briefing: true },
+    { scene: '情報崩壊', map: 'area2', title: '中央を見てみよう', copy: 'エリア2には青の偵察兵だけがいます。偵察兵は中央の確保に数えられません。この状態で青のターンを終えると情報崩壊が1累積します。ボタンで実際にターンを進めましょう。', briefing: true, button: 'ターン終了で確認' },
+    { scene: '情報崩壊', map: 'area2', title: '情報崩壊を確認', copy: '青の情報崩壊が増えました。エリア2に偵察兵以外の自軍コマがいない状態で自分のターンを終えるたびに1増え、累積15で敗北します。後から中央に戻っても累積値は消えません。', briefing: true },
+    { scene: '甲の種類', map: 'area1', title: '選べる甲は5種類', copy: '編成時に選べる甲は5種類です。\n千里眼: 好きな地点に視界を作る。\n暗殺者: 敵撃破後に後退する。\n戦姫: 自軍の撃破数で移動と視界が強化される。\n監視: 視界内の敵の移動を妨害する。\n弓兵: 離れた敵をスキルで攻撃する。\n移動・視界もそれぞれ異なります。詳しくはメニューの「甲の能力詳細」で確認できます。', briefing: true },
+    { scene: '核破壊', map: 'area3', title: '乙を選択', copy: '最後は敵の核を撃破します。敵陣にいる青の乙を選んでください。', row: 2, col: 6 },
+    { scene: '核破壊', map: 'area3', title: '敵の核を破壊', copy: '光る核のマスを攻撃してください。核は3マスにまたがる1ユニットで、どのマスを撃破しても勝利します。', row: 0, col: 6 }
 ];
+const TUTORIAL_SCENE_NAMES = ['戦闘', '軍旗', '情報崩壊', '甲の種類', '核破壊'];
 
 let p1Vision = { area1: new Set(), area2: new Set(), area3: new Set() };
 let p2Vision = { area1: new Set(), area2: new Set(), area3: new Set() };
@@ -966,25 +972,63 @@ function renderTutorialHud(message = '') {
     hud.classList.toggle('hidden', !tutorialMode);
     if (!tutorialMode) return;
     const lesson = TUTORIAL_LESSONS[tutorialStep];
+    document.getElementById('tutorial-scene-label').textContent = `SCENE ${TUTORIAL_SCENE_NAMES.indexOf(lesson.scene) + 1}/${TUTORIAL_SCENE_NAMES.length} / ${lesson.scene}`;
     document.getElementById('tutorial-step-number').textContent = `${String(tutorialStep + 1).padStart(2, '0')} / ${String(TUTORIAL_LESSONS.length).padStart(2, '0')}`;
     document.getElementById('tutorial-step-heading').textContent = lesson.title;
-    document.getElementById('tutorial-step-description').textContent = message || lesson.copy;
+    const collapseCount = tutorialStep === 9 ? ` 現在: ${informationCollapseTurns[1]}/${INFORMATION_COLLAPSE_TURN_LIMIT}。` : '';
+    document.getElementById('tutorial-step-description').textContent = message || `${lesson.copy}${collapseCount}`;
     const nextButton = document.getElementById('tutorial-next');
     nextButton?.classList.toggle('hidden', !lesson.briefing);
-    if (nextButton) nextButton.disabled = currentPlayer !== 1;
+    if (nextButton) {
+        nextButton.disabled = currentPlayer !== 1;
+        nextButton.textContent = lesson.button || '確認して次へ';
+    }
     applyTutorialTargetHighlight();
 }
 
 function advanceTutorialBriefing() {
     if (!tutorialMode || currentPlayer !== 1 || !TUTORIAL_LESSONS[tutorialStep]?.briefing) return;
-    tutorialStep++;
+    if (tutorialStep === 4) return loadTutorialScene('flag', 5);
+    if (tutorialStep === 7) return loadTutorialScene('collapse', 8);
+    if (tutorialStep === 9) return loadTutorialScene('koh', 10);
+    if (tutorialStep === 10) return loadTutorialScene('core', 11);
+    if (tutorialStep === 8) {
+        tutorialStep = 9;
+        endTurn();
+    }
+}
+
+function loadTutorialScene(scene, step) {
+    cancelSelection();
+    tutorialRunId++;
+    tutorialStep = step;
+    currentPlayer = 1;
+    gameTurn = 1;
+    playerTurnsStarted = { 1: 1, 2: 0 };
+    actionsThisTurn = 0;
+    actedUnitIds = new Set();
+    militaryFlags = [];
+    militaryFlagSerial = 0;
+    playerKillCounts = { 1: 0, 2: 0 };
+    informationCollapseTurns = { 1: 0, 2: 0 };
+    p1KohDestroyed = false;
+    p2KohDestroyed = false;
+    p1LastVision = { area1: new Set(), area2: new Set(), area3: new Set() };
+    p2LastVision = { area1: new Set(), area2: new Set(), area3: new Set() };
+    initializeBoards();
+    applyMapTerrainForCurrentMode(gameSeed);
+    initializeTutorialUnits(scene);
+    calculateVisibility();
+    switchActiveMap(TUTORIAL_LESSONS[step].map);
+    updateUI();
     renderTutorialHud();
 }
 
 function applyTutorialTargetHighlight() {
-    if (!tutorialMode || activeMap !== 'area3' || isGameOver) return;
+    if (!tutorialMode || isGameOver) return;
     document.querySelectorAll('#board .cell.tutorial-target').forEach(cell => cell.classList.remove('tutorial-target'));
     const lesson = TUTORIAL_LESSONS[tutorialStep];
+    if (activeMap !== lesson.map) return;
     if (!Number.isInteger(lesson.row) || !Number.isInteger(lesson.col)) return;
     const target = document.querySelector(`#board .cell[data-row="${lesson.row}"][data-col="${lesson.col}"]`);
     target?.classList.add('tutorial-target');
@@ -992,8 +1036,8 @@ function applyTutorialTargetHighlight() {
 
 function advanceTutorialAfterSelection(unit) {
     if (!tutorialMode) return;
-    const expected = tutorialStep === 0 || tutorialStep === 6 ? 'tutorial_otsu' : 'tutorial_tei';
-    if (![0, 2, 6].includes(tutorialStep) || unit.id !== expected) return;
+    const expected = tutorialStep === 0 || tutorialStep === 11 ? 'tutorial_otsu' : 'tutorial_tei';
+    if (![0, 2, 5, 11].includes(tutorialStep) || unit.id !== expected) return;
     tutorialStep++;
     renderTutorialHud();
 }
@@ -1005,6 +1049,9 @@ function advanceTutorialAfterMove(unit, destRow, destCol) {
         renderTutorialHud();
     } else if (tutorialStep === 3 && unit.id === 'tutorial_tei' && destRow === 1 && destCol === 4) {
         tutorialStep = 4;
+        renderTutorialHud();
+    } else if (tutorialStep === 6 && unit.id === 'tutorial_tei' && unit.carryingFlagPlayer === 1 && destRow === 8 && destCol === 4) {
+        tutorialStep = 7;
         renderTutorialHud();
     }
 }
@@ -3889,8 +3936,8 @@ function setupGameModeTabs() {
 }
 
 function switchActiveMap(mapName) {
-    if (tutorialMode && mapName !== 'area3') {
-        renderTutorialHud('この訓練では敵陣で核を攻撃します。エリア3を見てください。');
+    if (tutorialMode && mapName !== TUTORIAL_LESSONS[tutorialStep].map) {
+        renderTutorialHud('この場面の盤面を見てください。');
         return;
     }
     const preserveClairvoyanceSelection = Boolean(
@@ -5454,7 +5501,7 @@ function initializeUnits() {
     placePlayerFormation(2, onlineMode ? (onlineFormations[2] || getSavedFormationForMap()) : getSavedFormationForMap());
 }
 
-function initializeTutorialUnits() {
+function initializeTutorialUnits(scene = 'combat') {
     units = [];
     const p1Core = new Unit('tutorial_p1_core', 'core', 1, 'area1', 10, 5);
     const p2Core = new Unit('tutorial_p2_core', 'core', 2, 'area3', 0, 5);
@@ -5462,9 +5509,24 @@ function initializeTutorialUnits() {
         addUnitToBoard(p1Core, 'area1', 10, col);
         addUnitToBoard(p2Core, 'area3', 0, col);
     }
-    addUnitToBoard(new Unit('tutorial_otsu', 'otsu', 1, 'area3', 4, 6), 'area3', 4, 6);
-    addUnitToBoard(new Unit('tutorial_tei', 'tei', 1, 'area3', 3, 4), 'area3', 3, 4);
-    addUnitToBoard(new Unit('tutorial_enemy_koh', 'koh', 2, 'area3', 1, 4), 'area3', 1, 4);
+    if (scene === 'combat') {
+        addUnitToBoard(new Unit('tutorial_otsu', 'otsu', 1, 'area3', 4, 6), 'area3', 4, 6);
+        addUnitToBoard(new Unit('tutorial_tei', 'tei', 1, 'area3', 3, 4), 'area3', 3, 4);
+        addUnitToBoard(new Unit('tutorial_enemy_tei', 'tei', 2, 'area3', 1, 4), 'area3', 1, 4);
+    } else if (scene === 'flag') {
+        const fallenKoh = new Unit('tutorial_fallen_koh', 'koh', 1, 'area1', 8, 4);
+        addUnitToBoard(fallenKoh, 'area1', 8, 4);
+        captureUnit(fallenKoh, 2);
+        addUnitToBoard(new Unit('tutorial_tei', 'tei', 1, 'area1', 8, 6), 'area1', 8, 6);
+        addUnitToBoard(new Unit('tutorial_otsu', 'otsu', 1, 'area1', 8, 8), 'area1', 8, 8);
+    } else if (scene === 'collapse') {
+        addUnitToBoard(new Unit('tutorial_scout', 'scout', 1, 'area2', 9, 5), 'area2', 9, 5);
+        addUnitToBoard(new Unit('tutorial_otsu', 'otsu', 1, 'area1', 8, 6), 'area1', 8, 6);
+    } else if (scene === 'koh') {
+        addUnitToBoard(new Unit('tutorial_koh', 'koh', 1, 'area1', 8, 5), 'area1', 8, 5);
+    } else if (scene === 'core') {
+        addUnitToBoard(new Unit('tutorial_otsu', 'otsu', 1, 'area3', 2, 6), 'area3', 2, 6);
+    }
 }
 
 function getFormationDeploymentCells(player, area) {
@@ -6691,7 +6753,7 @@ function handleCellClick(row, col) {
                 : lesson.copy);
             return;
         }
-        if (activeMap !== 'area3' || currentPlayer !== 1 || row !== lesson.row || col !== lesson.col) {
+        if (activeMap !== lesson.map || currentPlayer !== 1 || row !== lesson.row || col !== lesson.col) {
             renderTutorialHud(currentPlayer === 2
                 ? '相手のターンです。行動可能なコマがないため自動でパスされます。'
                 : `次は光るマスを押してください。${lesson.copy}`);
