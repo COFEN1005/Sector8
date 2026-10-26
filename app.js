@@ -276,6 +276,18 @@ let previewUnit = null;
 let selectedAction = 'move';
 let activePhase = 'setup';
 let activeMap = 'area1';
+let tutorialMode = false;
+let tutorialStep = 0;
+let tutorialRunId = 0;
+
+const TUTORIAL_LESSONS = [
+    { title: '乙を選択', copy: '通常は自陣から中央を経て敵陣へ進みます。この訓練は敵陣（エリア3）の終盤から開始します。青い乙を押してください。', row: 4, col: 6 },
+    { title: '乙を前進', copy: '光っている2マス前へ移動してください。乙は直線に最大3マス移動でき、壁やコマを通り抜けられません。', row: 2, col: 6 },
+    { title: '丁を選択', copy: '1アクション使いました。青い丁を選んで、残り1アクションで敵を撃破します。', row: 3, col: 4 },
+    { title: '敵の丁を撃破', copy: '赤い丁を押してください。丁は直線2マス移動でき、敵のいるマスへ進むと撃破します。', row: 1, col: 4 },
+    { title: '乙を再選択', copy: '2アクションでターン終了。中央に偵察兵以外の自軍コマがいないため、情報崩壊が累積します。相手は行動可能なコマがなく自動パス。自分のターンに戻ったら乙を選んでください。', row: 2, col: 6 },
+    { title: '敵の核を破壊', copy: '敵の核の光るマスを攻撃してください。核は3マスにまたがる1ユニットで、いずれかを撃破すると実際の勝利判定が発動します。', row: 0, col: 6 }
+];
 
 let p1Vision = { area1: new Set(), area2: new Set(), area3: new Set() };
 let p2Vision = { area1: new Set(), area2: new Set(), area3: new Set() };
@@ -886,9 +898,9 @@ function setupFormationBoardInteractions(container) {
 }
 
 function setWorkspaceView(view) {
-    const next = ['battle', 'tutorial', 'formation', 'level-pass', 'options'].includes(view) ? view : 'battle';
+    const next = ['battle', 'formation', 'level-pass', 'options'].includes(view) ? view : 'battle';
+    if (tutorialMode && next !== 'battle') resetToSetup(false);
     document.getElementById('battle-screen')?.classList.toggle('hidden', next !== 'battle');
-    document.getElementById('tutorial-screen')?.classList.toggle('hidden', next !== 'tutorial');
     document.getElementById('formation-screen')?.classList.toggle('hidden', next !== 'formation');
     document.getElementById('level-pass-screen')?.classList.toggle('hidden', next !== 'level-pass');
     document.getElementById('options-screen')?.classList.toggle('hidden', next !== 'options');
@@ -902,12 +914,15 @@ function setWorkspaceView(view) {
     }
     if (next === 'options') updateAudioButtons();
     if (next === 'level-pass') loadLevelPass();
-    if (next === 'tutorial') window.Sector8Tutorial?.open();
 }
 
 function openLobbyDestination(destination) {
     const battleScreen = document.getElementById('battle-screen');
-    if (destination === 'tutorial' || destination === 'formation' || destination === 'options' || destination === 'level-pass') {
+    if (destination === 'tutorial') {
+        startTutorialGame();
+        return;
+    }
+    if (destination === 'formation' || destination === 'options' || destination === 'level-pass') {
         battleScreen?.classList.remove('lobby-config-open');
         setWorkspaceView(destination);
         return;
@@ -929,6 +944,56 @@ function openLobbyDestination(destination) {
     document.querySelectorAll('.lobby-entry').forEach(button => {
         button.classList.toggle('active', button.dataset.lobbyDestination === destination);
     });
+}
+
+function startTutorialGame() {
+    if (activePhase === 'battle' && !isGameOver && !tutorialMode) {
+        showStatusAlert('進行中の対局を終えてからチュートリアルを開始してください。', 'warning', 3000);
+        return;
+    }
+    if (activePhase === 'battle' || isGameOver) resetToSetup(false);
+    setSetupMode('local');
+    setOpponent(false);
+    document.getElementById('game-over-overlay')?.classList.add('hidden');
+    startGame({ tutorial: true, mapSourceMode: 'fixed1', p1Ability: '千里眼', p2Ability: '監視', seed: 8 });
+}
+
+function renderTutorialHud(message = '') {
+    const hud = document.getElementById('tutorial-hud');
+    if (!hud) return;
+    hud.classList.toggle('hidden', !tutorialMode);
+    if (!tutorialMode) return;
+    const lesson = TUTORIAL_LESSONS[tutorialStep];
+    document.getElementById('tutorial-step-number').textContent = `${String(tutorialStep + 1).padStart(2, '0')} / 06`;
+    document.getElementById('tutorial-step-heading').textContent = lesson.title;
+    document.getElementById('tutorial-step-description').textContent = message || lesson.copy;
+    applyTutorialTargetHighlight();
+}
+
+function applyTutorialTargetHighlight() {
+    if (!tutorialMode || activeMap !== 'area3' || isGameOver) return;
+    const lesson = TUTORIAL_LESSONS[tutorialStep];
+    const target = document.querySelector(`#board .cell[data-row="${lesson.row}"][data-col="${lesson.col}"]`);
+    target?.classList.add('tutorial-target');
+}
+
+function advanceTutorialAfterSelection(unit) {
+    if (!tutorialMode) return;
+    const expected = tutorialStep === 0 || tutorialStep === 4 ? 'tutorial_otsu' : 'tutorial_tei';
+    if (![0, 2, 4].includes(tutorialStep) || unit.id !== expected) return;
+    tutorialStep++;
+    renderTutorialHud();
+}
+
+function advanceTutorialAfterMove(unit, destRow, destCol) {
+    if (!tutorialMode) return;
+    if (tutorialStep === 1 && unit.id === 'tutorial_otsu' && destRow === 2 && destCol === 6) {
+        tutorialStep = 2;
+        renderTutorialHud();
+    } else if (tutorialStep === 3 && unit.id === 'tutorial_tei' && destRow === 1 && destCol === 4) {
+        tutorialStep = 4;
+        renderTutorialHud();
+    }
 }
 
 async function loadLevelPass() {
@@ -1148,7 +1213,7 @@ function setGameOverTitle(title, tone = 'gold') {
 }
 
 function recordMatchReplayEvent(event) {
-    if (replayPlaybackActive) return;
+    if (replayPlaybackActive || tutorialMode) return;
     if (!currentMatchReplay) currentMatchReplay = createMatchReplayBase();
     currentMatchReplay.events.push({
         ...event,
@@ -1159,7 +1224,7 @@ function recordMatchReplayEvent(event) {
 }
 
 function recordMatchCapture(victim, attackerPlayer) {
-    if (replayPlaybackActive) return;
+    if (replayPlaybackActive || tutorialMode) return;
     if (!currentMatchRecord) currentMatchRecord = createMatchRecordBase();
     currentMatchRecord.captures.push({
         victimName: victim?.name || 'UNKNOWN',
@@ -2148,7 +2213,7 @@ function startMatchTracking(config = null) {
 }
 
 async function submitMatchHistory(reason, winnerId) {
-    if (replayPlaybackActive) return;
+    if (replayPlaybackActive || tutorialMode) return;
     if (!authProfile && authSession?.token) {
         try {
             await restoreAuthSession();
@@ -3302,7 +3367,7 @@ function withReplayRenderState(snapshotState, callback) {
 }
 
 function recordMatchReplaySnapshot(label = null) {
-    if (replayPlaybackActive) return;
+    if (replayPlaybackActive || tutorialMode) return;
     if (!currentMatchReplay) currentMatchReplay = createMatchReplayBase();
     currentMatchReplay.snapshots = currentMatchReplay.snapshots || [];
     currentMatchReplay.snapshots.push(serializeReplaySnapshot(label));
@@ -3385,7 +3450,7 @@ function setupUIEventListeners() {
         setWorkspaceView('battle');
     });
     document.getElementById('nav-formation')?.addEventListener('click', () => setWorkspaceView('formation'));
-    document.getElementById('nav-tutorial')?.addEventListener('click', () => setWorkspaceView('tutorial'));
+    document.getElementById('nav-tutorial')?.addEventListener('click', startTutorialGame);
     document.getElementById('nav-level-pass')?.addEventListener('click', () => setWorkspaceView('level-pass'));
     document.getElementById('nav-options')?.addEventListener('click', () => setWorkspaceView('options'));
     document.getElementById('level-pass-refresh')?.addEventListener('click', loadLevelPass);
@@ -3393,7 +3458,8 @@ function setupUIEventListeners() {
         const button = event.target.closest('[data-reward-key]');
         if (button && !button.disabled) claimLevelPassReward(button);
     });
-    document.getElementById('tutorial-ai')?.addEventListener('click', () => openLobbyDestination('local'));
+    document.getElementById('tutorial-restart')?.addEventListener('click', startTutorialGame);
+    document.getElementById('tutorial-exit')?.addEventListener('click', () => resetToSetup(false));
     document.getElementById('lobby-launcher')?.addEventListener('click', event => {
         const button = event.target.closest('[data-lobby-destination]');
         if (button) openLobbyDestination(button.dataset.lobbyDestination);
@@ -3809,6 +3875,10 @@ function setupGameModeTabs() {
 }
 
 function switchActiveMap(mapName) {
+    if (tutorialMode && mapName !== 'area3') {
+        renderTutorialHud('この訓練では敵陣で核を攻撃します。エリア3を見てください。');
+        return;
+    }
     const preserveClairvoyanceSelection = Boolean(
         selectedUnit?.type === 'koh' &&
         selectedAction === 'ability' &&
@@ -4947,6 +5017,12 @@ function applyRemoteAction(action) {
 function startGame(config = null, fromOnline = false) {
     if (onlineMode && localPlayer !== 1 && !fromOnline) return;
     setWorkspaceView('battle');
+    tutorialMode = config?.tutorial === true;
+    tutorialStep = 0;
+    tutorialRunId++;
+    document.getElementById('battle-screen')?.classList.toggle('tutorial-active', tutorialMode);
+    document.getElementById('btn-replay-match')?.classList.remove('hidden');
+    document.getElementById('btn-restart').textContent = 'RELOAD SYSTEM';
     gameSeed = config?.seed || Math.floor(Math.random() * 0xFFFFFFFF);
     const requestedMapSourceMode = config?.mapSourceMode
         ? normalizeMapSourceMode(config.mapSourceMode)
@@ -4973,7 +5049,15 @@ function startGame(config = null, fromOnline = false) {
         p2Ability = normalizeAbilityChoice(config ? config.p2Ability : document.getElementById('p2-ability-choice').value, '監視');
     }
     vsAI = onlineMode ? false : vsAI;
-    startMatchTracking(config);
+    if (tutorialMode) {
+        currentMatchKey = null;
+        currentMatchRecord = null;
+        currentMatchReplay = null;
+        currentMatchStartProfile = null;
+        currentMatchOpponentStartProfile = null;
+    } else {
+        startMatchTracking(config);
+    }
 
     activePhase = 'battle';
     stopOnlinePreparationTimer();
@@ -5017,12 +5101,13 @@ function startGame(config = null, fromOnline = false) {
     if (!reusePreview) {
         initializeBoards();
         applyMapTerrainForCurrentMode(gameSeed);
-        initializeUnits();
+        if (tutorialMode) initializeTutorialUnits();
+        else initializeUnits();
     } else {
         hideOnlineMatchPreview();
     }
 
-    const firstPlayer = createRng(gameSeed ^ 0x9E3779B9)() < 0.5 ? 1 : 2;
+    const firstPlayer = tutorialMode ? 1 : (createRng(gameSeed ^ 0x9E3779B9)() < 0.5 ? 1 : 2);
     currentPlayer = firstPlayer;
     beginPlayerTurn(firstPlayer);
     if (currentMatchRecord) currentMatchRecord.firstPlayer = firstPlayer;
@@ -5034,13 +5119,13 @@ function startGame(config = null, fromOnline = false) {
     document.getElementById('online-prebattle-panel')?.classList.add('hidden');
     onlineMatchPreviewActive = false;
     calculateVisibility();
-    switchActiveMap(getViewerPlayer() === 2 ? 'area3' : 'area1');
+    switchActiveMap(tutorialMode ? 'area3' : (getViewerPlayer() === 2 ? 'area3' : 'area1'));
     renderBoard();
     updateUI();
     recordMatchReplaySnapshot(`TURN ${gameTurn} / P${currentPlayer} START`);
     window.clearTimeout(matchIntroTimer);
     matchIntroTimer = null;
-    const shouldShowMatchIntro = !replayPlaybackActive && (
+    const shouldShowMatchIntro = !tutorialMode && !replayPlaybackActive && (
         (onlineMode && fromOnline) ||
         (!onlineMode && vsAI)
     );
@@ -5048,7 +5133,7 @@ function startGame(config = null, fromOnline = false) {
         if (!onlineMode) queueStageIntroCutIn();
         queueMatchIntroCutIn();
     } else {
-        if (!onlineMode) queueStageIntroCutIn();
+        if (!onlineMode && !tutorialMode) queueStageIntroCutIn();
         matchIntroActive = false;
         matchIntroProfileSnapshot = null;
         document.getElementById('match-intro-overlay')?.classList.add('hidden');
@@ -5058,11 +5143,12 @@ function startGame(config = null, fromOnline = false) {
     showTurnBanner();
     if (lastTurnOwner !== currentPlayer) playTurnSfx();
     lastTurnOwner = currentPlayer;
-    if (!matchIntroActive) startAfkTurnReminder();
+    if (!matchIntroActive && !tutorialMode) startAfkTurnReminder();
     startKeepAliveWarningTimer();
     clearStatusAlert();
     syncBgmPlayback();
     updateAudioButtons();
+    renderTutorialHud();
 
     if (onlineMode && !fromOnline) {
         sendOnlineMessage({
@@ -5352,6 +5438,19 @@ function initializeUnits() {
     addUnitToBoard(p2Core, 'area3', 0, 6);
 
     placePlayerFormation(2, onlineMode ? (onlineFormations[2] || getSavedFormationForMap()) : getSavedFormationForMap());
+}
+
+function initializeTutorialUnits() {
+    units = [];
+    const p1Core = new Unit('tutorial_p1_core', 'core', 1, 'area1', 10, 5);
+    const p2Core = new Unit('tutorial_p2_core', 'core', 2, 'area3', 0, 5);
+    for (const col of [4, 5, 6]) {
+        addUnitToBoard(p1Core, 'area1', 10, col);
+        addUnitToBoard(p2Core, 'area3', 0, col);
+    }
+    addUnitToBoard(new Unit('tutorial_otsu', 'otsu', 1, 'area3', 4, 6), 'area3', 4, 6);
+    addUnitToBoard(new Unit('tutorial_tei', 'tei', 1, 'area3', 3, 4), 'area3', 3, 4);
+    addUnitToBoard(new Unit('tutorial_enemy_tei', 'tei', 2, 'area3', 1, 4), 'area3', 1, 4);
 }
 
 function getFormationDeploymentCells(player, area) {
@@ -6141,6 +6240,7 @@ function renderBoard(options = {}) {
     if (updateLinkedPanels && boardId === 'board') {
         updateTabIndicators();
         renderMinimaps();
+        applyTutorialTargetHighlight();
     }
 }
 
@@ -6569,6 +6669,15 @@ function getScoutWarpTargets(scout) {
 // --- CELL CLICK HANDLER ---
 function handleCellClick(row, col) {
     if (isGameOver) return;
+    if (tutorialMode) {
+        const lesson = TUTORIAL_LESSONS[tutorialStep];
+        if (activeMap !== 'area3' || currentPlayer !== 1 || row !== lesson.row || col !== lesson.col) {
+            renderTutorialHud(currentPlayer === 2
+                ? '相手のターンです。行動可能なコマがないため自動でパスされます。'
+                : `次は光るマスを押してください。${lesson.copy}`);
+            return;
+        }
+    }
     clearAfkTurnReminderOnAction();
     const cell = boards[activeMap][row][col];
     const viewerPlayer = getViewerPlayer();
@@ -6694,6 +6803,7 @@ function selectUnit(unit) {
 
     teleportBtn.classList.add('hidden');
     selectActionType('move');
+    advanceTutorialAfterSelection(unit);
 }
 
 function selectActionType(type) {
@@ -6928,6 +7038,7 @@ function executeMove(unit, destRow, destCol) {
     maybeClearCamouflageAfterMove(unit);
     recordMatchReplayEvent({ kind: 'action', action: { type: 'move', unitId: unit.id, row: destRow, col: destCol } });
     sendOnlineMessage({ kind: 'action', action: { type: 'move', unitId: unit.id, row: destRow, col: destCol } });
+    advanceTutorialAfterMove(unit, destRow, destCol);
     completeUnitAction(unit);
 }
 
@@ -7336,6 +7447,7 @@ function endTurn() {
     const logColor = currentPlayer === 1 ? 'p1' : 'p2';
     addConsoleLog(`TURN ${gameTurn} - ${playerName} の戦術行動フェーズ。`, logColor);
     showTurnBanner();
+    if (tutorialMode) renderTutorialHud();
 
     if (!hasAvailableActionUnit(currentPlayer)) {
         const otherPlayer = currentPlayer === 1 ? 2 : 1;
@@ -7344,7 +7456,14 @@ function endTurn() {
             return;
         }
         addConsoleLog(`TURN SKIP: Player ${currentPlayer} は行動可能なコマがありません。`, 'system');
-        setTimeout(endTurn, 500);
+        if (tutorialMode) {
+            const runId = tutorialRunId;
+            setTimeout(() => {
+                if (tutorialMode && tutorialRunId === runId && currentPlayer === 2 && !isGameOver) endTurn();
+            }, 500);
+        } else {
+            setTimeout(endTurn, 500);
+        }
         return;
     }
 
@@ -7422,6 +7541,19 @@ function getScoutLimit(player) {
 // --- WIN / LOSE ---
 function triggerWin(winnerId, fromOnline = false, reason = 'core') {
     if (isGameOver) return;
+    if (tutorialMode) {
+        isGameOver = true;
+        updateMenuBattleVisibility();
+        renderGameOverSummary(null);
+        document.getElementById('btn-replay-match')?.classList.add('hidden');
+        document.getElementById('btn-restart').textContent = 'ロビーに戻る';
+        setGameOverTitle(winnerId === 1 ? 'TRAINING COMPLETE' : 'TRAINING FAILED', winnerId === 1 ? 'cyan' : 'magenta');
+        document.getElementById('game-over-subtitle').textContent = winnerId === 1
+            ? '実際の対局ルールで敵の核を撃破しました。レート・EXP・履歴は変わりません。'
+            : '核が破壊されました。最初から再挑戦できます。';
+        document.getElementById('game-over-overlay').classList.remove('hidden');
+        return;
+    }
     isGameOver = true;
     updateMenuBattleVisibility();
     resetDrawRequests();
@@ -7520,6 +7652,7 @@ function forfeitGame() {
 }
 
 function skipTurn() {
+    if (tutorialMode) return;
     if (isGameOver || !canControlCurrentTurn() || activePhase !== 'battle') return;
     addConsoleLog(`TURN SKIP: Player ${currentPlayer} が手動でターンを終了。`, 'system');
     recordMatchReplayEvent({ kind: 'action', action: { type: 'skip' } });
@@ -7531,6 +7664,13 @@ function resetToSetup(fromOnline = false) {
     stopOnlinePreparationTimer();
     const completedOnlineMatch = onlineMode && isGameOver;
     activePhase = 'setup';
+    tutorialMode = false;
+    tutorialStep = 0;
+    tutorialRunId++;
+    document.getElementById('battle-screen')?.classList.remove('tutorial-active');
+    document.getElementById('tutorial-hud')?.classList.add('hidden');
+    document.getElementById('btn-replay-match')?.classList.remove('hidden');
+    document.getElementById('btn-restart').textContent = 'RELOAD SYSTEM';
     isGameOver = false;
     updateMenuBattleVisibility();
     document.getElementById('game-over-overlay').classList.add('hidden');

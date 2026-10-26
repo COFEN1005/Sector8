@@ -32,7 +32,7 @@ Define real rewards in `ACTIVE_REWARDS` in `level-pass.js`. The Lv5 milestones a
 
 ## Tutorial
 
-Open `TUTORIAL` from the lobby or top navigation. The training board teaches unit selection, straight movement, capture, information collapse, and the win condition. It is a local simulation: it does not start a match or change account progress, rating, or match history. The final screen links to the AI match setup. Lesson transitions are kept in `tutorial.js` so additional chapters can be added without changing the battle engine.
+Open `TUTORIAL` from the lobby or top navigation. It uses the normal fixed-map battle engine and its real movement, visibility, turn, capture, and core-victory rules. Follow the on-board prompts to move Otsu, capture an enemy with Tei, then attack the enemy core. Training does not update account progress, rating, or match history.
 
 After deployment, open `/api/account/health`. A ready project returns `ok: true`, `backend: "supabase"`, and `schemaVersion: 3`. `supabase_schema_update_required` means the SQL above has not been applied yet.
 
