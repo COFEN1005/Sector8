@@ -2918,8 +2918,7 @@ function setupAbilityGuide() {
     const position = document.getElementById('ability-guide-position');
     const previous = document.getElementById('ability-guide-prev');
     const next = document.getElementById('ability-guide-next');
-    const angelJump = document.getElementById('ability-guide-angel');
-    const angelIndex = cards.findIndex(card => card.dataset.ability === '天使');
+    const tabs = [...document.querySelectorAll('.ability-guide-tabs button[data-ability]')];
     const currentIndex = () => cards.reduce((best, card, index) => (
         Math.abs(card.offsetLeft - cards[0].offsetLeft - track.scrollLeft) <
         Math.abs(cards[best].offsetLeft - cards[0].offsetLeft - track.scrollLeft) ? index : best
@@ -2929,12 +2928,19 @@ function setupAbilityGuide() {
         if (position) position.textContent = `${String(index + 1).padStart(2, '0')} / ${String(cards.length).padStart(2, '0')}`;
         if (previous) previous.disabled = index === 0;
         if (next) next.disabled = index === cards.length - 1;
-        if (angelJump) angelJump.classList.toggle('active', index === angelIndex);
+        tabs.forEach(tab => {
+            const selected = tab.dataset.ability === cards[index].dataset.ability;
+            tab.classList.toggle('active', selected);
+            tab.setAttribute('aria-pressed', String(selected));
+        });
     };
     const goTo = index => track.scrollTo({ left: cards[index].offsetLeft - cards[0].offsetLeft, behavior: 'smooth' });
     previous?.addEventListener('click', () => goTo(Math.max(0, currentIndex() - 1)));
     next?.addEventListener('click', () => goTo(Math.min(cards.length - 1, currentIndex() + 1)));
-    angelJump?.addEventListener('click', () => { if (angelIndex >= 0) goTo(angelIndex); });
+    tabs.forEach(tab => tab.addEventListener('click', () => {
+        const index = cards.findIndex(card => card.dataset.ability === tab.dataset.ability);
+        if (index >= 0) goTo(index);
+    }));
     track.addEventListener('scroll', update, { passive: true });
     track.addEventListener('keydown', event => {
         if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;

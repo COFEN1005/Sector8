@@ -4,7 +4,8 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const guideHtml = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-assert.match(guideHtml, /id="ability-guide-angel"/);
+assert.match(guideHtml, /class="ability-guide-tabs"/);
+assert.match(guideHtml, /<button type="button" data-ability="天使">天使<\/button>/);
 assert.match(guideHtml, /class="ability-detail-card" data-ability="天使"/);
 assert.match(guideHtml, /<h4>天使<\/h4>[\s\S]*?PASSIVE <span>クイック<\/span>[\s\S]*?SKILL <span>祝福<\/span>/);
 

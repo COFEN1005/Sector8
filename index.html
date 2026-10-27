@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Share+Tech+Mono&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=angel-2">
+    <link rel="stylesheet" href="style.css?v=angel-3">
 </head>
 <body>
     <div id="app-container">
@@ -376,13 +376,20 @@
                             <div class="ability-guide-toolbar">
                                 <span>ABILITY INDEX <strong id="ability-guide-position">01 / 06</strong></span>
                                 <div class="ability-guide-controls">
-                                    <button id="ability-guide-angel" class="ability-guide-jump" type="button" aria-label="天使の能力詳細へ移動">NEW 天使</button>
                                     <button id="ability-guide-prev" type="button" aria-label="前の能力">‹</button>
                                     <button id="ability-guide-next" type="button" aria-label="次の能力">›</button>
                                 </div>
                             </div>
+                            <div class="ability-guide-tabs" role="group" aria-label="甲の種類を選択">
+                                <button type="button" data-ability="千里眼">千里眼</button>
+                                <button type="button" data-ability="暗殺者">暗殺者</button>
+                                <button type="button" data-ability="戦姫">戦姫</button>
+                                <button type="button" data-ability="監視">監視</button>
+                                <button type="button" data-ability="弓兵">弓兵</button>
+                                <button type="button" data-ability="天使">天使</button>
+                            </div>
                             <div id="ability-detail-list" class="ability-detail-list" role="region" aria-label="甲の能力カード。横にスクロールできます" tabindex="0">
-                                <article class="ability-detail-card">
+                                <article class="ability-detail-card" data-ability="千里眼">
                                     <div class="ability-card-index">01 / ACTIVE</div>
                                     <h4>千里眼</h4>
                                     <div class="ability-range-pair">
@@ -393,7 +400,7 @@
                                     <p>選んだマスを中心に3×3の視界を3ターン得る。クールダウンは3ターン。</p>
                                     <figure class="ability-skill-figure"><div class="ability-range-grid skill" data-shape="square" data-radius="1" data-size="7"></div><figcaption>指定地点を中心に3×3を可視化</figcaption></figure>
                                 </article>
-                                <article class="ability-detail-card">
+                                <article class="ability-detail-card" data-ability="暗殺者">
                                     <div class="ability-card-index">02 / PASSIVE</div>
                                     <h4>暗殺者</h4>
                                     <div class="ability-range-pair">
@@ -408,7 +415,7 @@
                                         <figcaption>撃破地点から ① → ② と戻る</figcaption>
                                     </figure>
                                 </article>
-                                <article class="ability-detail-card">
+                                <article class="ability-detail-card" data-ability="戦姫">
                                     <div class="ability-card-index">03 / PASSIVE</div>
                                     <h4>戦姫</h4>
                                     <div class="ability-skill-heading">PASSIVE <span>戦場の華</span></div>
@@ -420,7 +427,7 @@
                                     </div>
                                     <div class="ability-evolution-legend"><span>前段階まで</span><span>今回拡大</span></div>
                                 </article>
-                                <article class="ability-detail-card">
+                                <article class="ability-detail-card" data-ability="監視">
                                     <div class="ability-card-index">04 / PASSIVE</div>
                                     <h4>監視</h4>
                                     <div class="ability-range-pair">
@@ -431,7 +438,7 @@
                                     <p>このコマの視界内にいる敵コマの移動値を-1する。壁やコマに遮られた先は視界に含まれない。</p>
                                     <div class="ability-effect-note">視界内の敵へ 移動 -1</div>
                                 </article>
-                                <article class="ability-detail-card">
+                                <article class="ability-detail-card" data-ability="弓兵">
                                     <div class="ability-card-index">05 / ACTIVE</div>
                                     <h4>弓兵</h4>
                                     <div class="ability-range-pair">
@@ -1017,6 +1024,6 @@
     <script src="sector8-map4.js?v=1"></script>
     <script src="sector8-map5.js?v=1"></script>
     <script src="sector8-map6.js?v=1"></script>
-    <script src="app.js?v=angel-2"></script>
+    <script src="app.js?v=angel-3"></script>
 </body>
 </html>

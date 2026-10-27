@@ -1214,22 +1214,30 @@ header {
 
 .ability-guide-controls button:disabled { opacity: 0.35; cursor: default; }
 
-.ability-guide-controls .ability-guide-jump {
-    width: auto;
-    min-width: 4.6rem;
-    padding: 0 0.45rem;
-    border-color: rgba(255, 183, 0, 0.55);
-    color: var(--neon-gold);
-    background: rgba(255, 183, 0, 0.08);
-    font-family: var(--font-mono);
-    font-size: 0.7rem;
-    white-space: nowrap;
+.ability-guide-tabs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.35rem;
+    margin-bottom: 0.65rem;
 }
 
-.ability-guide-controls .ability-guide-jump.active,
-.ability-guide-controls .ability-guide-jump:hover {
-    background: rgba(255, 183, 0, 0.2);
-    box-shadow: 0 0 10px rgba(255, 183, 0, 0.2);
+.ability-guide-tabs button {
+    min-width: 0;
+    padding: 0.5rem 0.2rem;
+    border: 1px solid rgba(0, 240, 255, 0.25);
+    border-radius: 5px;
+    color: var(--text-primary);
+    background: rgba(0, 240, 255, 0.04);
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    cursor: pointer;
+}
+
+.ability-guide-tabs button.active,
+.ability-guide-tabs button:hover {
+    border-color: var(--neon-cyan);
+    color: var(--neon-cyan);
+    background: rgba(0, 240, 255, 0.12);
 }
 
 .ability-detail-list {
