@@ -12,7 +12,13 @@ const ACTIVE_REWARDS = Object.freeze({
     key: 'koh_ticket_lv5',
     type: 'koh_ticket',
     name: '甲引換券 x1',
-    description: 'ショップで今後追加される甲との交換に使用できます。'
+    description: 'ショップで新たな甲との交換に使用できます。'
+  }),
+  10: Object.freeze({
+    key: 'koh_ticket_lv10',
+    type: 'koh_ticket',
+    name: '甲引換券 x1',
+    description: 'ショップで新たな甲との交換に使用できます。'
   })
 });
 

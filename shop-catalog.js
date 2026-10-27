@@ -6,6 +6,11 @@ const ACTIVE_PRODUCTS = Object.freeze([
     key: 'koh_angel', type: 'koh', itemKey: '天使', name: '天使',
     description: '菱形移動2・視界3。クイックで祝福のCTを短縮し、味方を再行動可能にする。',
     currency: KOH_TICKET, price: 1
+  }),
+  Object.freeze({
+    key: 'koh_stealth', type: 'koh', itemKey: '隠密', name: '隠密',
+    description: '直線移動3・菱形視界3。3ターン静止すると透明化し、敵の視界と進路を通す。',
+    currency: KOH_TICKET, price: 1
   })
 ]);
 

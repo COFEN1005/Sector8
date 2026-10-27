@@ -66,10 +66,11 @@ const LEVEL_EXP_PER_LEVEL = 100;
 const MATCH_EXP_GAIN = 50;
 const KEEPALIVE_WARNING_MS = 10 * 60 * 1000;
 const DEVELOP_MODE_SEQUENCE = '12312321213';
-const ALL_ABILITY_OPTIONS = ['千里眼', '暗殺者', '戦姫', '監視', '弓兵', '天使'];
+const ALL_ABILITY_OPTIONS = ['千里眼', '暗殺者', '戦姫', '監視', '弓兵', '天使', '隠密'];
 const SELECTABLE_ABILITY_OPTIONS = ['千里眼', '暗殺者', '戦姫', '監視', '弓兵'];
 const CLAIRVOYANCE_COOLDOWN_TURNS = 3;
 const ANGEL_BLESSING_COOLDOWN_TURNS = 10;
+const STEALTH_STILL_TURNS = 3;
 const CLAIRVOYANCE_DURATION_TURNS = 3;
 const WAR_PRINCESS_SCOUT_BONUS_LIMIT = 4;
 const IMPERSONATION_CHOICES = ['core', 'otsu', 'hei', 'tei', 'scout', ...ALL_ABILITY_OPTIONS];
@@ -195,7 +196,9 @@ function isOccupantVisibleToPlayer(occupant, viewerPlayer, mapName) {
 }
 
 function shouldIgnoreOccupantForPreview(unit, occupant, mapName, options = {}) {
-    if (!options.hideUnseenEnemies || !occupant || occupant.player === unit.player) return false;
+    if (!occupant || occupant.player === unit.player) return false;
+    if (isStealthHiddenFromPlayer(occupant, unit.player)) return true;
+    if (!options.hideUnseenEnemies) return false;
     return !isOccupantVisibleToPlayer(occupant, unit.player, mapName);
 }
 
@@ -293,7 +296,7 @@ const TUTORIAL_LESSONS = [
     { scene: '軍旗', map: 'area1', title: '軍旗の回収成功', copy: '青い丁が青の軍旗を回収しました。軍旗を持ったまま自分のターン終了を7回迎えると、そのコマは元の能力を受け継ぐ甲に昇格します。', briefing: true },
     { scene: '情報崩壊', map: 'area2', title: '中央を見てみよう', copy: 'エリア2には青の偵察兵だけがいます。偵察兵は中央の確保に数えられません。この状態で青のターンを終えると情報崩壊が1累積します。ボタンで実際にターンを進めましょう。', briefing: true, button: 'ターン終了で確認' },
     { scene: '情報崩壊', map: 'area2', title: '情報崩壊を確認', copy: '青の情報崩壊が増えました。エリア2に偵察兵以外の自軍コマがいない状態で自分のターンを終えるたびに1増え、累積15で敗北します。後から中央に戻っても累積値は消えません。', briefing: true },
-    { scene: '甲の種類', map: 'area1', title: '甲の選択と解放', copy: '初期の甲は5種類です。\n千里眼: 好きな地点に視界を作る。\n暗殺者: 敵撃破後に後退する。\n戦姫: 自軍の撃破数で移動と視界が強化される。\n監視: 視界内の敵の移動を妨害する。\n弓兵: 離れた敵をスキルで攻撃する。\n天使: ショップで解放。味方を再行動可能にする。\n移動・視界もそれぞれ異なります。詳しくはメニューの「甲の能力詳細」で確認できます。', briefing: true },
+    { scene: '甲の種類', map: 'area1', title: '甲の選択と解放', copy: '初期の甲は5種類です。\n千里眼: 好きな地点に視界を作る。\n暗殺者: 敵撃破後に後退する。\n戦姫: 自軍の撃破数で移動と視界が強化される。\n監視: 視界内の敵の移動を妨害する。\n弓兵: 離れた敵をスキルで攻撃する。\n天使・隠密: ショップで解放できる甲。\n移動・視界もそれぞれ異なります。詳しくはメニューの「甲の能力詳細」で確認できます。', briefing: true },
     { scene: '核破壊', map: 'area3', title: '乙を選択', copy: '最後は敵の核を撃破します。敵陣にいる青の乙を選んでください。', row: 2, col: 6 },
     { scene: '核破壊', map: 'area3', title: '敵の核を破壊', copy: '光る核のマスを攻撃してください。核は3マスにまたがる1ユニットで、どのマスを撃破しても勝利します。', row: 0, col: 6 }
 ];
@@ -2693,6 +2696,9 @@ class Unit {
         this.flagSurvivalTurns = 0;
         this.medicScoutReinforceTurns = 0;
         this.archerMovedThisTurn = false;
+        this.stealthStillTurns = 0;
+        this.stealthInvisible = false;
+        this.stealthMovedThisTurn = false;
 
         this.configureTypeStats(type);
     }
@@ -2768,6 +2774,7 @@ class Unit {
                 '監視': '【甲特有: 監視 / パッシブ】正方形視界2・直線移動1。視界内の敵移動-1。',
                 '弓兵': '【甲特有: 弓兵 / アクティブ・パッシブ】菱形移動2・菱形視界3。通常攻撃では撃破不可。移動前のみ、視界内かつ菱形距離3の敵を射撃できる。射撃は1アクションを消費し、使用後に行動済みを解除する。',
                 '天使': '【甲特有: 天使 / パッシブ・アクティブ】菱形移動2・菱形視界3。味方の敵撃破ごとに祝福のCT-2。同じエリアの味方1体の行動済みを解除する祝福はCT10。',
+                '隠密': '【甲特有: 隠密 / パッシブ】直線移動3・菱形視界3。自分のターンを3回移動せず終えると透明化。敵が上下左右1マスに近づくと発見される。移動で解除。透明化中も味方に視界を提供する。',
                 '迷彩': '【甲特有: 迷彩 / 発動型】使用後はマンハッタン視界1になり、動かない限り敵視界に出ない。',
                 '煙幕': '【甲特有: 煙幕 / 発動型】マンハッタン視界3。直線移動4＋周囲1。3×3の煙幕を設置し、煙幕内の敵味方を迷彩状態にする。',
                 '憑依': '【甲特有: 憑依 / 発動型】マンハッタン移動3・視界3。好きなコマの見た目に変えられる。敵撃破で元に戻り、再変更は10ターン後。',
@@ -2805,6 +2812,7 @@ class Unit {
             if (ability === '戦姫') r = 2 + getWarPrincessBonus(this.player);
             if (ability === '弓兵') r = 2;
             if (ability === '天使') r = 2;
+            if (ability === '隠密') r = 3;
             if (ability === '歴戦王' && this.veteranMomentumPenalty) r = 2;
         }
         r -= getMonitorPenalty(this);
@@ -2833,6 +2841,7 @@ class Unit {
             if (ability === '戦姫') v = 2 + getWarPrincessBonus(this.player);
             if (ability === '弓兵') v = 3;
             if (ability === '天使') v = 3;
+            if (ability === '隠密') v = 3;
             if (ability === '迷彩' && this.camouflaged) v = 1;
             if (getPlayerAbility(this.player) === '脳筋') {
                 v += Number(this.bruteVisionBonus || 0);
@@ -2850,6 +2859,7 @@ class Unit {
             const ability = getUnitAbilityContext(this);
             if (ability === '脳筋') return 'straight';
             if (ability === '暗殺者') return 'straight';
+            if (ability === '隠密') return 'straight';
             if (ability === '監視') return 'straight';
             if (ability === '煙幕') return 'smoke';
             if (ability === '歴戦王' && this.veteranMomentumPenalty) return 'straight';
@@ -3010,6 +3020,7 @@ function getAbilityClassByName(ability) {
         '監視': 'ability-watch',
         '弓兵': 'ability-archer',
         '天使': 'ability-angel',
+        '隠密': 'ability-stealth',
         '迷彩': 'ability-camouflage',
         '憑依': 'ability-possession',
         '儀式': 'ability-ritual',
@@ -3338,6 +3349,9 @@ function serializeReplayUnit(unit) {
         veteranMomentumPenalty: Boolean(unit.veteranMomentumPenalty),
         assassinMomentumPenalty: Boolean(unit.assassinMomentumPenalty),
         archerMovedThisTurn: Boolean(unit.archerMovedThisTurn),
+        stealthStillTurns: Number(unit.stealthStillTurns || 0),
+        stealthInvisible: Boolean(unit.stealthInvisible),
+        stealthMovedThisTurn: Boolean(unit.stealthMovedThisTurn),
         carryingFlagPlayer: unit.carryingFlagPlayer || null,
         carryingFlagAbility: unit.carryingFlagAbility || null,
         flagSurvivalTurns: unit.flagSurvivalTurns || 0,
@@ -3415,6 +3429,9 @@ function hydrateReplayUnit(raw) {
     unit.bruteVisionBonus = Number(raw.bruteVisionBonus || 0);
     unit.assassinMomentumPenalty = Boolean(raw.assassinMomentumPenalty);
     unit.archerMovedThisTurn = Boolean(raw.archerMovedThisTurn);
+    unit.stealthStillTurns = Number(raw.stealthStillTurns || 0);
+    unit.stealthInvisible = Boolean(raw.stealthInvisible);
+    unit.stealthMovedThisTurn = Boolean(raw.stealthMovedThisTurn);
     return unit;
 }
 
@@ -5997,6 +6014,9 @@ function promoteFlagBearer(unit) {
     clearFlagCarrier(unit, true);
     promoteUnitType(unit, 'koh');
     unit.camouflaged = false;
+    unit.stealthStillTurns = 0;
+    unit.stealthInvisible = false;
+    unit.stealthMovedThisTurn = false;
     unit.veteranMomentumPenalty = false;
     unit.assassinMomentumPenalty = false;
     unit.warPrincessKills = 0;
@@ -6135,7 +6155,7 @@ function isCellInsideVisionShape(unit, row, col, shape, range) {
     return Math.abs(dr) + Math.abs(dc) <= range;
 }
 
-function hasOpaqueLineOfSight(mapName, fromRow, fromCol, toRow, toCol) {
+function hasOpaqueLineOfSight(mapName, fromRow, fromCol, toRow, toCol, viewerPlayer) {
     if (fromRow === toRow && fromCol === toCol) return true;
 
     const rowDelta = toRow - fromRow;
@@ -6171,7 +6191,7 @@ function hasOpaqueLineOfSight(mapName, fromRow, fromCol, toRow, toCol) {
 
         if (row === toRow && col === toCol) return true;
         const cell = boards[mapName]?.[row]?.[col];
-        if (cell?.isWall || cell?.unit) return false;
+        if (cell?.isWall || (cell?.unit && !isStealthHiddenFromPlayer(cell.unit, viewerPlayer))) return false;
     }
     return true;
 }
@@ -6196,7 +6216,7 @@ function getUnitVisionCells(unit) {
         for (let col = startCol; col <= endCol; col++) {
             if (row === unit.row && col === unit.col) continue;
             if (!isCellInsideVisionShape(unit, row, col, shape, range)) continue;
-            if (hasOpaqueLineOfSight(mapName, unit.row, unit.col, row, col)) {
+            if (hasOpaqueLineOfSight(mapName, unit.row, unit.col, row, col, unit.player)) {
                 visible.add(`${row},${col}`);
             }
         }
@@ -6233,10 +6253,17 @@ function canScoutRevealCamouflage(viewerPlayer, mapName, row, col) {
     return false;
 }
 
+function isStealthHiddenFromPlayer(unit, viewerPlayer) {
+    if (!unit || !unit.stealthInvisible || unit.player === viewerPlayer) return false;
+    return ![[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dr, dc]) =>
+        boards[unit.map]?.[unit.row + dr]?.[unit.col + dc]?.unit?.player === viewerPlayer);
+}
+
 function isUnitVisibleToViewer(unit, viewerPlayer, activeVisionSet) {
     if (!unit) return false;
     if (gameMode === 'debug') return true;
     if (unit.player === viewerPlayer) return true;
+    if (unit.stealthInvisible) return !isStealthHiddenFromPlayer(unit, viewerPlayer);
     if (unit.glowUntilTurn > 0 && gameTurn <= unit.glowUntilTurn) return true;
     if (!activeVisionSet.has(`${unit.row},${unit.col}`)) return false;
     if (!unit.camouflaged) return true;
@@ -6245,12 +6272,34 @@ function isUnitVisibleToViewer(unit, viewerPlayer, activeVisionSet) {
 
 function maybeClearCamouflageAfterMove(unit) {
     if (!unit || unit.type !== 'koh') return;
+    if (getPlayerAbility(unit.player) === '隠密') {
+        if (unit.stealthInvisible) addConsoleLog(`ABILITY: 透明解除 - ${unit.name} が移動しました。`, 'ability');
+        unit.stealthInvisible = false;
+        unit.stealthStillTurns = 0;
+        unit.stealthMovedThisTurn = true;
+    }
     const hadManualCamouflage = Boolean(unit.manualCamouflage);
     if (hadManualCamouflage) unit.manualCamouflage = false;
     refreshUnitCamouflageState(unit);
     if (hadManualCamouflage && !unit.camouflaged) {
         addConsoleLog(`ABILITY: 迷彩解除 - ${unit.name} が移動したため姿を現しました。`, 'ability');
     }
+}
+
+function updateStealthAtTurnEnd(player) {
+    if (getPlayerAbility(player) !== '隠密') return;
+    units.filter(unit => unit.player === player && unit.type === 'koh').forEach(unit => {
+        if (unit.stealthMovedThisTurn) {
+            unit.stealthMovedThisTurn = false;
+            return;
+        }
+        if (unit.stealthInvisible) return;
+        unit.stealthStillTurns = Math.min(STEALTH_STILL_TURNS, unit.stealthStillTurns + 1);
+        if (unit.stealthStillTurns === STEALTH_STILL_TURNS) {
+            unit.stealthInvisible = true;
+            addConsoleLog(`ABILITY: 透明 - ${unit.name} が3ターン静止して姿を消しました。`, 'ability');
+        }
+    });
 }
 
 // --- FOG OF WAR / VISIBILITY ---
@@ -6443,6 +6492,13 @@ function renderBoard(options = {}) {
                             killCounter.className = 'kill-counter';
                             killCounter.textContent = getPlayerKillCount(u.player);
                             unitEl.appendChild(killCounter);
+                        }
+                        if (abilityName === '隠密') {
+                            if (u.stealthInvisible) unitEl.classList.add('stealth-invisible');
+                            const stealthCounter = document.createElement('span');
+                            stealthCounter.className = 'stealth-counter';
+                            stealthCounter.textContent = u.stealthInvisible ? '透明' : `${u.stealthStillTurns}/3`;
+                            unitEl.appendChild(stealthCounter);
                         }
                     }
                     if (u.carryingFlagPlayer) {
@@ -7176,8 +7232,10 @@ function executeMove(unit, destRow, destCol) {
     if (
         unit.type === 'koh' &&
         getPlayerAbility(unit.player) === '弓兵' &&
-        ((resolved.localOccupant && resolved.localOccupant.player !== unit.player) ||
-            (resolved.destOccupant && resolved.destOccupant.player !== unit.player))
+        ((resolved.localOccupant && resolved.localOccupant.player !== unit.player &&
+            !isStealthHiddenFromPlayer(resolved.localOccupant, unit.player)) ||
+            (resolved.destOccupant && resolved.destOccupant.player !== unit.player &&
+                !isStealthHiddenFromPlayer(resolved.destOccupant, unit.player)))
     ) {
         addConsoleLog('ERROR: 弓兵は通常攻撃で敵コマを撃破できません。', 'system');
         cancelSelection();
@@ -7663,6 +7721,8 @@ function endTurn() {
     cancelSelection();
     if (isGameOver) return;
 
+    updateStealthAtTurnEnd(currentPlayer);
+
     units.forEach(u => {
         if (u.player === currentPlayer && u.inspirationTurns > 0) u.inspirationTurns--;
         if (u.glowUntilTurn > 0 && gameTurn >= u.glowUntilTurn) u.glowUntilTurn = 0;
@@ -8090,7 +8150,8 @@ function executeAITurn() {
         moves.forEach(m => {
             let score = 0;
             const resolved = resolveMoveDestination(u, m.row, m.col);
-            const victim = resolved.destOccupant || resolved.localOccupant;
+            const occupant = resolved.destOccupant || resolved.localOccupant;
+            const victim = isStealthHiddenFromPlayer(occupant, u.player) ? null : occupant;
 
             if (victim) {
                 if (victim.type === 'core') score += 1000000;

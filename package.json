@@ -5,7 +5,7 @@
   "main": "server.js",
   "scripts": {
     "build": "node --check server.js && node --check app.js",
-    "test": "node tests/formation-deployment.test.js && node tests/level-pass.test.js && node tests/shop.test.js && node tests/tutorial-battle.test.js && node tests/angel.test.js && node tests/angel-auth.test.js",
+    "test": "node tests/formation-deployment.test.js && node tests/level-pass.test.js && node tests/shop.test.js && node tests/tutorial-battle.test.js && node tests/angel.test.js && node tests/angel-auth.test.js && node tests/stealth.test.js",
     "start": "node server.js",
     "dev": "node server.js"
   },
