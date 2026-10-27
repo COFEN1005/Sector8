@@ -66,9 +66,10 @@ const LEVEL_EXP_PER_LEVEL = 100;
 const MATCH_EXP_GAIN = 50;
 const KEEPALIVE_WARNING_MS = 10 * 60 * 1000;
 const DEVELOP_MODE_SEQUENCE = '12312321213';
-const ALL_ABILITY_OPTIONS = ['千里眼', '暗殺者', '戦姫', '監視', '弓兵'];
+const ALL_ABILITY_OPTIONS = ['千里眼', '暗殺者', '戦姫', '監視', '弓兵', '天使'];
 const SELECTABLE_ABILITY_OPTIONS = ['千里眼', '暗殺者', '戦姫', '監視', '弓兵'];
 const CLAIRVOYANCE_COOLDOWN_TURNS = 3;
+const ANGEL_BLESSING_COOLDOWN_TURNS = 10;
 const CLAIRVOYANCE_DURATION_TURNS = 3;
 const WAR_PRINCESS_SCOUT_BONUS_LIMIT = 4;
 const IMPERSONATION_CHOICES = ['core', 'otsu', 'hei', 'tei', 'scout', ...ALL_ABILITY_OPTIONS];
@@ -222,6 +223,7 @@ let smokeCooldownByPlayer = { 1: 0, 2: 0 };
 let clairvoyanceZones = [];
 let clairvoyanceZoneSerial = 0;
 let clairvoyanceCooldownByPlayer = { 1: 0, 2: 0 };
+let angelBlessingCooldownByPlayer = { 1: 0, 2: 0 };
 let playerKillCounts = { 1: 0, 2: 0 };
 let informationCollapseTurns = { 1: 0, 2: 0 };
 let lastKeepAliveAt = Date.now();
@@ -291,7 +293,7 @@ const TUTORIAL_LESSONS = [
     { scene: '軍旗', map: 'area1', title: '軍旗の回収成功', copy: '青い丁が青の軍旗を回収しました。軍旗を持ったまま自分のターン終了を7回迎えると、そのコマは元の能力を受け継ぐ甲に昇格します。', briefing: true },
     { scene: '情報崩壊', map: 'area2', title: '中央を見てみよう', copy: 'エリア2には青の偵察兵だけがいます。偵察兵は中央の確保に数えられません。この状態で青のターンを終えると情報崩壊が1累積します。ボタンで実際にターンを進めましょう。', briefing: true, button: 'ターン終了で確認' },
     { scene: '情報崩壊', map: 'area2', title: '情報崩壊を確認', copy: '青の情報崩壊が増えました。エリア2に偵察兵以外の自軍コマがいない状態で自分のターンを終えるたびに1増え、累積15で敗北します。後から中央に戻っても累積値は消えません。', briefing: true },
-    { scene: '甲の種類', map: 'area1', title: '選べる甲は5種類', copy: '編成時に選べる甲は5種類です。\n千里眼: 好きな地点に視界を作る。\n暗殺者: 敵撃破後に後退する。\n戦姫: 自軍の撃破数で移動と視界が強化される。\n監視: 視界内の敵の移動を妨害する。\n弓兵: 離れた敵をスキルで攻撃する。\n移動・視界もそれぞれ異なります。詳しくはメニューの「甲の能力詳細」で確認できます。', briefing: true },
+    { scene: '甲の種類', map: 'area1', title: '甲の選択と解放', copy: '初期の甲は5種類です。\n千里眼: 好きな地点に視界を作る。\n暗殺者: 敵撃破後に後退する。\n戦姫: 自軍の撃破数で移動と視界が強化される。\n監視: 視界内の敵の移動を妨害する。\n弓兵: 離れた敵をスキルで攻撃する。\n天使: ショップで解放。味方を再行動可能にする。\n移動・視界もそれぞれ異なります。詳しくはメニューの「甲の能力詳細」で確認できます。', briefing: true },
     { scene: '核破壊', map: 'area3', title: '乙を選択', copy: '最後は敵の核を撃破します。敵陣にいる青の乙を選んでください。', row: 2, col: 6 },
     { scene: '核破壊', map: 'area3', title: '敵の核を破壊', copy: '光る核のマスを攻撃してください。核は3マスにまたがる1ユニットで、どのマスを撃破しても勝利します。', row: 0, col: 6 }
 ];
@@ -349,6 +351,7 @@ let matchHistoryCache = [];
 let matchHistoryLoadedForPlayerId = null;
 let matchHistoryRequestToken = 0;
 let shopRequestToken = 0;
+let ownedKohAbilities = new Set();
 let devTargetPlayer = null;
 let onlineProfileDetails = { 1: null, 2: null };
 let matchIntroActive = false;
@@ -1135,6 +1138,10 @@ async function loadShop() {
         if (requestToken !== shopRequestToken) return;
         const balance = Number(data.ticketBalance || 0);
         const owned = new Set((data.purchases || []).map(purchase => purchase.product_key));
+        ownedKohAbilities = new Set((data.purchases || [])
+            .filter(purchase => purchase.item_type === 'koh')
+            .map(purchase => purchase.item_key));
+        syncAbilitySelectOptions();
         const ownedList = document.getElementById('shop-owned-list');
         document.getElementById('shop-ticket-balance').textContent = authProfile ? String(balance) : '--';
         status.textContent = !authProfile
@@ -1176,6 +1183,8 @@ async function loadShop() {
         }
     } catch (error) {
         if (requestToken !== shopRequestToken) return;
+        ownedKohAbilities = new Set();
+        syncAbilitySelectOptions();
         status.textContent = `ショップの読み込みに失敗しました: ${error.message}`;
         grid.replaceChildren();
         document.getElementById('shop-owned-list').textContent = '取得できませんでした。';
@@ -1287,6 +1296,7 @@ function resetMatchRecording() {
     clairvoyanceZones = [];
     clairvoyanceZoneSerial = 0;
     clairvoyanceCooldownByPlayer = { 1: 0, 2: 0 };
+    angelBlessingCooldownByPlayer = { 1: 0, 2: 0 };
     playerKillCounts = { 1: 0, 2: 0 };
     informationCollapseTurns = { 1: 0, 2: 0 };
     resetDrawRequests();
@@ -2233,6 +2243,8 @@ async function loadMatchHistory({ force = false } = {}) {
 function applyAuthProfile(profile, token) {
     authProfile = profile || null;
     authSession = token ? { token } : null;
+    ownedKohAbilities = new Set();
+    syncAbilitySelectOptions();
     saveAuthSession();
     if (authProfile?.playerId) {
         try { window.localStorage.setItem(LAST_PLAYER_ID_STORAGE_KEY, authProfile.playerId); } catch {}
@@ -2309,6 +2321,8 @@ async function logoutAccount() {
     }
     authSession = null;
     authProfile = null;
+    ownedKohAbilities = new Set();
+    syncAbilitySelectOptions();
     setFormationSyncPending(false);
     loadSavedFormation();
     saveAuthSession();
@@ -2753,6 +2767,7 @@ class Unit {
                 '衛生兵': '【甲特有: 衛生兵 / パッシブ型】生存中、偵察兵の補充周期が7ターンになり上限が3になる。補充状況は甲の右上カウンターで確認できる。',
                 '監視': '【甲特有: 監視 / パッシブ】正方形視界2・直線移動1。視界内の敵移動-1。',
                 '弓兵': '【甲特有: 弓兵 / アクティブ・パッシブ】菱形移動2・菱形視界3。通常攻撃では撃破不可。移動前のみ、視界内かつ菱形距離3の敵を射撃できる。射撃は1アクションを消費し、使用後に行動済みを解除する。',
+                '天使': '【甲特有: 天使 / パッシブ・アクティブ】菱形移動2・菱形視界3。味方の敵撃破ごとに祝福のCT-2。同じエリアの味方1体の行動済みを解除する祝福はCT10。',
                 '迷彩': '【甲特有: 迷彩 / 発動型】使用後はマンハッタン視界1になり、動かない限り敵視界に出ない。',
                 '煙幕': '【甲特有: 煙幕 / 発動型】マンハッタン視界3。直線移動4＋周囲1。3×3の煙幕を設置し、煙幕内の敵味方を迷彩状態にする。',
                 '憑依': '【甲特有: 憑依 / 発動型】マンハッタン移動3・視界3。好きなコマの見た目に変えられる。敵撃破で元に戻り、再変更は10ターン後。',
@@ -2789,6 +2804,7 @@ class Unit {
             if (ability === '千里眼') r = 3;
             if (ability === '戦姫') r = 2 + getWarPrincessBonus(this.player);
             if (ability === '弓兵') r = 2;
+            if (ability === '天使') r = 2;
             if (ability === '歴戦王' && this.veteranMomentumPenalty) r = 2;
         }
         r -= getMonitorPenalty(this);
@@ -2816,6 +2832,7 @@ class Unit {
             if (ability === '千里眼') v = 3;
             if (ability === '戦姫') v = 2 + getWarPrincessBonus(this.player);
             if (ability === '弓兵') v = 3;
+            if (ability === '天使') v = 3;
             if (ability === '迷彩' && this.camouflaged) v = 1;
             if (getPlayerAbility(this.player) === '脳筋') {
                 v += Number(this.bruteVisionBonus || 0);
@@ -2982,6 +2999,7 @@ function getAbilityClassByName(ability) {
         '衛生兵': 'ability-medic',
         '監視': 'ability-watch',
         '弓兵': 'ability-archer',
+        '天使': 'ability-angel',
         '迷彩': 'ability-camouflage',
         '憑依': 'ability-possession',
         '儀式': 'ability-ritual',
@@ -3016,6 +3034,16 @@ function getSmokeCooldownRemaining(player) {
 
 function getClairvoyanceCooldownRemaining(player) {
     return Math.max(0, Number(clairvoyanceCooldownByPlayer[player] || 0));
+}
+
+function getAngelBlessingCooldownRemaining(player) {
+    return Math.max(0, Number(angelBlessingCooldownByPlayer[player] || 0));
+}
+
+function getAngelBlessingTargets(unit) {
+    if (!unit || unit.type !== 'koh' || getPlayerAbility(unit.player) !== '天使') return [];
+    return units.filter(target => target.player === unit.player && target.map === unit.map && target.type !== 'core')
+        .map(target => ({ row: target.row, col: target.col, type: 'ability' }));
 }
 
 function isCellInClairvoyanceZone(mapName, row, col) {
@@ -3219,10 +3247,11 @@ function getUnitMovementSummary(unit) {
 }
 
 function getAllAbilityOptions() {
-    return [...SELECTABLE_ABILITY_OPTIONS];
+    return [...SELECTABLE_ABILITY_OPTIONS, ...ALL_ABILITY_OPTIONS.filter(ability =>
+        !SELECTABLE_ABILITY_OPTIONS.includes(ability) && ownedKohAbilities.has(ability))];
 }
 
-function normalizeAbilityChoice(value, fallback = '千里眼', options = SELECTABLE_ABILITY_OPTIONS) {
+function normalizeAbilityChoice(value, fallback = '千里眼', options = ALL_ABILITY_OPTIONS) {
     if (options.includes(value)) return value;
     return options.includes(fallback) ? fallback : options[0];
 }
@@ -3246,7 +3275,7 @@ function syncAbilitySelectOptions() {
             select.id === 'p2-ability-choice' ? '監視' :
             select.id === 'online-ability-choice' ? '千里眼' :
             '千里眼';
-        select.value = normalizeAbilityChoice(currentValue, fallbackValue);
+        select.value = normalizeAbilityChoice(currentValue, fallbackValue, getAllAbilityOptions());
     });
 }
 
@@ -3328,6 +3357,7 @@ function serializeReplaySnapshot(label = null) {
         p1Ability,
         p2Ability,
         playerKillCounts: { ...playerKillCounts },
+        angelBlessingCooldownByPlayer: { ...angelBlessingCooldownByPlayer },
         informationCollapseTurns: { ...informationCollapseTurns },
         p1Vision: serializeReplayVision(p1Vision),
         p2Vision: serializeReplayVision(p2Vision),
@@ -3453,6 +3483,7 @@ function withReplayRenderState(snapshotState, callback) {
         p1Ability,
         p2Ability,
         playerKillCounts,
+        angelBlessingCooldownByPlayer,
         informationCollapseTurns,
         gameMode,
         mapSourceMode
@@ -3476,6 +3507,7 @@ function withReplayRenderState(snapshotState, callback) {
         1: Number(snapshotState.playerKillCounts?.[1] || 0),
         2: Number(snapshotState.playerKillCounts?.[2] || 0)
     };
+    angelBlessingCooldownByPlayer = { ...angelBlessingCooldownByPlayer, ...snapshotState.angelBlessingCooldownByPlayer };
     informationCollapseTurns = {
         1: Number(snapshotState.informationCollapseTurns?.[1] || 0),
         2: Number(snapshotState.informationCollapseTurns?.[2] || 0)
@@ -3504,6 +3536,7 @@ function withReplayRenderState(snapshotState, callback) {
         p1Ability = saved.p1Ability;
         p2Ability = saved.p2Ability;
         playerKillCounts = saved.playerKillCounts;
+        angelBlessingCooldownByPlayer = saved.angelBlessingCooldownByPlayer;
         informationCollapseTurns = saved.informationCollapseTurns;
         gameMode = saved.gameMode;
         mapSourceMode = saved.mapSourceMode;
@@ -4345,7 +4378,7 @@ function setupOnlineMode() {
 }
 
 function getOnlineAbilityChoice() {
-    return normalizeAbilityChoice(document.getElementById('online-ability-choice')?.value, '千里眼');
+    return normalizeAbilityChoice(document.getElementById('online-ability-choice')?.value, '千里眼', getAllAbilityOptions());
 }
 
 async function copyRoomCode() {
@@ -4584,6 +4617,7 @@ function prepareOnlineMatchPreview(seed = null, preparationDeadline = null) {
     clairvoyanceZones = [];
     clairvoyanceZoneSerial = 0;
     clairvoyanceCooldownByPlayer = { 1: 0, 2: 0 };
+    angelBlessingCooldownByPlayer = { 1: 0, 2: 0 };
     playerKillCounts = { 1: 0, 2: 0 };
     informationCollapseTurns = { 1: 0, 2: 0 };
     p1LastVision = { area1: new Set(), area2: new Set(), area3: new Set() };
@@ -4653,6 +4687,20 @@ function startOnlineBattle() {
 }
 
 function handleOnlineMessage(message) {
+    if (message.kind === 'ability_rejected') {
+        if (localPlayer) {
+            onlineReadyState[localPlayer] = false;
+            onlineAbilityChoices[localPlayer] = null;
+        }
+        setMatchmakingStatus(message.reason === 'selection_mismatch'
+            ? '甲の選択が対戦準備と一致しません。もう一度READYしてください。'
+            : message.reason === 'verification_failed'
+                ? '甲の所有確認に失敗しました。接続を確認して再度READYしてください。'
+                : 'この甲は未交換です。ショップで交換してから選択してください。', 'warning');
+        updateReadyButton();
+        updateOnlineStartAvailability();
+        return;
+    }
     if (message.kind === 'hello') {
         if (message.snapshot?.ended) {
             activePhase = 'setup';
@@ -5243,6 +5291,7 @@ function startGame(config = null, fromOnline = false) {
     clairvoyanceZones = [];
     clairvoyanceZoneSerial = 0;
     clairvoyanceCooldownByPlayer = { 1: 0, 2: 0 };
+    angelBlessingCooldownByPlayer = { 1: 0, 2: 0 };
     resetDrawRequests();
     playerKillCounts = { 1: 0, 2: 0 };
     informationCollapseTurns = { 1: 0, 2: 0 };
@@ -5975,6 +6024,11 @@ function captureUnit(victim, attackerPlayer) {
     if ((attackerPlayer === 1 || attackerPlayer === 2) && victim.player !== attackerPlayer) {
         const previousKills = getPlayerKillCount(attackerPlayer);
         playerKillCounts[attackerPlayer] = previousKills + 1;
+        if (getPlayerAbility(attackerPlayer) === '天使' && getKohUnit(attackerPlayer)) {
+            const before = getAngelBlessingCooldownRemaining(attackerPlayer);
+            angelBlessingCooldownByPlayer[attackerPlayer] = Math.max(0, before - 2);
+            if (before > 0) addConsoleLog(`ABILITY: クイック - 味方の撃破で祝福のCTを${before - angelBlessingCooldownByPlayer[attackerPlayer]}短縮。`, 'ability');
+        }
         const previousBonus = previousKills >= 10 ? 2 : previousKills >= 5 ? 1 : 0;
         const nextBonus = getWarPrincessBonus(attackerPlayer);
         if (getPlayerAbility(attackerPlayer) === '戦姫' && nextBonus > previousBonus) {
@@ -6922,7 +6976,8 @@ function showUnitPreview(unit, previewLabel = 'ENEMY PREVIEW') {
 
 function canUseAbilityWhileActed(unit) {
     if (!unit || unit.type !== 'koh') return false;
-    return getPlayerAbility(unit.player) === '千里眼' && getClairvoyanceCooldownRemaining(unit.player) <= 0;
+    return (getPlayerAbility(unit.player) === '千里眼' && getClairvoyanceCooldownRemaining(unit.player) <= 0) ||
+        (getPlayerAbility(unit.player) === '天使' && getAngelBlessingCooldownRemaining(unit.player) <= 0);
 }
 
 function selectUnit(unit) {
@@ -6961,6 +7016,10 @@ function selectUnit(unit) {
     if (unit.type === 'koh') {
         abilityBtn.classList.remove('hidden');
         if (abilityName === '千里眼') abilityBtn.textContent = clairvoyanceCooldown > 0 ? `ホークアイ CD ${clairvoyanceCooldown}` : '範囲指定: ホークアイ';
+        else if (abilityName === '天使') {
+            const cooldown = getAngelBlessingCooldownRemaining(unit.player);
+            abilityBtn.textContent = cooldown > 0 ? `祝福 CD ${cooldown}` : '対象選択: 祝福';
+        }
         else if (abilityName === '弓兵') abilityBtn.textContent = '射撃対象を選択';
         else if (abilityName === '煙幕') abilityBtn.textContent = smokeCooldown > 0 ? `煙幕 CD ${smokeCooldown}` : `即時発動: ${abilityName}`;
         else if (abilityName === '鼓舞') abilityBtn.textContent = `パッシブ: ${abilityName}`;
@@ -7022,6 +7081,16 @@ function selectActionType(type) {
                         return;
                     }
                     placements.forEach(target => {
+                        const el = document.querySelector(`.cell[data-row="${target.row}"][data-col="${target.col}"]`);
+                        if (el) el.classList.add('highlight-ability');
+                    });
+                } else if (abilityName === '天使') {
+                    const cooldown = getAngelBlessingCooldownRemaining(selectedUnit.player);
+                    if (cooldown > 0) {
+                        showStatusAlert(`祝福はあと ${cooldown} ターン使用できません。`, 'warning', 2400);
+                        return;
+                    }
+                    getAngelBlessingTargets(selectedUnit).forEach(target => {
                         const el = document.querySelector(`.cell[data-row="${target.row}"][data-col="${target.col}"]`);
                         if (el) el.classList.add('highlight-ability');
                     });
@@ -7254,7 +7323,26 @@ function executeAbility(unit, destRow, destCol, actionMeta = {}) {
     if (unit.type === 'koh') {
         const abilityName = getPlayerAbility(unit.player);
 
-        if (abilityName === '弓兵') {
+        if (abilityName === '天使') {
+            if (getAngelBlessingCooldownRemaining(unit.player) > 0) {
+                addConsoleLog('ERROR: 祝福はまだ再使用できません。', 'warning');
+                return;
+            }
+            const valid = getAngelBlessingTargets(unit).some(target => target.row === destRow && target.col === destCol);
+            const target = valid ? boards[map]?.[destRow]?.[destCol]?.unit : null;
+            if (!target || target.player !== unit.player || target.type === 'core') {
+                addConsoleLog('ERROR: 同じエリアの味方を選択してください。', 'warning');
+                return;
+            }
+            actedUnitIds.delete(target.id);
+            angelBlessingCooldownByPlayer[unit.player] = ANGEL_BLESSING_COOLDOWN_TURNS;
+            addConsoleLog(`ABILITY: 祝福 - ${target.name} の行動済み状態を解除。`, 'ability');
+            if (!shouldHideAiActionFeedback(unit.player)) playMoveSfx();
+            recordMatchReplayEvent({ kind: 'action', action: { type: 'ability', unitId: unit.id, row: destRow, col: destCol } });
+            sendOnlineMessage({ kind: 'action', action: { type: 'ability', unitId: unit.id, row: destRow, col: destCol } });
+            consumeTurnWithoutMarkingActed(unit);
+            return;
+        } else if (abilityName === '弓兵') {
             if (unit.archerMovedThisTurn) {
                 addConsoleLog('ERROR: 弓兵は移動後に射撃できません。', 'warning');
                 return;
@@ -7581,6 +7669,9 @@ function endTurn() {
     if (clairvoyanceCooldownByPlayer[currentPlayer] > 0) {
         clairvoyanceCooldownByPlayer[currentPlayer]--;
     }
+    if (angelBlessingCooldownByPlayer[currentPlayer] > 0) {
+        angelBlessingCooldownByPlayer[currentPlayer]--;
+    }
     pruneExpiredSmokeZones();
     pruneExpiredClairvoyanceZones();
     updateFlagCarrierSurvival(currentPlayer);
@@ -7875,6 +7966,7 @@ function resetToSetup(fromOnline = false) {
     clairvoyanceZones = [];
     clairvoyanceZoneSerial = 0;
     clairvoyanceCooldownByPlayer = { 1: 0, 2: 0 };
+    angelBlessingCooldownByPlayer = { 1: 0, 2: 0 };
     playerKillCounts = { 1: 0, 2: 0 };
     informationCollapseTurns = { 1: 0, 2: 0 };
     playerTurnsStarted = { 1: 0, 2: 0 };
@@ -8124,6 +8216,14 @@ function executeAITurn() {
                     bestScore = score;
                     bestAction = { type: 'ability', unit: u, action: '千里眼', row: u.row, col: u.col };
                 }
+            } else if (aiAbility === '天使' && getAngelBlessingCooldownRemaining(2) === 0) {
+                const target = getAngelBlessingTargets(u)
+                    .map(candidate => boards[map][candidate.row][candidate.col].unit)
+                    .find(ally => ally && ally.id !== u.id && actedUnitIds.has(ally.id));
+                if (target && 450 > bestScore) {
+                    bestScore = 450;
+                    bestAction = { type: 'ability', unit: u, action: '天使', row: target.row, col: target.col };
+                }
             }
         }
     });
@@ -8141,7 +8241,7 @@ function executeAITurn() {
                     executeAbility(bestAction.unit, null, null, bestAction);
                 } else if (bestAction.action === '煙幕') {
                     executeAbility(bestAction.unit, bestAction.row ?? bestAction.unit.row, bestAction.col ?? bestAction.unit.col);
-                } else if (bestAction.action === '千里眼' || bestAction.action === '弓兵') {
+                } else if (bestAction.action === '千里眼' || bestAction.action === '弓兵' || bestAction.action === '天使') {
                     executeAbility(bestAction.unit, bestAction.row ?? bestAction.unit.row, bestAction.col ?? bestAction.unit.col);
                 }
             }

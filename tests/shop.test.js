@@ -6,7 +6,8 @@ const { findClaimableReward } = require('../level-pass');
 const { KOH_TICKET, getShopProducts, findPurchasableProduct, calculateTicketBalance } = require('../shop-catalog');
 
 assert.equal(findPurchasableProduct('not_available'), null);
-assert.equal(getShopProducts()[0].status, 'planned');
+assert.equal(getShopProducts()[0].status, 'active');
+assert.equal(findPurchasableProduct('koh_angel').itemKey, '天使');
 assert.equal(findClaimableReward('koh_ticket_lv5').type, KOH_TICKET);
 
 const store = createSqliteStore();
@@ -20,9 +21,7 @@ assert.equal(store.claimLevelPassReward(playerId, ticketReward).ok, true);
 assert.equal(store.claimLevelPassReward(playerId, ticketReward).ok, true);
 assert.equal(calculateTicketBalance(store.getLevelPassUnlocks(playerId), store.getShopPurchases(playerId)), 1);
 
-const futureKoh = {
-  key: 'future_koh_test', type: 'koh', itemKey: 'future_koh_test', currency: KOH_TICKET, price: 1
-};
+const futureKoh = findPurchasableProduct('koh_angel');
 const first = store.redeemShopProduct(playerId, futureKoh);
 assert.equal(first.ok, true);
 assert.equal(first.remaining, 0);

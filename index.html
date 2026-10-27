@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Share+Tech+Mono&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=shop-1">
+    <link rel="stylesheet" href="style.css?v=angel-1">
 </head>
 <body>
     <div id="app-container">
@@ -374,7 +374,7 @@
                         <summary>甲の能力詳細</summary>
                         <div class="account-group-body ability-guide-body">
                             <div class="ability-guide-toolbar">
-                                <span>ABILITY INDEX <strong id="ability-guide-position">01 / 05</strong></span>
+                                <span>ABILITY INDEX <strong id="ability-guide-position">01 / 06</strong></span>
                                 <div class="ability-guide-controls">
                                     <button id="ability-guide-prev" type="button" aria-label="前の能力">‹</button>
                                     <button id="ability-guide-next" type="button" aria-label="次の能力">›</button>
@@ -441,6 +441,19 @@
                                     <p>通常攻撃では敵を撃破できない。視界内で菱形距離3の敵を射撃する。CTなし。1アクションを消費し、射撃後は行動済みを解除する。移動後や行動済みでは使用不可。</p>
                                     <figure class="ability-skill-figure"><div class="ability-range-grid skill" data-shape="ring" data-radius="3"></div><figcaption>射撃対象｜菱形距離 3 のマス</figcaption></figure>
                                 </article>
+                                <article class="ability-detail-card">
+                                    <div class="ability-card-index">06 / ACTIVE + PASSIVE / SHOP</div>
+                                    <h4>天使</h4>
+                                    <div class="ability-range-pair">
+                                        <figure><div class="ability-range-grid move" data-shape="diamond" data-radius="2"></div><figcaption>移動｜菱形 2</figcaption></figure>
+                                        <figure><div class="ability-range-grid vision" data-shape="diamond" data-radius="3"></div><figcaption>視界｜菱形 3</figcaption></figure>
+                                    </div>
+                                    <div class="ability-skill-heading">PASSIVE <span>クイック</span></div>
+                                    <p>味方が敵を撃破するたび、祝福の残りクールタイムを2短縮する。</p>
+                                    <div class="ability-skill-heading">SKILL <span>祝福</span></div>
+                                    <p>同じエリアの味方1体を選び、行動済み状態を解除する。CT10ターン。</p>
+                                    <div class="ability-effect-note">同じエリアの味方から対象を選択</div>
+                                </article>
                             </div>
                             <div class="ability-guide-hint">図は障害物のない盤面での基本範囲。横にスワイプして切り替え</div>
                         </div>
@@ -479,7 +492,7 @@
                 <div><span class="workspace-kicker">EXCHANGE / SECTOR-8</span><h2>ショップ</h2></div>
                 <button id="shop-refresh" class="neon-btn secondary" type="button">REFRESH</button>
             </div>
-            <p class="workspace-copy">甲引換券で、今後追加される甲を解放できます。既存の甲5種類は引き続き無料で使用できます。</p>
+            <p class="workspace-copy">甲引換券で天使を解放できます。既存の甲5種類は引き続き無料で使用できます。</p>
             <div class="shop-wallet"><span>所持 / 甲引換券</span><strong id="shop-ticket-balance">--</strong><small>Lv5のレベルパス報酬から入手</small></div>
             <div id="shop-status" class="level-pass-status" role="status">読み込み中...</div>
             <div id="shop-grid" class="shop-grid" aria-label="ショップの商品"></div>
@@ -1003,6 +1016,6 @@
     <script src="sector8-map4.js?v=1"></script>
     <script src="sector8-map5.js?v=1"></script>
     <script src="sector8-map6.js?v=1"></script>
-    <script src="app.js?v=shop-1"></script>
+    <script src="app.js?v=angel-1"></script>
 </body>
 </html>

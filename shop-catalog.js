@@ -1,20 +1,15 @@
 const KOH_TICKET = 'koh_ticket';
 
-// New products go here after their game behavior is implemented. Existing Koh stay free.
-const ACTIVE_PRODUCTS = Object.freeze([]);
-
-const PLANNED_PRODUCTS = Object.freeze([
+// Existing Koh stay free; new Koh are unlocked through ticket redemption.
+const ACTIVE_PRODUCTS = Object.freeze([
   Object.freeze({
-    key: null,
-    type: 'koh',
-    itemKey: null,
-    name: '新たな甲',
-    description: '新しい甲が追加されたら、甲引換券で交換できます。',
-    currency: KOH_TICKET,
-    price: 1,
-    status: 'planned'
+    key: 'koh_angel', type: 'koh', itemKey: '天使', name: '天使',
+    description: '菱形移動2・視界3。クイックで祝福のCTを短縮し、味方を再行動可能にする。',
+    currency: KOH_TICKET, price: 1
   })
 ]);
+
+const PLANNED_PRODUCTS = Object.freeze([]);
 
 function getShopProducts() {
   return [

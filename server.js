@@ -25,6 +25,7 @@ const port = Number(process.env.PORT || 8787);
 const MAX_SPECTATORS = 2;
 const gunzip = promisify(zlib.gunzip);
 const accountStore = createStore();
+const FREE_KOH_ABILITIES = new Set(['千里眼', '暗殺者', '戦姫', '監視', '弓兵']);
 
 const rooms = new Map();
 const clients = new Map();
@@ -56,6 +57,7 @@ function createRoom(roomId, random = false) {
         history: [],
         profiles: { 1: null, 2: null },
         profileDetails: { 1: null, 2: null },
+        abilityChoices: { 1: null, 2: null },
         seats: {
             1: { socket: null, token: crypto.randomUUID() },
             2: { socket: null, token: crypto.randomUUID() }
@@ -352,6 +354,10 @@ function joinRandomRoom(socket, token, matchTier = 'rank') {
 }
 
 function trackRoomState(room, message, senderInfo) {
+    if (message.kind === 'ability_choice') {
+        room.abilityChoices[senderInfo.player] = message.ability;
+        return;
+    }
     if (message.kind === 'start') {
         room.started = true;
         room.ended = false;
@@ -365,6 +371,7 @@ function trackRoomState(room, message, senderInfo) {
         room.ended = false;
         room.startConfig = null;
         room.history = [];
+        room.abilityChoices = { 1: null, 2: null };
         return;
     }
     if (message.kind === 'profile' && senderInfo.player) {
@@ -384,6 +391,16 @@ function trackRoomState(room, message, senderInfo) {
             room.ended = true;
         }
     }
+}
+
+async function canSelectKohAbility(info, ability, store = accountStore) {
+    if (FREE_KOH_ABILITIES.has(ability)) return true;
+    const product = getShopProducts().find(entry => entry.status === 'active' && entry.type === 'koh' && entry.itemKey === ability);
+    if (!product || !info?.authToken) return false;
+    const session = await store.restoreSession(info.authToken);
+    if (!session.ok) return false;
+    const purchases = await store.getShopPurchases(session.profile.id);
+    return purchases.some(purchase => purchase.product_key === product.key && purchase.item_key === ability);
 }
 
 const FORMATION_UNITS = {
@@ -907,6 +924,7 @@ server.on('upgrade', (req, socket) => {
     }
 
     let buf = Buffer.alloc(0);
+    let pendingMessages = Promise.resolve();
     socket.on('data', (chunk) => {
         buf = Buffer.concat([buf, chunk]);
         let parsed = readFrame(buf);
@@ -916,9 +934,32 @@ server.on('upgrade', (req, socket) => {
             if (message && message.close) { socket.destroy(); return; }
             if (message && message.ping) sendPong(socket, message.payload);
             else if (message && !message.ignored) {
-                const senderInfo = clients.get(socket);
-                if (senderInfo) trackRoomState(room, message, senderInfo);
-                broadcast(socket, message, room.id);
+                pendingMessages = pendingMessages.then(async () => {
+                    const senderInfo = clients.get(socket);
+                    if (!senderInfo) return;
+                    if (senderInfo.role === 'spectator') {
+                        if (message.kind === 'chat' || message.kind === 'keepalive') broadcast(socket, message, room.id);
+                        return;
+                    }
+                    if (senderInfo.role !== 'player' || !senderInfo.player) return;
+                    message.player = senderInfo.player;
+                    if (message.kind === 'ability_choice' && !await canSelectKohAbility(senderInfo, message.ability)) {
+                        sendFrame(socket, { kind: 'ability_rejected', ability: message.ability });
+                        return;
+                    }
+                    if (message.kind === 'start') {
+                        const choices = room.abilityChoices;
+                        if (senderInfo.player !== 1 || message.config?.p1Ability !== choices[1] || message.config?.p2Ability !== choices[2]) {
+                            sendFrame(socket, { kind: 'ability_rejected', reason: 'selection_mismatch' });
+                            return;
+                        }
+                    }
+                    trackRoomState(room, message, senderInfo);
+                    broadcast(socket, message, room.id);
+                }).catch(error => {
+                    console.error('WebSocket message rejected:', error);
+                    sendFrame(socket, { kind: 'ability_rejected', reason: 'verification_failed' });
+                });
             }
             parsed = readFrame(buf);
         }
@@ -957,3 +998,4 @@ if (require.main === module) {
 }
 
 module.exports = server;
+module.exports.canSelectKohAbility = canSelectKohAbility;
