@@ -9,7 +9,7 @@ const ACTIVE_PRODUCTS = Object.freeze([
   }),
   Object.freeze({
     key: 'koh_stealth', type: 'koh', itemKey: '隠密', name: '隠密',
-    description: '直線移動3・菱形視界3。3ターン静止すると透明化し、敵の視界と進路を通す。',
+    description: '直線移動3・菱形視界3。2ターン静止すると透明化し、敵の視界と進路を通す。',
     currency: KOH_TICKET, price: 1
   })
 ]);

@@ -70,7 +70,7 @@ const ALL_ABILITY_OPTIONS = ['千里眼', '暗殺者', '戦姫', '監視', '弓�
 const SELECTABLE_ABILITY_OPTIONS = ['千里眼', '暗殺者', '戦姫', '監視', '弓兵'];
 const CLAIRVOYANCE_COOLDOWN_TURNS = 3;
 const ANGEL_BLESSING_COOLDOWN_TURNS = 10;
-const STEALTH_STILL_TURNS = 3;
+const STEALTH_STILL_TURNS = 2;
 const CLAIRVOYANCE_DURATION_TURNS = 3;
 const WAR_PRINCESS_SCOUT_BONUS_LIMIT = 4;
 const IMPERSONATION_CHOICES = ['core', 'otsu', 'hei', 'tei', 'scout', ...ALL_ABILITY_OPTIONS];
@@ -2774,7 +2774,7 @@ class Unit {
                 '監視': '【甲特有: 監視 / パッシブ】正方形視界2・直線移動1。視界内の敵移動-1。',
                 '弓兵': '【甲特有: 弓兵 / アクティブ・パッシブ】菱形移動2・菱形視界3。通常攻撃では撃破不可。移動前のみ、視界内かつ菱形距離3の敵を射撃できる。射撃は1アクションを消費し、使用後に行動済みを解除する。',
                 '天使': '【甲特有: 天使 / パッシブ・アクティブ】菱形移動2・菱形視界3。味方の敵撃破ごとに祝福のCT-2。同じエリアの味方1体の行動済みを解除する祝福はCT10。',
-                '隠密': '【甲特有: 隠密 / パッシブ】直線移動3・菱形視界3。自分のターンを3回移動せず終えると透明化。敵が上下左右1マスに近づくと発見される。移動で解除。透明化中も味方に視界を提供する。',
+                '隠密': '【甲特有: 隠密 / パッシブ】直線移動3・菱形視界3。自分のターンを2回移動せず終えると透明化。敵が上下左右1マスに近づくと発見される。移動で解除。透明化中も味方に視界を提供する。',
                 '迷彩': '【甲特有: 迷彩 / 発動型】使用後はマンハッタン視界1になり、動かない限り敵視界に出ない。',
                 '煙幕': '【甲特有: 煙幕 / 発動型】マンハッタン視界3。直線移動4＋周囲1。3×3の煙幕を設置し、煙幕内の敵味方を迷彩状態にする。',
                 '憑依': '【甲特有: 憑依 / 発動型】マンハッタン移動3・視界3。好きなコマの見た目に変えられる。敵撃破で元に戻り、再変更は10ターン後。',
@@ -6297,7 +6297,7 @@ function updateStealthAtTurnEnd(player) {
         unit.stealthStillTurns = Math.min(STEALTH_STILL_TURNS, unit.stealthStillTurns + 1);
         if (unit.stealthStillTurns === STEALTH_STILL_TURNS) {
             unit.stealthInvisible = true;
-            addConsoleLog(`ABILITY: 透明 - ${unit.name} が3ターン静止して姿を消しました。`, 'ability');
+            addConsoleLog(`ABILITY: 透明 - ${unit.name} が${STEALTH_STILL_TURNS}ターン静止して姿を消しました。`, 'ability');
         }
     });
 }
@@ -6497,7 +6497,7 @@ function renderBoard(options = {}) {
                             if (u.stealthInvisible) unitEl.classList.add('stealth-invisible');
                             const stealthCounter = document.createElement('span');
                             stealthCounter.className = 'stealth-counter';
-                            stealthCounter.textContent = u.stealthInvisible ? '透明' : `${u.stealthStillTurns}/3`;
+                            stealthCounter.textContent = u.stealthInvisible ? '透明' : `${u.stealthStillTurns}/${STEALTH_STILL_TURNS}`;
                             unitEl.appendChild(stealthCounter);
                         }
                     }

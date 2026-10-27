@@ -39,7 +39,7 @@ assert.equal(vm.runInContext('stealth.getMovementRange()', context), 3);
 assert.equal(vm.runInContext('stealth.getEffectiveMoveType()', context), 'straight');
 assert.equal(vm.runInContext('stealth.getVisionRange()', context), 3);
 assert.equal(vm.runInContext('getUnitVisionCells(stealth).has("5,7")', context), true);
-vm.runInContext('updateStealthAtTurnEnd(1); updateStealthAtTurnEnd(1)', context);
+vm.runInContext('updateStealthAtTurnEnd(1)', context);
 assert.equal(vm.runInContext('stealth.stealthInvisible', context), false);
 vm.runInContext('updateStealthAtTurnEnd(1)', context);
 assert.equal(vm.runInContext('stealth.stealthInvisible', context), true);
@@ -65,7 +65,9 @@ assert.equal(vm.runInContext('stealth.stealthInvisible', context), false, 'movem
 assert.equal(vm.runInContext('stealth.stealthStillTurns', context), 0);
 vm.runInContext('updateStealthAtTurnEnd(1)', context);
 assert.equal(vm.runInContext('stealth.stealthStillTurns', context), 0, 'moving turn does not count as stationary');
-vm.runInContext('updateStealthAtTurnEnd(1); updateStealthAtTurnEnd(1); updateStealthAtTurnEnd(1)', context);
+vm.runInContext('updateStealthAtTurnEnd(1)', context);
+assert.equal(vm.runInContext('stealth.stealthInvisible', context), false);
+vm.runInContext('updateStealthAtTurnEnd(1)', context);
 assert.equal(vm.runInContext('stealth.stealthInvisible', context), true);
 
 vm.runInContext('executeMove(attacker, 5, 6)', context);
