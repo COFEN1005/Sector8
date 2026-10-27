@@ -1075,6 +1075,19 @@ function advanceTutorialAfterMove(unit, destRow, destCol) {
     }
 }
 
+function scrollLevelPassToLevel(level) {
+    const grid = document.getElementById('level-pass-grid');
+    const card = grid?.querySelector(`[data-level="${level}"]`);
+    if (!card) return;
+    const left = grid.scrollLeft + card.getBoundingClientRect().left - grid.getBoundingClientRect().left - 7;
+    grid.scrollTo({ left, behavior: 'smooth' });
+}
+
+function scrollLevelPassBy(direction) {
+    const grid = document.getElementById('level-pass-grid');
+    grid?.scrollBy({ left: direction * Math.max(180, grid.clientWidth * 0.8), behavior: 'smooth' });
+}
+
 async function loadLevelPass() {
     const status = document.getElementById('level-pass-status');
     const grid = document.getElementById('level-pass-grid');
@@ -1084,9 +1097,12 @@ async function loadLevelPass() {
         const data = await apiRequest('/api/level-pass');
         const currentLevel = Number(data.profile?.level || 0);
         const claimed = new Set((data.unlocks || []).map(item => item.reward_key));
+        const owner = String(data.profile?.id || 'guest');
+        const previousScrollLeft = grid.dataset.owner === owner ? grid.scrollLeft : null;
+        const visibleRewardKeys = new Set((data.levels || []).map(entry => entry.reward.key).filter(Boolean));
         document.getElementById('level-pass-current-level').textContent = currentLevel ? `LV ${currentLevel}` : 'GUEST';
         document.getElementById('level-pass-exp').textContent = data.profile ? `${data.profile.exp || 0} / 100 EXP` : '--';
-        document.getElementById('level-pass-claimed').textContent = String(claimed.size);
+        document.getElementById('level-pass-claimed').textContent = String([...claimed].filter(key => visibleRewardKeys.has(key)).length);
         status.textContent = data.profile
             ? `Lv${currentLevel}まで到達。報酬を受け取るとアカウントに保存されます。`
             : 'ログインすると進行状況と受取記録が表示されます。';
@@ -1096,7 +1112,8 @@ async function loadLevelPass() {
             const received = Boolean(reward.key && claimed.has(reward.key));
             const reached = currentLevel >= entry.level;
             const card = document.createElement('article');
-            card.className = `level-pass-card ${reached ? 'reached' : 'locked'} ${reward.status === 'planned' ? 'planned' : ''}`;
+            card.className = `level-pass-card ${reached ? 'reached' : 'locked'} ${reward.status === 'planned' ? 'planned' : ''} ${reward.type === 'koh_ticket' ? 'ticket' : ''} ${received ? 'received' : ''}`;
+            card.dataset.level = String(entry.level);
             const level = document.createElement('span');
             level.className = 'level-pass-card-level';
             level.textContent = `LEVEL ${String(entry.level).padStart(2, '0')}`;
@@ -1118,6 +1135,15 @@ async function loadLevelPass() {
                 card.append(button);
             }
             grid.append(card);
+        }
+        grid.dataset.owner = owner;
+        grid.dataset.currentLevel = String(currentLevel || 1);
+        if (previousScrollLeft !== null) {
+            grid.scrollLeft = previousScrollLeft;
+        } else {
+            const firstClaimable = (data.levels || []).find(entry =>
+                entry.reward.status === 'active' && entry.level <= currentLevel && !claimed.has(entry.reward.key));
+            requestAnimationFrame(() => scrollLevelPassToLevel(firstClaimable?.level || currentLevel || 1));
         }
     } catch (error) {
         status.textContent = `読み込みに失敗しました: ${error.message}`;
@@ -3720,6 +3746,22 @@ function setupUIEventListeners() {
     document.getElementById('nav-shop')?.addEventListener('click', () => setWorkspaceView('shop'));
     document.getElementById('nav-options')?.addEventListener('click', () => setWorkspaceView('options'));
     document.getElementById('level-pass-refresh')?.addEventListener('click', loadLevelPass);
+    document.getElementById('level-pass-prev')?.addEventListener('click', () => scrollLevelPassBy(-1));
+    document.getElementById('level-pass-next')?.addEventListener('click', () => scrollLevelPassBy(1));
+    document.getElementById('level-pass-current')?.addEventListener('click', () => {
+        const level = Number(document.getElementById('level-pass-grid')?.dataset.currentLevel || 1);
+        scrollLevelPassToLevel(level);
+    });
+    document.getElementById('level-pass-grid')?.addEventListener('wheel', event => {
+        const grid = event.currentTarget;
+        if (event.ctrlKey || event.shiftKey || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
+        const canScroll = event.deltaY > 0
+            ? grid.scrollLeft < grid.scrollWidth - grid.clientWidth - 1
+            : grid.scrollLeft > 0;
+        if (!canScroll) return;
+        grid.scrollLeft += event.deltaY;
+        event.preventDefault();
+    }, { passive: false });
     document.getElementById('shop-refresh')?.addEventListener('click', loadShop);
     document.getElementById('shop-grid')?.addEventListener('click', event => {
         const button = event.target.closest('[data-product-key]');

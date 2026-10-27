@@ -1,50 +1,17 @@
 const INITIAL_LEVEL_PASS_MAX = 50;
 
-// Add reward definitions here without changing the progression or claim schema.
-const ACTIVE_REWARDS = Object.freeze({
-  1: Object.freeze({
-    key: 'signal_vanguard',
-    type: 'title',
-    name: '先行信号',
-    description: 'レベルパス開始記念の称号。装備機能は今後追加予定。'
-  }),
-  5: Object.freeze({
-    key: 'koh_ticket_lv5',
-    type: 'koh_ticket',
-    name: '甲引換券 x1',
-    description: 'ショップで新たな甲との交換に使用できます。'
-  }),
-  10: Object.freeze({
-    key: 'koh_ticket_lv10',
-    type: 'koh_ticket',
-    name: '甲引換券 x1',
-    description: 'ショップで新たな甲との交換に使用できます。'
-  }),
-  15: Object.freeze({
-    key: 'koh_ticket_lv15',
-    type: 'koh_ticket',
-    name: '甲引換券 x1',
-    description: 'ショップで新たな甲との交換に使用できます。'
-  })
-});
-
-const MILESTONE_TYPES = Object.freeze({
-  5: 'koh', 10: 'bgm', 15: 'bonus', 20: 'koh', 25: 'bgm',
-  30: 'bonus', 35: 'koh', 40: 'bgm', 45: 'bonus', 50: 'koh'
-});
-
-const PLACEHOLDER_LABELS = Object.freeze({
-  koh: '甲アンロック枠',
-  bgm: 'BGMアンロック枠',
-  bonus: '報酬枠',
-  standard: '報酬枠'
-});
-
 function getLevelPassReward(level) {
-  const active = ACTIVE_REWARDS[level];
-  if (active) return { ...active, level, status: 'active' };
-  const type = MILESTONE_TYPES[level] || 'standard';
-  return { key: null, type, name: PLACEHOLDER_LABELS[type], level, status: 'planned' };
+  if (level === 1 || level % 5 === 0) {
+    return {
+      key: `koh_ticket_lv${level}`,
+      type: 'koh_ticket',
+      name: '甲引換券 x1',
+      description: 'ショップで新たな甲との交換に使用できます。',
+      level,
+      status: 'active'
+    };
+  }
+  return { key: null, type: 'standard', name: '報酬枠', level, status: 'planned' };
 }
 
 function getLevelPassLevels(maxLevel = INITIAL_LEVEL_PASS_MAX) {

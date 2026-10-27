@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Share+Tech+Mono&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=decoy-1">
+    <link rel="stylesheet" href="style.css?v=level-pass-1">
 </head>
 <body>
     <div id="app-container">
@@ -511,14 +511,22 @@
                 <div><span class="workspace-kicker">PROGRESSION / SECTOR-8</span><h2>レベルパス</h2></div>
                 <button id="level-pass-refresh" class="neon-btn secondary" type="button">REFRESH</button>
             </div>
-            <p class="workspace-copy">対戦で得たEXPに応じて解放。Lv50までの報酬枠を公開中です。甲・BGMなどの未実装報酬は準備中と表示されます。</p>
+            <p class="workspace-copy">対戦で得たEXPに応じて解放。Lv1と以降5レベルごとに甲引換券を受け取れます。</p>
             <div class="level-pass-overview">
                 <div><span class="level-pass-overview-label">CURRENT LEVEL</span><strong id="level-pass-current-level">--</strong></div>
                 <div><span class="level-pass-overview-label">NEXT LEVEL</span><strong id="level-pass-exp">--</strong></div>
                 <div><span class="level-pass-overview-label">CLAIMED</span><strong id="level-pass-claimed">0</strong></div>
             </div>
             <div id="level-pass-status" class="level-pass-status" role="status">読み込み中...</div>
-            <div id="level-pass-grid" class="level-pass-grid" aria-label="レベルパス報酬一覧"></div>
+            <div class="level-pass-rail-heading">
+                <span>REWARD TRACK <small>横にスクロールして報酬を確認</small></span>
+                <div class="level-pass-rail-controls">
+                    <button id="level-pass-prev" type="button" aria-label="前の報酬へ">←</button>
+                    <button id="level-pass-current" type="button">現在のレベルへ</button>
+                    <button id="level-pass-next" type="button" aria-label="次の報酬へ">→</button>
+                </div>
+            </div>
+            <div id="level-pass-grid" class="level-pass-grid" role="region" tabindex="0" aria-label="レベルパス報酬一覧。横にスクロールできます"></div>
         </section>
 
         <section id="shop-screen" class="workspace-screen shop-screen hidden">
@@ -527,7 +535,7 @@
                 <button id="shop-refresh" class="neon-btn secondary" type="button">REFRESH</button>
             </div>
             <p class="workspace-copy">甲引換券で天使・隠密・偽物を解放できます。既存の甲5種類は引き続き無料で使用できます。</p>
-            <div class="shop-wallet"><span>所持 / 甲引換券</span><strong id="shop-ticket-balance">--</strong><small>Lv5・Lv10・Lv15のレベルパス報酬から入手</small></div>
+            <div class="shop-wallet"><span>所持 / 甲引換券</span><strong id="shop-ticket-balance">--</strong><small>Lv1と以降5レベルごとのレベルパス報酬</small></div>
             <div id="shop-status" class="level-pass-status" role="status">読み込み中...</div>
             <div id="shop-grid" class="shop-grid" aria-label="ショップの商品"></div>
             <div class="shop-owned"><h3>交換済み</h3><div id="shop-owned-list">まだ交換した商品はありません。</div></div>
@@ -1050,6 +1058,6 @@
     <script src="sector8-map4.js?v=1"></script>
     <script src="sector8-map5.js?v=1"></script>
     <script src="sector8-map6.js?v=1"></script>
-    <script src="app.js?v=decoy-1"></script>
+    <script src="app.js?v=level-pass-1"></script>
 </body>
 </html>

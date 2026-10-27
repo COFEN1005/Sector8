@@ -11,6 +11,7 @@ assert.equal(findPurchasableProduct('koh_angel').itemKey, '天使');
 assert.equal(findPurchasableProduct('koh_stealth').itemKey, '隠密');
 assert.equal(findPurchasableProduct('koh_decoy').itemKey, '偽物');
 assert.equal(findClaimableReward('koh_ticket_lv5').type, KOH_TICKET);
+assert.equal(findClaimableReward('koh_ticket_lv1').type, KOH_TICKET);
 assert.equal(findClaimableReward('koh_ticket_lv10').type, KOH_TICKET);
 assert.equal(findClaimableReward('koh_ticket_lv15').type, KOH_TICKET);
 
@@ -56,6 +57,10 @@ assert.equal(store.redeemShopProduct(playerId, findPurchasableProduct('koh_decoy
 assert.equal(store.getShopPurchases(playerId).length, 3);
 assert.equal(calculateTicketBalance(store.getLevelPassUnlocks(playerId), store.getShopPurchases(playerId)), 0);
 assert.equal(store.redeemShopProduct(-1, futureKoh).error, 'not_found');
+const levelOnePlayer = store.registerPlayer({ name: 'LevelOneShop', pin: '1234' });
+assert.equal(store.claimLevelPassReward(levelOnePlayer.profile.id, findClaimableReward('koh_ticket_lv1')).ok, true);
+assert.equal(calculateTicketBalance(store.getLevelPassUnlocks(levelOnePlayer.profile.id), []), 1);
+assert.equal(store.redeemShopProduct(levelOnePlayer.profile.id, findPurchasableProduct('koh_decoy')).ok, true);
 store.db.close();
 
 console.log('Shop tickets, single-use redemption, duplicate protection, and balances verified.');
