@@ -3741,7 +3741,6 @@ function setupUIEventListeners() {
         setWorkspaceView('battle');
     });
     document.getElementById('nav-formation')?.addEventListener('click', () => setWorkspaceView('formation'));
-    document.getElementById('nav-tutorial')?.addEventListener('click', startTutorialGame);
     document.getElementById('nav-level-pass')?.addEventListener('click', () => setWorkspaceView('level-pass'));
     document.getElementById('nav-shop')?.addEventListener('click', () => setWorkspaceView('shop'));
     document.getElementById('nav-options')?.addEventListener('click', () => setWorkspaceView('options'));
