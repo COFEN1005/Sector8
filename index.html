@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Share+Tech+Mono&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=stealth-1">
+    <link rel="stylesheet" href="style.css?v=decoy-1">
 </head>
 <body>
     <div id="app-container">
@@ -374,7 +374,7 @@
                         <summary>甲の能力詳細</summary>
                         <div class="account-group-body ability-guide-body">
                             <div class="ability-guide-toolbar">
-                                <span>ABILITY INDEX <strong id="ability-guide-position">01 / 07</strong></span>
+                                <span>ABILITY INDEX <strong id="ability-guide-position">01 / 08</strong></span>
                                 <div class="ability-guide-controls">
                                     <button id="ability-guide-prev" type="button" aria-label="前の能力">‹</button>
                                     <button id="ability-guide-next" type="button" aria-label="次の能力">›</button>
@@ -388,6 +388,7 @@
                                 <button type="button" data-ability="弓兵">弓兵</button>
                                 <button type="button" data-ability="天使">天使</button>
                                 <button type="button" data-ability="隠密">隠密</button>
+                                <button type="button" data-ability="偽物">偽物</button>
                             </div>
                             <div id="ability-detail-list" class="ability-detail-list" role="region" aria-label="甲の能力カード。横にスクロールできます" tabindex="0">
                                 <article class="ability-detail-card" data-ability="千里眼">
@@ -475,6 +476,18 @@
                                     <p>敵が上下左右1マスに近づくと発見される。発見されない間、敵の視界と移動経路は隠密のいるマスを通る。敵がそのマスで止まると隠密は撃破される。</p>
                                     <figure class="ability-skill-figure"><div class="ability-range-grid vision" data-shape="straight" data-radius="1" data-size="5"></div><figcaption>発見範囲｜上下左右 1</figcaption></figure>
                                 </article>
+                                <article class="ability-detail-card" data-ability="偽物">
+                                    <div class="ability-card-index">08 / ACTIVE / SHOP</div>
+                                    <h4>偽物</h4>
+                                    <div class="ability-range-pair">
+                                        <figure><div class="ability-range-grid move" data-shape="diamond" data-radius="3"></div><figcaption>移動｜菱形 3</figcaption></figure>
+                                        <figure><div class="ability-range-grid vision" data-shape="diamond" data-radius="3"></div><figcaption>視界｜菱形 3</figcaption></figure>
+                                    </div>
+                                    <div class="ability-skill-heading">SKILL <span>デコイ</span></div>
+                                    <p>本体の視界内にある空きマスを選び、見た目が同じ「偽物」を配置する。デコイは移動0・視界0。場に最大2体まで置ける。</p>
+                                    <p>3体目を置くと最初のデコイが消える。CT6ターン。使用は1アクションを消費するが、本体は行動済みにならない。</p>
+                                    <div class="ability-effect-note">配置範囲｜本体の視界内の空きマス</div>
+                                </article>
                             </div>
                             <div class="ability-guide-hint">図は障害物のない盤面での基本範囲。横にスワイプして切り替え</div>
                         </div>
@@ -513,8 +526,8 @@
                 <div><span class="workspace-kicker">EXCHANGE / SECTOR-8</span><h2>ショップ</h2></div>
                 <button id="shop-refresh" class="neon-btn secondary" type="button">REFRESH</button>
             </div>
-            <p class="workspace-copy">甲引換券で天使・隠密を解放できます。既存の甲5種類は引き続き無料で使用できます。</p>
-            <div class="shop-wallet"><span>所持 / 甲引換券</span><strong id="shop-ticket-balance">--</strong><small>Lv5・Lv10のレベルパス報酬から入手</small></div>
+            <p class="workspace-copy">甲引換券で天使・隠密・偽物を解放できます。既存の甲5種類は引き続き無料で使用できます。</p>
+            <div class="shop-wallet"><span>所持 / 甲引換券</span><strong id="shop-ticket-balance">--</strong><small>Lv5・Lv10・Lv15のレベルパス報酬から入手</small></div>
             <div id="shop-status" class="level-pass-status" role="status">読み込み中...</div>
             <div id="shop-grid" class="shop-grid" aria-label="ショップの商品"></div>
             <div class="shop-owned"><h3>交換済み</h3><div id="shop-owned-list">まだ交換した商品はありません。</div></div>
@@ -1037,6 +1050,6 @@
     <script src="sector8-map4.js?v=1"></script>
     <script src="sector8-map5.js?v=1"></script>
     <script src="sector8-map6.js?v=1"></script>
-    <script src="app.js?v=stealth-2"></script>
+    <script src="app.js?v=decoy-1"></script>
 </body>
 </html>

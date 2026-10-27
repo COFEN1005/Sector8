@@ -2425,6 +2425,7 @@ details li {
 .unit.ability-archer { box-shadow: 0 0 14px rgba(74, 222, 128, 0.42), inset 0 0 10px rgba(74, 222, 128, 0.18); }
 .unit.ability-angel { box-shadow: 0 0 14px rgba(255, 215, 132, 0.48), inset 0 0 10px rgba(255, 215, 132, 0.2); }
 .unit.ability-stealth { box-shadow: 0 0 14px rgba(93, 226, 199, 0.42), inset 0 0 10px rgba(93, 226, 199, 0.18); }
+.unit.ability-decoy { box-shadow: 0 0 14px rgba(255, 114, 178, 0.42), inset 0 0 10px rgba(255, 114, 178, 0.18); }
 .unit.ability-stealth.stealth-invisible { opacity: 0.58; border-style: dashed; }
 .stealth-counter {
     position: absolute;

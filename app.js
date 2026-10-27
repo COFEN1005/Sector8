@@ -66,10 +66,12 @@ const LEVEL_EXP_PER_LEVEL = 100;
 const MATCH_EXP_GAIN = 50;
 const KEEPALIVE_WARNING_MS = 10 * 60 * 1000;
 const DEVELOP_MODE_SEQUENCE = '12312321213';
-const ALL_ABILITY_OPTIONS = ['千里眼', '暗殺者', '戦姫', '監視', '弓兵', '天使', '隠密'];
+const ALL_ABILITY_OPTIONS = ['千里眼', '暗殺者', '戦姫', '監視', '弓兵', '天使', '隠密', '偽物'];
 const SELECTABLE_ABILITY_OPTIONS = ['千里眼', '暗殺者', '戦姫', '監視', '弓兵'];
 const CLAIRVOYANCE_COOLDOWN_TURNS = 3;
 const ANGEL_BLESSING_COOLDOWN_TURNS = 10;
+const DECOY_COOLDOWN_TURNS = 6;
+const DECOY_MAX_UNITS = 2;
 const STEALTH_STILL_TURNS = 2;
 const CLAIRVOYANCE_DURATION_TURNS = 3;
 const WAR_PRINCESS_SCOUT_BONUS_LIMIT = 4;
@@ -227,6 +229,8 @@ let clairvoyanceZones = [];
 let clairvoyanceZoneSerial = 0;
 let clairvoyanceCooldownByPlayer = { 1: 0, 2: 0 };
 let angelBlessingCooldownByPlayer = { 1: 0, 2: 0 };
+let decoyCooldownByPlayer = { 1: 0, 2: 0 };
+let decoySpawnSerial = 0;
 let playerKillCounts = { 1: 0, 2: 0 };
 let informationCollapseTurns = { 1: 0, 2: 0 };
 let lastKeepAliveAt = Date.now();
@@ -296,7 +300,7 @@ const TUTORIAL_LESSONS = [
     { scene: '軍旗', map: 'area1', title: '軍旗の回収成功', copy: '青い丁が青の軍旗を回収しました。軍旗を持ったまま自分のターン終了を7回迎えると、そのコマは元の能力を受け継ぐ甲に昇格します。', briefing: true },
     { scene: '情報崩壊', map: 'area2', title: '中央を見てみよう', copy: 'エリア2には青の偵察兵だけがいます。偵察兵は中央の確保に数えられません。この状態で青のターンを終えると情報崩壊が1累積します。ボタンで実際にターンを進めましょう。', briefing: true, button: 'ターン終了で確認' },
     { scene: '情報崩壊', map: 'area2', title: '情報崩壊を確認', copy: '青の情報崩壊が増えました。エリア2に偵察兵以外の自軍コマがいない状態で自分のターンを終えるたびに1増え、累積15で敗北します。後から中央に戻っても累積値は消えません。', briefing: true },
-    { scene: '甲の種類', map: 'area1', title: '甲の選択と解放', copy: '初期の甲は5種類です。\n千里眼: 好きな地点に視界を作る。\n暗殺者: 敵撃破後に後退する。\n戦姫: 自軍の撃破数で移動と視界が強化される。\n監視: 視界内の敵の移動を妨害する。\n弓兵: 離れた敵をスキルで攻撃する。\n天使・隠密: ショップで解放できる甲。\n移動・視界もそれぞれ異なります。詳しくはメニューの「甲の能力詳細」で確認できます。', briefing: true },
+    { scene: '甲の種類', map: 'area1', title: '甲の選択と解放', copy: '初期の甲は5種類です。\n千里眼: 好きな地点に視界を作る。\n暗殺者: 敵撃破後に後退する。\n戦姫: 自軍の撃破数で移動と視界が強化される。\n監視: 視界内の敵の移動を妨害する。\n弓兵: 離れた敵をスキルで攻撃する。\n天使・隠密・偽物: ショップで解放できる甲。\n移動・視界もそれぞれ異なります。詳しくはメニューの「甲の能力詳細」で確認できます。', briefing: true },
     { scene: '核破壊', map: 'area3', title: '乙を選択', copy: '最後は敵の核を撃破します。敵陣にいる青の乙を選んでください。', row: 2, col: 6 },
     { scene: '核破壊', map: 'area3', title: '敵の核を破壊', copy: '光る核のマスを攻撃してください。核は3マスにまたがる1ユニットで、どのマスを撃破しても勝利します。', row: 0, col: 6 }
 ];
@@ -530,6 +534,7 @@ function getAbilityDisplayName(ability) {
 
 function getUnitDisplaySymbol(unit) {
     if (!unit) return '?';
+    if (unit.type === 'decoy') return getAbilityInitial(unit.player);
     const visualType = getUnitVisualType(unit);
     if (unit.type === 'koh' && !unit.disguiseType) {
         return getAbilityInitial(unit.player);
@@ -538,6 +543,11 @@ function getUnitDisplaySymbol(unit) {
         return getAbilityVisualSymbol(visualType);
     }
     return getUnitTypeSymbol(visualType);
+}
+
+function getUnitInspectionProfile(unit) {
+    if (unit.type !== 'decoy') return unit;
+    return new Unit(unit.id, 'koh', unit.player, unit.map, unit.row, unit.col, unit.isFrontline);
 }
 
 function sanitizeUsername(name) {
@@ -1300,6 +1310,8 @@ function resetMatchRecording() {
     clairvoyanceZoneSerial = 0;
     clairvoyanceCooldownByPlayer = { 1: 0, 2: 0 };
     angelBlessingCooldownByPlayer = { 1: 0, 2: 0 };
+    decoyCooldownByPlayer = { 1: 0, 2: 0 };
+    decoySpawnSerial = 0;
     playerKillCounts = { 1: 0, 2: 0 };
     informationCollapseTurns = { 1: 0, 2: 0 };
     resetDrawRequests();
@@ -2738,6 +2750,10 @@ class Unit {
                 this.baseMove = 1;
                 this.moveType = 'straight';
                 break;
+            case 'decoy':
+                this.baseVision = 0;
+                this.baseMove = 0;
+                break;
         }
     }
 
@@ -2749,6 +2765,7 @@ class Unit {
             case 'hei': return '丙 (Hei)';
             case 'tei': return '丁 (Tei)';
             case 'scout': return '偵察兵 (Scout)';
+            case 'decoy': return '甲 (Koh)';
         }
     }
 
@@ -2775,6 +2792,7 @@ class Unit {
                 '弓兵': '【甲特有: 弓兵 / アクティブ・パッシブ】菱形移動2・菱形視界3。通常攻撃では撃破不可。移動前のみ、視界内かつ菱形距離3の敵を射撃できる。射撃は1アクションを消費し、使用後に行動済みを解除する。',
                 '天使': '【甲特有: 天使 / パッシブ・アクティブ】菱形移動2・菱形視界3。味方の敵撃破ごとに祝福のCT-2。同じエリアの味方1体の行動済みを解除する祝福はCT10。',
                 '隠密': '【甲特有: 隠密 / パッシブ】直線移動3・菱形視界3。自分のターンを2回移動せず終えると透明化。敵が上下左右1マスに近づくと発見される。移動で解除。透明化中も味方に視界を提供する。',
+                '偽物': '【甲特有: 偽物 / アクティブ】菱形移動3・菱形視界3。視界内の空きマスに視界0・移動0のデコイを置く。最大2体で、3体目を置くと最古のデコイが消える。CT6。',
                 '迷彩': '【甲特有: 迷彩 / 発動型】使用後はマンハッタン視界1になり、動かない限り敵視界に出ない。',
                 '煙幕': '【甲特有: 煙幕 / 発動型】マンハッタン視界3。直線移動4＋周囲1。3×3の煙幕を設置し、煙幕内の敵味方を迷彩状態にする。',
                 '憑依': '【甲特有: 憑依 / 発動型】マンハッタン移動3・視界3。好きなコマの見た目に変えられる。敵撃破で元に戻り、再変更は10ターン後。',
@@ -2793,6 +2811,7 @@ class Unit {
     }
 
     getMovementRange() {
+        if (this.type === 'decoy') return 0;
         let r = this.baseMove;
         if (this.type === 'koh') {
             const disguiseProfile = this.disguiseType && !isImpersonableAbility(this.disguiseType)
@@ -2813,6 +2832,7 @@ class Unit {
             if (ability === '弓兵') r = 2;
             if (ability === '天使') r = 2;
             if (ability === '隠密') r = 3;
+            if (ability === '偽物') r = 3;
             if (ability === '歴戦王' && this.veteranMomentumPenalty) r = 2;
         }
         r -= getMonitorPenalty(this);
@@ -2842,6 +2862,7 @@ class Unit {
             if (ability === '弓兵') v = 3;
             if (ability === '天使') v = 3;
             if (ability === '隠密') v = 3;
+            if (ability === '偽物') v = 3;
             if (ability === '迷彩' && this.camouflaged) v = 1;
             if (getPlayerAbility(this.player) === '脳筋') {
                 v += Number(this.bruteVisionBonus || 0);
@@ -3021,6 +3042,7 @@ function getAbilityClassByName(ability) {
         '弓兵': 'ability-archer',
         '天使': 'ability-angel',
         '隠密': 'ability-stealth',
+        '偽物': 'ability-decoy',
         '迷彩': 'ability-camouflage',
         '憑依': 'ability-possession',
         '儀式': 'ability-ritual',
@@ -3061,9 +3083,37 @@ function getAngelBlessingCooldownRemaining(player) {
     return Math.max(0, Number(angelBlessingCooldownByPlayer[player] || 0));
 }
 
+function getDecoyCooldownRemaining(player) {
+    return Math.max(0, Number(decoyCooldownByPlayer[player] || 0));
+}
+
+function getDecoyPlacementTargets(unit) {
+    if (!unit || unit.type !== 'koh' || getPlayerAbility(unit.player) !== '偽物') return [];
+    return [...getUnitVisionCells(unit)].map(key => {
+        const [row, col] = key.split(',').map(Number);
+        return { row, col, type: 'ability' };
+    }).filter(({ row, col }) => {
+        const cell = boards[unit.map]?.[row]?.[col];
+        return cell && !cell.isWall && !cell.unit && !cell.isCoreTile;
+    });
+}
+
+function placeDecoy(unit, row, col) {
+    const valid = getDecoyPlacementTargets(unit).some(target => target.row === row && target.col === col);
+    if (!valid) return false;
+    const existing = units.filter(entry => entry.type === 'decoy' && entry.player === unit.player)
+        .sort((a, b) => a.decoyOrder - b.decoyOrder);
+    if (existing.length >= DECOY_MAX_UNITS) removeUnitEverywhere(existing[0]);
+    decoySpawnSerial++;
+    const decoy = new Unit(`p${unit.player}_decoy_${decoySpawnSerial}`, 'decoy', unit.player, unit.map, row, col);
+    decoy.decoyOrder = decoySpawnSerial;
+    addUnitToBoard(decoy, unit.map, row, col);
+    return true;
+}
+
 function getAngelBlessingTargets(unit) {
     if (!unit || unit.type !== 'koh' || getPlayerAbility(unit.player) !== '天使') return [];
-    return units.filter(target => target.player === unit.player && target.map === unit.map && target.type !== 'core')
+    return units.filter(target => target.player === unit.player && target.map === unit.map && target.type !== 'core' && target.type !== 'decoy')
         .map(target => ({ row: target.row, col: target.col, type: 'ability' }));
 }
 
@@ -3352,6 +3402,7 @@ function serializeReplayUnit(unit) {
         stealthStillTurns: Number(unit.stealthStillTurns || 0),
         stealthInvisible: Boolean(unit.stealthInvisible),
         stealthMovedThisTurn: Boolean(unit.stealthMovedThisTurn),
+        decoyOrder: Number(unit.decoyOrder || 0),
         carryingFlagPlayer: unit.carryingFlagPlayer || null,
         carryingFlagAbility: unit.carryingFlagAbility || null,
         flagSurvivalTurns: unit.flagSurvivalTurns || 0,
@@ -3382,6 +3433,8 @@ function serializeReplaySnapshot(label = null) {
         p2Ability,
         playerKillCounts: { ...playerKillCounts },
         angelBlessingCooldownByPlayer: { ...angelBlessingCooldownByPlayer },
+        decoyCooldownByPlayer: { ...decoyCooldownByPlayer },
+        decoySpawnSerial,
         informationCollapseTurns: { ...informationCollapseTurns },
         p1Vision: serializeReplayVision(p1Vision),
         p2Vision: serializeReplayVision(p2Vision),
@@ -3432,6 +3485,7 @@ function hydrateReplayUnit(raw) {
     unit.stealthStillTurns = Number(raw.stealthStillTurns || 0);
     unit.stealthInvisible = Boolean(raw.stealthInvisible);
     unit.stealthMovedThisTurn = Boolean(raw.stealthMovedThisTurn);
+    unit.decoyOrder = Number(raw.decoyOrder || 0);
     return unit;
 }
 
@@ -3511,6 +3565,8 @@ function withReplayRenderState(snapshotState, callback) {
         p2Ability,
         playerKillCounts,
         angelBlessingCooldownByPlayer,
+        decoyCooldownByPlayer,
+        decoySpawnSerial,
         informationCollapseTurns,
         gameMode,
         mapSourceMode
@@ -3535,6 +3591,8 @@ function withReplayRenderState(snapshotState, callback) {
         2: Number(snapshotState.playerKillCounts?.[2] || 0)
     };
     angelBlessingCooldownByPlayer = { ...angelBlessingCooldownByPlayer, ...snapshotState.angelBlessingCooldownByPlayer };
+    decoyCooldownByPlayer = { ...decoyCooldownByPlayer, ...snapshotState.decoyCooldownByPlayer };
+    decoySpawnSerial = Number(snapshotState.decoySpawnSerial || 0);
     informationCollapseTurns = {
         1: Number(snapshotState.informationCollapseTurns?.[1] || 0),
         2: Number(snapshotState.informationCollapseTurns?.[2] || 0)
@@ -3564,6 +3622,8 @@ function withReplayRenderState(snapshotState, callback) {
         p2Ability = saved.p2Ability;
         playerKillCounts = saved.playerKillCounts;
         angelBlessingCooldownByPlayer = saved.angelBlessingCooldownByPlayer;
+        decoyCooldownByPlayer = saved.decoyCooldownByPlayer;
+        decoySpawnSerial = saved.decoySpawnSerial;
         informationCollapseTurns = saved.informationCollapseTurns;
         gameMode = saved.gameMode;
         mapSourceMode = saved.mapSourceMode;
@@ -4645,6 +4705,8 @@ function prepareOnlineMatchPreview(seed = null, preparationDeadline = null) {
     clairvoyanceZoneSerial = 0;
     clairvoyanceCooldownByPlayer = { 1: 0, 2: 0 };
     angelBlessingCooldownByPlayer = { 1: 0, 2: 0 };
+    decoyCooldownByPlayer = { 1: 0, 2: 0 };
+    decoySpawnSerial = 0;
     playerKillCounts = { 1: 0, 2: 0 };
     informationCollapseTurns = { 1: 0, 2: 0 };
     p1LastVision = { area1: new Set(), area2: new Set(), area3: new Set() };
@@ -5319,6 +5381,8 @@ function startGame(config = null, fromOnline = false) {
     clairvoyanceZoneSerial = 0;
     clairvoyanceCooldownByPlayer = { 1: 0, 2: 0 };
     angelBlessingCooldownByPlayer = { 1: 0, 2: 0 };
+    decoyCooldownByPlayer = { 1: 0, 2: 0 };
+    decoySpawnSerial = 0;
     resetDrawRequests();
     playerKillCounts = { 1: 0, 2: 0 };
     informationCollapseTurns = { 1: 0, 2: 0 };
@@ -5997,7 +6061,7 @@ function destroyMilitaryFlagAt(map, row, col, reason = '爆破') {
 }
 
 function tryPickupMilitaryFlag(unit) {
-    if (!unit || unit.type === 'core' || unit.type === 'koh' || unit.type === 'scout' || unit.carryingFlagPlayer) return false;
+    if (!unit || unit.type === 'core' || unit.type === 'koh' || unit.type === 'scout' || unit.type === 'decoy' || unit.carryingFlagPlayer) return false;
     const cell = boards[unit.map]?.[unit.row]?.[unit.col];
     const flag = cell?.flags?.slice().reverse().find(entry => entry.player === unit.player) || cell?.flag;
     if (!flag || flag.player !== unit.player) return false;
@@ -6050,6 +6114,10 @@ function getVisibleFlagsOnCell(cell, viewerPlayer, activeVision) {
 }
 
 function captureUnit(victim, attackerPlayer) {
+    if (victim.type === 'decoy') {
+        removeUnitEverywhere(victim);
+        return false;
+    }
     recordMatchCapture(victim, attackerPlayer);
     if ((attackerPlayer === 1 || attackerPlayer === 2) && victim.player !== attackerPlayer) {
         const previousKills = getPlayerKillCount(attackerPlayer);
@@ -6199,6 +6267,7 @@ function hasOpaqueLineOfSight(mapName, fromRow, fromCol, toRow, toCol, viewerPla
 function getUnitVisionCells(unit) {
     const visible = new Set();
     if (!unit || !unit.map) return visible;
+    if (unit.type === 'decoy') return visible;
 
     const mapName = unit.map;
     const size = MAP_SIZES[mapName];
@@ -6304,7 +6373,7 @@ function updateStealthAtTurnEnd(player) {
 
 // --- FOG OF WAR / VISIBILITY ---
 function hasArea2ControlUnit(player) {
-    return units.some(unit => unit.player === player && unit.map === 'area2' && unit.type !== 'scout');
+    return units.some(unit => unit.player === player && unit.map === 'area2' && unit.type !== 'scout' && unit.type !== 'decoy');
 }
 
 function calculateVisibility() {
@@ -6459,11 +6528,11 @@ function renderBoard(options = {}) {
 
                 if (!isHiddenByFog) {
                     const unitEl = document.createElement('div');
-                    unitEl.className = `unit player-${u.player} ${u.type}`;
+                    unitEl.className = `unit player-${u.player} ${u.type === 'decoy' ? 'koh' : u.type}`;
                     unitEl.style.zIndex = '10';
                     if (u.inspirationTurns > 0) unitEl.classList.add('inspired');
                     if (actedUnitIds.has(u.id)) unitEl.classList.add('acted');
-                    if (u.type === 'koh') {
+                    if (u.type === 'koh' || u.type === 'decoy') {
                         const abilityName = u.player === 1 ? p1Ability : p2Ability;
                         const visualAbilityName = u.disguiseType ? getImpersonationLabel(u.disguiseType) : getAbilityDisplayName(abilityName);
                         const visualAbilityClass = u.disguiseType ? getAbilityClassByName(u.disguiseType) : getAbilityClass(u.player);
@@ -6481,19 +6550,19 @@ function renderBoard(options = {}) {
                         if (u.glowUntilTurn > 0 && gameTurn <= u.glowUntilTurn) {
                             unitEl.classList.add('glowing');
                         }
-                        if (abilityName === '衛生兵') {
+                        if (u.type === 'koh' && abilityName === '衛生兵') {
                             const medicCounter = document.createElement('span');
                             medicCounter.className = 'medic-counter';
                             medicCounter.textContent = `${Math.min(7, Number(u.medicScoutReinforceTurns || 0))}/7`;
                             unitEl.appendChild(medicCounter);
                         }
-                        if (abilityName === '戦姫') {
+                        if (u.type === 'koh' && abilityName === '戦姫') {
                             const killCounter = document.createElement('span');
                             killCounter.className = 'kill-counter';
                             killCounter.textContent = getPlayerKillCount(u.player);
                             unitEl.appendChild(killCounter);
                         }
-                        if (abilityName === '隠密') {
+                        if (u.type === 'koh' && abilityName === '隠密') {
                             if (u.stealthInvisible) unitEl.classList.add('stealth-invisible');
                             const stealthCounter = document.createElement('span');
                             stealthCounter.className = 'stealth-counter';
@@ -6509,9 +6578,10 @@ function renderBoard(options = {}) {
                         unitEl.appendChild(flagCounter);
                     }
                     unitEl.setAttribute('data-rank', u.symbol);
-                    const visualName = u.disguiseType ? getImpersonationLabel(u.disguiseType) : u.name;
-                    const tooltipAbilityDescription = u.disguiseType ? `憑依中: ${getImpersonationLabel(u.disguiseType)}` : u.abilityDescription;
-                    unitEl.title = `${visualName} (P${u.player})\n移動: ${getUnitMovementSummary(u)}\n視界: ${getVisionShapeLabel(u.getVisionShape())}${u.getVisionRange()}${u.carryingFlagPlayer ? '\n軍旗生存: ' + u.flagSurvivalTurns + '/' + FLAG_SURVIVAL_TURNS : ''}\n${tooltipAbilityDescription}`;
+                    const inspectionUnit = getUnitInspectionProfile(u);
+                    const visualName = u.disguiseType ? getImpersonationLabel(u.disguiseType) : inspectionUnit.name;
+                    const tooltipAbilityDescription = u.disguiseType ? `憑依中: ${getImpersonationLabel(u.disguiseType)}` : inspectionUnit.abilityDescription;
+                    unitEl.title = `${visualName} (P${u.player})\n移動: ${getUnitMovementSummary(inspectionUnit)}\n視界: ${getVisionShapeLabel(inspectionUnit.getVisionShape())}${inspectionUnit.getVisionRange()}${u.carryingFlagPlayer ? '\n軍旗生存: ' + u.flagSurvivalTurns + '/' + FLAG_SURVIVAL_TURNS : ''}\n${tooltipAbilityDescription}`;
                     if (u.type === 'core') unitEl.classList.add('core');
                     cellEl.appendChild(unitEl);
                 }
@@ -7024,7 +7094,7 @@ function showUnitPreview(unit, previewLabel = 'ENEMY PREVIEW') {
     actionCtrl.classList.remove('hidden');
     actionCtrl.classList.add('preview-mode');
     actionCtrl.querySelector('.unit-badge').textContent = unit.symbol;
-    const abilityName = unit.type === 'koh' ? getPlayerAbility(unit.player) : null;
+    const abilityName = unit.type === 'koh' || unit.type === 'decoy' ? getPlayerAbility(unit.player) : null;
     actionCtrl.querySelector('.unit-name').textContent = abilityName
         ? `${previewLabel} / ${unit.name} / ${abilityName}`
         : `${previewLabel} / ${unit.name}`;
@@ -7033,7 +7103,7 @@ function showUnitPreview(unit, previewLabel = 'ENEMY PREVIEW') {
     const selectedCell = document.querySelector(`.cell[data-row="${unit.row}"][data-col="${unit.col}"]`);
     if (selectedCell) selectedCell.classList.add('selected');
 
-    getValidMoves(unit).forEach(move => {
+    getValidMoves(getUnitInspectionProfile(unit)).forEach(move => {
         const el = document.querySelector(`.cell[data-row="${move.row}"][data-col="${move.col}"]`);
         if (!el) return;
         el.classList.add(move.type === 'attack' ? 'highlight-preview-attack' : 'highlight-preview-move');
@@ -7043,11 +7113,12 @@ function showUnitPreview(unit, previewLabel = 'ENEMY PREVIEW') {
 function canUseAbilityWhileActed(unit) {
     if (!unit || unit.type !== 'koh') return false;
     return (getPlayerAbility(unit.player) === '千里眼' && getClairvoyanceCooldownRemaining(unit.player) <= 0) ||
-        (getPlayerAbility(unit.player) === '天使' && getAngelBlessingCooldownRemaining(unit.player) <= 0);
+        (getPlayerAbility(unit.player) === '天使' && getAngelBlessingCooldownRemaining(unit.player) <= 0) ||
+        (getPlayerAbility(unit.player) === '偽物' && getDecoyCooldownRemaining(unit.player) <= 0);
 }
 
 function selectUnit(unit) {
-    if (unit.type === 'core') return;
+    if (unit.type === 'core' || unit.type === 'decoy') return;
     if (actedUnitIds.has(unit.id) && !canUseAbilityWhileActed(unit)) {
         addConsoleLog('INFO: このターンに行動済みのコマは再行動できません。', 'system');
         return;
@@ -7085,6 +7156,10 @@ function selectUnit(unit) {
         else if (abilityName === '天使') {
             const cooldown = getAngelBlessingCooldownRemaining(unit.player);
             abilityBtn.textContent = cooldown > 0 ? `祝福 CD ${cooldown}` : '対象選択: 祝福';
+        }
+        else if (abilityName === '偽物') {
+            const cooldown = getDecoyCooldownRemaining(unit.player);
+            abilityBtn.textContent = cooldown > 0 ? `デコイ CD ${cooldown}` : '配置先を選択: デコイ';
         }
         else if (abilityName === '弓兵') abilityBtn.textContent = '射撃対象を選択';
         else if (abilityName === '煙幕') abilityBtn.textContent = smokeCooldown > 0 ? `煙幕 CD ${smokeCooldown}` : `即時発動: ${abilityName}`;
@@ -7157,6 +7232,21 @@ function selectActionType(type) {
                         return;
                     }
                     getAngelBlessingTargets(selectedUnit).forEach(target => {
+                        const el = document.querySelector(`.cell[data-row="${target.row}"][data-col="${target.col}"]`);
+                        if (el) el.classList.add('highlight-ability');
+                    });
+                } else if (abilityName === '偽物') {
+                    const cooldown = getDecoyCooldownRemaining(selectedUnit.player);
+                    if (cooldown > 0) {
+                        showStatusAlert(`デコイはあと ${cooldown} ターン使用できません。`, 'warning', 2400);
+                        return;
+                    }
+                    const placements = getDecoyPlacementTargets(selectedUnit);
+                    if (!placements.length) {
+                        showStatusAlert('デコイを置けるマスがありません。', 'warning', 2400);
+                        return;
+                    }
+                    placements.forEach(target => {
                         const el = document.querySelector(`.cell[data-row="${target.row}"][data-col="${target.col}"]`);
                         if (el) el.classList.add('highlight-ability');
                     });
@@ -7277,7 +7367,7 @@ function executeMove(unit, destRow, destCol) {
         if (captureUnit(v.unit, unit.player)) return;
 
         const isEnemyHome = unit.player === 1 ? v.map === 'area3' : v.map === 'area1';
-        if (!isGameOver && unit.type === 'otsu' && isEnemyHome) {
+        if (!isGameOver && v.unit.type !== 'decoy' && unit.type === 'otsu' && isEnemyHome) {
             addConsoleLog(`ABILITY: 乙の「切り崩し」発動！`, 'ability');
             executeOtsuBreakthrough(v.map, v.row, v.col);
         }
@@ -7287,7 +7377,8 @@ function executeMove(unit, destRow, destCol) {
 
     // 暗殺者は撃破地点から進行方向と逆へ、通れる分だけ最大2マス後退する。
     let finalRow = targetRow, finalCol = targetCol, finalMap = targetMap;
-    if (unit.type === 'koh' && captured.length > 0) {
+    const realCaptureCount = captured.filter(entry => entry.unit.type !== 'decoy').length;
+    if (unit.type === 'koh' && realCaptureCount > 0) {
         const ability = unit.player === 1 ? p1Ability : p2Ability;
         if (ability === '歴戦王') {
             unit.refreshActedAfterAction = true;
@@ -7318,7 +7409,7 @@ function executeMove(unit, destRow, destCol) {
     unit.col = finalCol;
     boards[finalMap][finalRow][finalCol].unit = unit;
     tryPickupMilitaryFlag(unit);
-    applyWarPrincessKills(unit, captured.length);
+    applyWarPrincessKills(unit, realCaptureCount);
     if (unit.type === 'koh' && getPlayerAbility(unit.player) === '弓兵') {
         unit.archerMovedThisTurn = true;
     }
@@ -7391,7 +7482,24 @@ function executeAbility(unit, destRow, destCol, actionMeta = {}) {
     if (unit.type === 'koh') {
         const abilityName = getPlayerAbility(unit.player);
 
-        if (abilityName === '天使') {
+        if (abilityName === '偽物') {
+            if (getDecoyCooldownRemaining(unit.player) > 0) {
+                addConsoleLog('ERROR: デコイはまだ再使用できません。', 'warning');
+                return;
+            }
+            if (!placeDecoy(unit, destRow, destCol)) {
+                addConsoleLog('ERROR: デコイはこの甲の視界内にある空きマスに配置してください。', 'warning');
+                return;
+            }
+            decoyCooldownByPlayer[unit.player] = DECOY_COOLDOWN_TURNS;
+            addConsoleLog(`ABILITY: デコイ - ${getAreaLabel(map)} [${destCol},${destRow}] に偽物を配置。`, 'ability');
+            if (!shouldHideAiActionFeedback(unit.player)) playMoveSfx();
+            recordMatchReplayEvent({ kind: 'action', action: { type: 'ability', unitId: unit.id, row: destRow, col: destCol } });
+            sendOnlineMessage({ kind: 'action', action: { type: 'ability', unitId: unit.id, row: destRow, col: destCol } });
+            unit.refreshActedAfterAction = true;
+            completeUnitAction(unit);
+            return;
+        } else if (abilityName === '天使') {
             if (getAngelBlessingCooldownRemaining(unit.player) > 0) {
                 addConsoleLog('ERROR: 祝福はまだ再使用できません。', 'warning');
                 return;
@@ -7692,7 +7800,7 @@ function completeUnitAction(unit) {
 }
 
 function hasAvailableActionUnit(player) {
-    return units.some(unit => unit.player === player && unit.type !== 'core' && !actedUnitIds.has(unit.id));
+    return units.some(unit => unit.player === player && unit.type !== 'core' && unit.type !== 'decoy' && !actedUnitIds.has(unit.id));
 }
 
 function shouldHideAiActionFeedback(player = currentPlayer) {
@@ -7741,6 +7849,9 @@ function endTurn() {
     }
     if (angelBlessingCooldownByPlayer[currentPlayer] > 0) {
         angelBlessingCooldownByPlayer[currentPlayer]--;
+    }
+    if (decoyCooldownByPlayer[currentPlayer] > 0) {
+        decoyCooldownByPlayer[currentPlayer]--;
     }
     pruneExpiredSmokeZones();
     pruneExpiredClairvoyanceZones();
@@ -8037,6 +8148,8 @@ function resetToSetup(fromOnline = false) {
     clairvoyanceZoneSerial = 0;
     clairvoyanceCooldownByPlayer = { 1: 0, 2: 0 };
     angelBlessingCooldownByPlayer = { 1: 0, 2: 0 };
+    decoyCooldownByPlayer = { 1: 0, 2: 0 };
+    decoySpawnSerial = 0;
     playerKillCounts = { 1: 0, 2: 0 };
     informationCollapseTurns = { 1: 0, 2: 0 };
     playerTurnsStarted = { 1: 0, 2: 0 };
@@ -8137,7 +8250,7 @@ function addConsoleLog(text, type = 'system') {
 function executeAITurn() {
     if (isGameOver) return;
 
-    const aiUnits = units.filter(u => u.player === 2 && u.type !== 'core' && !actedUnitIds.has(u.id));
+    const aiUnits = units.filter(u => u.player === 2 && u.type !== 'core' && u.type !== 'decoy' && !actedUnitIds.has(u.id));
     if (aiUnits.length === 0) { endTurn(); return; }
 
     let bestAction = null;
@@ -8295,6 +8408,13 @@ function executeAITurn() {
                     bestScore = 450;
                     bestAction = { type: 'ability', unit: u, action: '天使', row: target.row, col: target.col };
                 }
+            } else if (aiAbility === '偽物' && getDecoyCooldownRemaining(2) === 0) {
+                const target = getDecoyPlacementTargets(u)
+                    .sort((a, b) => a.row - b.row)[0];
+                if (target && 120 > bestScore) {
+                    bestScore = 120;
+                    bestAction = { type: 'ability', unit: u, action: '偽物', row: target.row, col: target.col };
+                }
             }
         }
     });
@@ -8312,7 +8432,7 @@ function executeAITurn() {
                     executeAbility(bestAction.unit, null, null, bestAction);
                 } else if (bestAction.action === '煙幕') {
                     executeAbility(bestAction.unit, bestAction.row ?? bestAction.unit.row, bestAction.col ?? bestAction.unit.col);
-                } else if (bestAction.action === '千里眼' || bestAction.action === '弓兵' || bestAction.action === '天使') {
+                } else if (bestAction.action === '千里眼' || bestAction.action === '弓兵' || bestAction.action === '天使' || bestAction.action === '偽物') {
                     executeAbility(bestAction.unit, bestAction.row ?? bestAction.unit.row, bestAction.col ?? bestAction.unit.col);
                 }
             }

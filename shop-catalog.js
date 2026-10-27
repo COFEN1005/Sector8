@@ -11,6 +11,11 @@ const ACTIVE_PRODUCTS = Object.freeze([
     key: 'koh_stealth', type: 'koh', itemKey: '隠密', name: '隠密',
     description: '直線移動3・菱形視界3。2ターン静止すると透明化し、敵の視界と進路を通す。',
     currency: KOH_TICKET, price: 1
+  }),
+  Object.freeze({
+    key: 'koh_decoy', type: 'koh', itemKey: '偽物', name: '偽物',
+    description: '菱形移動3・菱形視界3。視界内に移動0・視界0のデコイを最大2体配置。CT6。',
+    currency: KOH_TICKET, price: 1
   })
 ]);
 

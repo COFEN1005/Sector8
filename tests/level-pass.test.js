@@ -11,6 +11,7 @@ assert.equal(levels[49].level, 50);
 assert.equal(getLevelPassLevels(75).length, 75);
 assert.equal(findClaimableReward('signal_vanguard').status, 'active');
 assert.equal(findClaimableReward('koh_ticket_lv10').level, 10);
+assert.equal(findClaimableReward('koh_ticket_lv15').level, 15);
 assert.equal(findClaimableReward('not_in_catalog'), null);
 
 const store = createSqliteStore();
