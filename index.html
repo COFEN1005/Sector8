@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Share+Tech+Mono&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=angel-1">
+    <link rel="stylesheet" href="style.css?v=angel-2">
 </head>
 <body>
     <div id="app-container">
@@ -376,6 +376,7 @@
                             <div class="ability-guide-toolbar">
                                 <span>ABILITY INDEX <strong id="ability-guide-position">01 / 06</strong></span>
                                 <div class="ability-guide-controls">
+                                    <button id="ability-guide-angel" class="ability-guide-jump" type="button" aria-label="天使の能力詳細へ移動">NEW 天使</button>
                                     <button id="ability-guide-prev" type="button" aria-label="前の能力">‹</button>
                                     <button id="ability-guide-next" type="button" aria-label="次の能力">›</button>
                                 </div>
@@ -441,7 +442,7 @@
                                     <p>通常攻撃では敵を撃破できない。視界内で菱形距離3の敵を射撃する。CTなし。1アクションを消費し、射撃後は行動済みを解除する。移動後や行動済みでは使用不可。</p>
                                     <figure class="ability-skill-figure"><div class="ability-range-grid skill" data-shape="ring" data-radius="3"></div><figcaption>射撃対象｜菱形距離 3 のマス</figcaption></figure>
                                 </article>
-                                <article class="ability-detail-card">
+                                <article class="ability-detail-card" data-ability="天使">
                                     <div class="ability-card-index">06 / ACTIVE + PASSIVE / SHOP</div>
                                     <h4>天使</h4>
                                     <div class="ability-range-pair">
@@ -1016,6 +1017,6 @@
     <script src="sector8-map4.js?v=1"></script>
     <script src="sector8-map5.js?v=1"></script>
     <script src="sector8-map6.js?v=1"></script>
-    <script src="app.js?v=angel-1"></script>
+    <script src="app.js?v=angel-2"></script>
 </body>
 </html>
